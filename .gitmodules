@@ -6,3 +6,6 @@
   branch = "0.2.1"
   path = "lib/prb-test"
   url = "https://github.com/paulrberg/prb-test"
+[submodule "lib/Commons"]
+	path = lib/Commons
+	url = https://github.com/itos-finance/Commons
