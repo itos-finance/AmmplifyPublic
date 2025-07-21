@@ -21,6 +21,7 @@ struct VaultStore {
 /// Each index has a primary vault and a backup vault it may be migrating to.
 /// The combination of the two is a VaultProxy.
 /// Fetching a VaultProxy and operating on the Vault Storage is done through VaultLib.
+/// @dev Previously used and tested in Burve with light changes to the vault storage keys.
 library VaultLib {
     // If we have fewer than this many tokens left in a vault, we can remove it.
     uint256 public constant BALANCE_DE_MINIMUS = 10;

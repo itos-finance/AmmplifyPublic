@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import {ClosureId} from "../closure/Id.sol";
-import {VaultE4626} from "./E4626.sol";
+import { VaultE4626 } from "./E4626.sol";
 
 /// The types of vaults we can handle.
 enum VaultType {
@@ -31,30 +30,22 @@ library VaultPointerImpl {
     error VaultTypeUnrecognized(VaultType);
 
     /// Queue up a deposit for a given cid.
-    function deposit(
-        VaultPointer memory self,
-        ClosureId cid,
-        uint256 amount
-    ) internal {
+    function deposit(VaultPointer memory self, uint256 id, uint256 amount) internal {
         if (isNull(self) || amount == 0) return;
 
         if (self.vType == VaultType.E4626) {
-            getE4626(self).deposit(self.temp, cid, amount);
+            getE4626(self).deposit(self.temp, id, amount);
         } else {
             revert VaultTypeUnrecognized(self.vType);
         }
     }
 
     /// Queue up a withdrawal for a given cid.
-    function withdraw(
-        VaultPointer memory self,
-        ClosureId cid,
-        uint256 amount
-    ) internal {
+    function withdraw(VaultPointer memory self, uint256 id, uint256 amount) internal {
         if (isNull(self) || amount == 0) return;
 
         if (self.vType == VaultType.E4626) {
-            getE4626(self).withdraw(self.temp, cid, amount);
+            getE4626(self).withdraw(self.temp, id, amount);
         } else {
             revert VaultTypeUnrecognized(self.vType);
         }
@@ -63,9 +54,7 @@ library VaultPointerImpl {
     /// Query the most tokens that can actually be withdrawn.
     /// @dev This is the only one that makes a direct call to the vault,
     /// so be careful it returns a value that does not account for any pending deposits.
-    function withdrawable(
-        VaultPointer memory self
-    ) internal view returns (uint256 _withdrawable) {
+    function withdrawable(VaultPointer memory self) internal view returns (uint256 _withdrawable) {
         if (isNull(self)) return 0;
 
         if (self.vType == VaultType.E4626) {
@@ -76,15 +65,11 @@ library VaultPointerImpl {
     }
 
     /// Query the balance available to the given cid.
-    function balance(
-        VaultPointer memory self,
-        ClosureId cid,
-        bool roundUp
-    ) internal view returns (uint128 amount) {
+    function balance(VaultPointer memory self, uint256 id, bool roundUp) internal view returns (uint128 amount) {
         if (isNull(self)) return 0;
 
         if (self.vType == VaultType.E4626) {
-            return getE4626(self).balance(self.temp, cid, roundUp);
+            return getE4626(self).balance(self.temp, id, roundUp);
         } else {
             revert VaultTypeUnrecognized(self.vType);
         }
@@ -93,23 +78,20 @@ library VaultPointerImpl {
     /// Query the total balance of all the given cids.
     function totalBalance(
         VaultPointer memory self,
-        ClosureId[] storage cids,
+        uint256[] memory ids,
         bool roundUp
     ) internal view returns (uint128 amount) {
         if (isNull(self)) return 0;
 
         if (self.vType == VaultType.E4626) {
-            return getE4626(self).totalBalance(self.temp, cids, roundUp);
+            return getE4626(self).totalBalance(self.temp, ids, roundUp);
         } else {
             revert VaultTypeUnrecognized(self.vType);
         }
     }
 
     /// Query the total balance of everything.
-    function totalBalance(
-        VaultPointer memory self,
-        bool roundUp
-    ) internal view returns (uint256 amount) {
+    function totalBalance(VaultPointer memory self, bool roundUp) internal view returns (uint256 amount) {
         if (isNull(self)) return 0;
 
         if (self.vType == VaultType.E4626) {
@@ -131,7 +113,6 @@ library VaultPointerImpl {
         }
     }
 
-    /// Queue up a deposit for a given cid.
     function isValid(VaultPointer memory self) internal view returns (bool) {
         if (isNull(self)) return true;
 
@@ -156,9 +137,7 @@ library VaultPointerImpl {
 
     /* helpers */
 
-    function getE4626(
-        VaultPointer memory self
-    ) private pure returns (VaultE4626 storage proxy) {
+    function getE4626(VaultPointer memory self) private pure returns (VaultE4626 storage proxy) {
         assembly {
             proxy.slot := mload(self)
         }
