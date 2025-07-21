@@ -3,12 +3,12 @@ pragma solidity ^0.8.27;
 
 import { Pool } from "./Pool.sol";
 import { Config } from "./Config.sol";
-import { AssetBook } from "./Asset.sol";
+import { AssetStore } from "./Asset.sol";
 import { VaultStore } from "./vaults/Vault.sol";
 import { FeeStore } from "./Fee.sol";
 
 struct Storage {
-    AssetBook _assets;
+    AssetStore _assets;
     mapping(address poolAddr => Pool) pools;
     VaultStore _vaults;
     FeeStore _fees;
@@ -34,7 +34,7 @@ library Store {
         v = load()._vaults;
     }
 
-    function assets() internal view returns (AssetBook storage a) {
+    function assets() internal view returns (AssetStore storage a) {
         a = load()._assets;
     }
 

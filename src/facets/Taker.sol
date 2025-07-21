@@ -3,41 +3,77 @@ pragma solidity ^0.8.27;
 
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { AmmplifyAdminRights } from "./Admin.sol";
+import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
 
-contract TakerFacet {
+uint256 constant TAKER_VAULT_ID = 80085;
+
+contract TakerFacet is ReentrancyGuardTransient {
+    error NotTakerOwner(address owner, address sender);
+
     /// Since our takers are permissioned
-    function collateralize(address token, uint256 amount) external {
+    function collateralize(address token, uint256 amount, bytes calldata data) external nonReentrant {
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
-        return; // Placeholder return value
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        address[] memory balances = new address[](1);
+        balances[0] = token;
+        RFTLib.settle(msg.sender, tokens, balances, data);
+        Store.fees().collateral[msg.sender][token] += amount;
     }
 
-    function withdrawCollateral(address token, uint256 amount) external {
+    function withdrawCollateral(address token, uint256 amount) external nonReentrant {
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
-        return; // Placeholder return value
+        Store.fees().collateral[msg.sender][token] -= amount;
+        address[] memory tokens = new address[](1);
+        tokens[0] = token;
+        address[] memory balances = new address[](1);
+        balances[0] = token;
+        RFTLib.settle(msg.sender, tokens, balances, data);
     }
 
     function newAsset(
+        address recipient,
         address poolAddr,
         uint24 lowTick,
         uint24 highTick,
         uint128 liq,
-        address rehypo,
-        bytes calldata data
-    ) external returns (uint256 assetId) {
+        uint8 xVaultIndex,
+        uint8 yVaultIndex,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96
+    ) external nonReentrant returns (uint256 assetId) {
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
-        // Implementation of newAsset function
-        // This is a placeholder; actual implementation will depend on the specific requirements
-        // and logic of the TakerFacet.
-        return 0; // Placeholder return value
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        Asset storage asset;
+        (asset, assetId) = AssetLib.newTaker(recipient, pInfo, lowTick, highTick, liq, xVaultIndex, yVaultIndex);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        // This fills in the nodes in the asset.
+        WalkerLib.addTakerWalk(pInfo, lowTick, highTick, data);
+        VaultLib.getProxy(pInfo.token0, xVaultIndex).deposit(TAKER_VAULT_ID, data.xBalance);
+        VaultLib.getProxy(pInfo.token1, yVaultIndex).deposit(TAKER_VAULT_ID, data.yBalance);
     }
 
     function removeAsset(
-        uint256 assetId
-    ) external returns (address token0, address token1, uint256 balance0, uint256 balance1) {
+        address recipient,
+        uint256 assetId,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
+        bytes calldata rftData
+    ) external nonReentrant returns (address token0, address token1, uint256 balance0, uint256 balance1) {
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
-        // Implementation of removeAsset function
-        // This is a placeholder; actual implementation will depend on the specific requirements
-        // and logic of the TakerFacet.
+        Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.owner == msg.sender, NotTakerOwner(asset.owner, msg.sender));
+
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+
+        WalkerLib.removeTakerWalk(pInfo, lowTick, highTick, data);
+        AssetLib.removeAsset(assetId);
+        address[] memory tokens = pInfo.tokens();
+        address[] memory balances = new address[](2);
+        balances[0] = data.xBalance;
+        balances[1] = data.yBalance;
+        RFTLib.settle(recipient, tokens, balances, rftData);
     }
 
     function viewAsset(
@@ -47,9 +83,10 @@ contract TakerFacet {
         view
         returns (address poolAddr, uint128 liq, uint256 balance0, uint256 balance1, uint256 fees0, uint256 fees1)
     {
-        // Implementation of viewAsset function
-        // This is a placeholder; actual implementation will depend on the specific requirements
-        // and logic of the TakerFacet.
-        return (address(0), 0, 0, 0, 0, 0); // Placeholder return values
+        Asset storage asset = AssetLib.getAsset(assetId);
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        ViewData memory data = ViewDataImpl.make(pInfo, asset);
+        ViewWalkerLib.takerWalk(pInfo, asset.lowTick, asset.highTick, data);
+        return (asset.poolAddr, asset.liq, data.xBalance, data.yBalance, data.fees0, data.fees1);
     }
 }

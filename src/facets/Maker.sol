@@ -4,8 +4,9 @@ pragma solidity ^0.8.27;
 import { PoolInfo } from "../Pool.sol";
 import { Asset, AssetLib } from "../Asset.sol";
 import { Data, DataImpl } from "../visitors/Data.sol";
+import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
 
-contract MakerFacet {
+contract MakerFacet is ReentrancyGuardTransient {
     /// @notice Creates a new maker position.
     /// @param poolAddr The address of the pool.
     /// @param lowTick The lower tick of the liquidity range.
@@ -24,21 +25,13 @@ contract MakerFacet {
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external returns (uint256 assetId) {
+    ) external nonReentrant returns (uint256 assetId) {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         Asset storage asset;
-        (asset, assetId) = AssetLib.newMaker(recipient, pInfo, lowTick, highTick, liq);
-        Liqtype liqType = isCompounding ? LiqType.MAKER : LiqType.MAKER_NC;
-        Data memory data = DataImpl.make(
-            pInfo,
-            SafeCast.toInt128(liq),
-            liqType,
-            asset,
-            minSqrtPriceX96,
-            maxSqrtPriceX96
-        );
+        (asset, assetId) = AssetLib.newMaker(recipient, pInfo, lowTick, highTick, liq, isCompounding);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
         // This fills in the nodes in the asset.
-        WalkerLib.walk(pInfo, lowTick, highTick, data);
+        WalkerLib.addMakerWalk(pInfo, lowTick, highTick, data);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
         balances[0] = data.xBalance;
@@ -52,11 +45,11 @@ contract MakerFacet {
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external returns (address token0, address token1, uint256 balance0, uint256 balance1) {
+    ) external nonReentrant returns (address token0, address token1, uint256 balance0, uint256 balance1) {
         Asset storage asset = AssetLib.getAsset(assetId);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        Data memory data = DataImpl.make(pInfo, -asset.liq, asset.liqType, asset, minSqrtPriceX96, maxSqrtPriceX96);
-        WalkerLib.walk(pInfo, lowTick, highTick, data);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        WalkerLib.removeMakerWalk(pInfo, lowTick, highTick, data);
         AssetLib.removeAsset(assetId);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
@@ -74,8 +67,8 @@ contract MakerFacet {
     {
         Asset storage asset = AssetLib.getAsset(assetId);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        ViewData memory data = ViewDataImpl.make(pInfo, asset.liqType);
-        ViewWalkerLib.walk(pInfo, asset.lowTick, asset.highTick, data);
+        ViewData memory data = ViewDataImpl.make(pInfo, asset);
+        ViewWalkerLib.makerWalk(pInfo, asset.lowTick, asset.highTick, data);
         return (asset.poolAddr, asset.liq, data.xBalance, data.yBalance, data.fees0, data.fees1);
     }
 
@@ -84,11 +77,11 @@ contract MakerFacet {
         address recipient,
         uint256 assetId,
         bytes calldata rftData
-    ) external returns (uint256 fees0, uint256 fees1) {
+    ) external nonReentrant returns (uint256 fees0, uint256 fees1) {
         Asset storage asset = AssetLib.getAsset(assetId);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         Data memory data = DataImpl.make(pInfo, -asset.liq, asset.liqType, asset, minSqrtPriceX96, maxSqrtPriceX96);
-        WalkerLib.collectWalk(pInfo, lowTick, highTick, data);
+        WalkerLib.collectMakerWalk(pInfo, lowTick, highTick, data);
         AssetLib.collectFees(assetId, data);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);

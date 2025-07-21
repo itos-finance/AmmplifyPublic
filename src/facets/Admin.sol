@@ -6,14 +6,10 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { Store } from "../Store.sol";
+import { TAKER_VAULT_ID } from "./Taker.sol";
 
 library AmmplifyAdminRights {
     uint256 public constant TAKER = 0x1;
-}
-
-struct AdminStorage {
-    SmoothRateCurveConfig defaultFeeCurve;
-    mapping(address => SmoothRateCurveConfig) feeCurves;
 }
 
 contract AdminFacet is TimedAdminFacet {
@@ -38,9 +34,7 @@ contract AdminFacet is TimedAdminFacet {
     /* Vault related */
 
     function viewVaults(address token, uint8 vaultIdx) external view returns (address vault, address backup) {
-        VaultStore storage vStore = Store.vaults();
-        vault = vStore.vaults[token][vaultIdx];
-        backup = vStore.backups[token][vaultIdx];
+        (vault, backup) = VaultLib.getVaultAddresses(token, vaultIdx);
     }
 
     function addVault(address token, uint8 vaultIdx, address vault, VaultType vType) external {
@@ -53,19 +47,14 @@ contract AdminFacet is TimedAdminFacet {
         VaultLib.remove(vault);
     }
 
-    function swapVault(uint8 vaultId) external {
+    function swapVault(address token, uint8 vaultId) external returns (address oldVault, address newVault) {
         AdminLib.validateOwner();
-        VaultProxy storage vaults = VaultProxy.getVaults();
-        address oldVault = vaults.vaults[vaultId];
-        if (oldVault == address(0)) revert VaultNotFound(oldVault);
-        vaults.vaults[vaultId] = newVault;
-        vaults.vTypes[newVault] = vaults.vTypes[oldVault];
-        delete vaults.vTypes[oldVault];
+        (oldVault, newVault) = VaultLib.hotSwap(token, vaultId);
     }
 
     function transferVaultBalance(address fromVault, address toVault, uint256 amount) external {
         AdminLib.validateOwner();
-        VaultLib.transfer(fromVault, toVault, amount);
+        VaultLib.transfer(fromVault, toVault, TAKER_VAULT_ID, amount);
     }
 
     // Internal overrides

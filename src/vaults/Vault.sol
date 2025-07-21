@@ -8,9 +8,9 @@ import { Store } from "../Store.sol";
 // Holds overall vault information.
 struct VaultStore {
     // Vaults in use.
-    mapping(address token => address[]) vaults;
+    mapping(address token => mapping(uint8 => address)) vaults;
     // Vaults we're potentially transfering into.
-    mapping(address token => address[]) backups;
+    mapping(address token => mapping(uint8 => address)) backups;
     // Vault info.
     mapping(address vault => VaultType) vTypes;
     mapping(address vault => VaultE4626) e4626s;
@@ -89,7 +89,7 @@ library VaultLib {
         // Vault specific operation.
         if (vType == VaultType.E4626) vStore.e4626s[vault].del();
         else revert VaultTypeNotRecognized(vType);
-        // VertexId delete.
+        // Clear bookkeeping.
         delete vStore.usedBy[vault];
         delete vStore.index[vault];
     }
@@ -97,42 +97,42 @@ library VaultLib {
     /// Move an amount of tokens from one vault to another.
     /// @dev This implicitly requires that the two vaults are based on the same token
     /// and there can only be two vaults for a given token.
-    function transfer(address fromVault, address toVault, ClosureId cid, uint256 amount) internal {
+    function transfer(address fromVault, address toVault, uint256 userId, uint256 amount) internal {
         VaultPointer memory from = getVault(fromVault);
-        from.withdraw(cid, amount);
+        from.withdraw(userId, amount);
         from.commit();
         VaultPointer memory to = getVault(toVault);
-        to.deposit(cid, amount);
+        to.deposit(userId, amount);
         to.commit();
     }
 
     /// Swap the active vault we deposit into.
-    function hotSwap(VertexId vid) internal returns (address fromVault, address toVault) {
+    function hotSwap(address token, uint8 index) internal returns (address fromVault, address toVault) {
         VaultStorage storage vStore = Store.vaults();
         // If there is no backup, then we can't do this.
-        if (vStore.backups[vid] == address(0)) revert NoBackup(vid);
+        if (vStore.backups[token][index] == address(0)) revert NoBackup(token, index);
         // Swap.
-        address active = vStore.vaults[vid];
-        address backup = vStore.backups[vid];
-        vStore.vaults[vid] = backup;
-        vStore.backups[vid] = active;
+        address active = vStore.vaults[token][index];
+        address backup = vStore.backups[token][index];
+        vStore.vaults[token][index] = backup;
+        vStore.backups[token][index] = active;
         return (active, backup);
     }
 
     /* Getters */
 
     /// Get the active and backup addresses for a vault.
-    function getVaultAddresses(VertexId vid) internal view returns (address active, address backup) {
+    function getVaultAddresses(address token, uint8 index) internal view returns (address active, address backup) {
         VaultStorage storage vStore = Store.vaults();
-        active = vStore.vaults[vid];
-        backup = vStore.backups[vid];
+        active = vStore.vaults[token][index];
+        backup = vStore.backups[token][index];
     }
 
     /// Fetch a VaultProxy for the vertex's active vaults.
-    function getProxy(VertexId vid) internal view returns (VaultProxy memory vProxy) {
+    function getProxy(address token, uint8 index) internal view returns (VaultProxy memory vProxy) {
         VaultStorage storage vStore = Store.vaults();
-        vProxy.active = getVault(vStore.vaults[vid]);
-        address backup = vStore.backups[vid];
+        vProxy.active = getVault(vStore.vaults[token][index]);
+        address backup = vStore.backups[token][index];
         if (backup != address(0)) vProxy.backup = getVault(backup);
     }
 

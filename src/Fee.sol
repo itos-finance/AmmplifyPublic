@@ -6,7 +6,11 @@ import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 struct FeeStore {
     SmoothRateCurveConfig defaultFeeCurve;
     mapping(address => SmoothRateCurveConfig) feeCurves;
+    /* Collateral */
+    mapping(address sender => mapping(address token => uint256)) collateral;
 }
+
+
 
 
 /// Makers earn fees in two ways, from the swap fees of the underlying pool

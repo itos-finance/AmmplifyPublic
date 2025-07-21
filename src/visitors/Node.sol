@@ -42,8 +42,8 @@ library NodeImpl {
         uint256 ncY = FullMath.mulX256(ratioX256, y, false);
         xC = x - uint128(ncX);
         yC = y - uint128(ncY);
-        xNC = (ncX << 128) / self.ncLiq; // Rounds down.
-        yNC = (ncY << 128) / self.ncLiq; // Rounds down.
+        xNC = uint128((ncX << 128) / self.ncLiq); // Rounds down.
+        yNC = uint128((ncY << 128) / self.ncLiq); // Rounds down.
     }
 
     /// Splits the fees and then assigns them to the node's maker liquidity.
