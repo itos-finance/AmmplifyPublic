@@ -1,0 +1,152 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.27;
+
+import { VaultType } from "./VaultPointer.sol";
+import { VaultE4626 } from "./E4626.sol";
+import { Store } from "../Store.sol";
+
+// Holds overall vault information.
+struct VaultStore {
+    // Vaults in use.
+    mapping(address token => address[]) vaults;
+    // Vaults we're potentially transfering into.
+    mapping(address token => address[]) backups;
+    // Vault info.
+    mapping(address vault => VaultType) vTypes;
+    mapping(address vault => VaultE4626) e4626s;
+    mapping(address vault => address) usedBy;
+    mapping(address vault => uint8) index;
+}
+
+/// Each index has a primary vault and a backup vault it may be migrating to.
+/// The combination of the two is a VaultProxy.
+/// Fetching a VaultProxy and operating on the Vault Storage is done through VaultLib.
+library VaultLib {
+    // If we have fewer than this many tokens left in a vault, we can remove it.
+    uint256 public constant BALANCE_DE_MINIMUS = 10;
+
+    event VaultAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
+    event BackupAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
+    event VaultRemoved(address indexed vault, address indexed token, uint8 indexed index, address newActiveVault);
+    event VaultSwapped(address indexed oldVault, address indexed token, uint8 indexed index, address newActiveVault);
+
+    // Thrown when a vault has already been added before.
+    error VaultExists(address vault, address token);
+    // Thrown when removing a vault that still holds a substantive balance.
+    error RemainingVaultBalance(address vault, uint256 balance);
+    // This vault type is not currently supported.
+    error VaultTypeNotRecognized(VaultType);
+    // Thrown during a get if the vault can't be found.
+    error VaultNotFound(address);
+    // Thrown when there is already a primary and a backup vault.
+    error VaultOccupied(uint256 vault, address token, uint8 index);
+    // Thrown when removing a vault that is still in use.
+    error VaultInUse(address vault, address token, uint8 index);
+    // Thrown when deleting or swapping a vault but there is no backup for the vertex.
+    error NoBackup(address token, uint8 index);
+
+    /// Add a vault for a token.
+    /// Adds as the primary vault if one does not exist yet, then the backup vault.
+    function add(address token, uint8 idx, address vault, VaultType vType) internal {
+        VaultStorage storage vStore = Store.vaults();
+
+        // First add to vault tracking.
+        if (vStore.vaults[token][idx] == address(0)) {
+            // Add as the primary vault
+            vStore.vaults[token][idx] = vault;
+        } else if (vStore.backups[token][idx] == address(0)) {
+            // Add as a backup.
+            vStore.backups[token][idx] = vault;
+        } else {
+            revert VaultOccupied(vault, token, idx);
+        }
+
+        // Now add vault details.
+        if (vStore.vTypes[vault] != VaultType.UnImplemented) revert VaultExists(vault, token);
+        vStore.vTypes[vault] = vType;
+        if (vType == VaultType.E4626) vStore.e4626s[vault].init(token, vault);
+        else revert VaultTypeNotRecognized(vType);
+        vStore.usedBy[vault] = token;
+        vStore.index[vault] = idx;
+    }
+
+    function remove(address vault) internal {
+        VaultPointer memory vPtr = getVault(vault);
+        uint256 outstanding = vPtr.totalBalance(false);
+        if (outstanding > BALANCE_DE_MINIMUS) revert RemainingVaultBalance(vault, outstanding);
+
+        VaultStorage storage vStore = Store.vaults();
+        address token = vStore.usedBy[vault];
+        uint8 idx = vStore.index[vault];
+        if (vStore.vaults[token][idx] == vault) revert VaultInUse(vault, token, idx);
+
+        // We are not the active vault, so we're the backup and we have no tokens. Okay to remove.
+        delete vStore.backups[token][idx];
+
+        VaultType vType = vStore.vTypes[vault];
+        delete vStore.vTypes[vault];
+        // Vault specific operation.
+        if (vType == VaultType.E4626) vStore.e4626s[vault].del();
+        else revert VaultTypeNotRecognized(vType);
+        // VertexId delete.
+        delete vStore.usedBy[vault];
+        delete vStore.index[vault];
+    }
+
+    /// Move an amount of tokens from one vault to another.
+    /// @dev This implicitly requires that the two vaults are based on the same token
+    /// and there can only be two vaults for a given token.
+    function transfer(address fromVault, address toVault, ClosureId cid, uint256 amount) internal {
+        VaultPointer memory from = getVault(fromVault);
+        from.withdraw(cid, amount);
+        from.commit();
+        VaultPointer memory to = getVault(toVault);
+        to.deposit(cid, amount);
+        to.commit();
+    }
+
+    /// Swap the active vault we deposit into.
+    function hotSwap(VertexId vid) internal returns (address fromVault, address toVault) {
+        VaultStorage storage vStore = Store.vaults();
+        // If there is no backup, then we can't do this.
+        if (vStore.backups[vid] == address(0)) revert NoBackup(vid);
+        // Swap.
+        address active = vStore.vaults[vid];
+        address backup = vStore.backups[vid];
+        vStore.vaults[vid] = backup;
+        vStore.backups[vid] = active;
+        return (active, backup);
+    }
+
+    /* Getters */
+
+    /// Get the active and backup addresses for a vault.
+    function getVaultAddresses(VertexId vid) internal view returns (address active, address backup) {
+        VaultStorage storage vStore = Store.vaults();
+        active = vStore.vaults[vid];
+        backup = vStore.backups[vid];
+    }
+
+    /// Fetch a VaultProxy for the vertex's active vaults.
+    function getProxy(VertexId vid) internal view returns (VaultProxy memory vProxy) {
+        VaultStorage storage vStore = Store.vaults();
+        vProxy.active = getVault(vStore.vaults[vid]);
+        address backup = vStore.backups[vid];
+        if (backup != address(0)) vProxy.backup = getVault(backup);
+    }
+
+    /// Fetch a Vault
+    function getVault(address vault) internal view returns (VaultPointer memory vPtr) {
+        VaultStorage storage vStore = Store.vaults();
+        vPtr.vType = vStore.vTypes[vault];
+        if (vPtr.vType == VaultType.E4626) {
+            VaultE4626 storage v = vStore.e4626s[vault];
+            assembly {
+                mstore(vPtr, v.slot) // slotAddress is the first field.
+            }
+            v.fetch(vPtr.temp);
+        } else {
+            revert VaultNotFound(vault);
+        }
+    }
+}
