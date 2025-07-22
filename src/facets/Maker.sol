@@ -50,7 +50,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
         WalkerLib.removeMakerWalk(pInfo, lowTick, highTick, data);
-        AssetLib.removeAsset(assetId);
+        AssetLib.removeAsset(assetId, pInfo);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
         balances[0] = data.xBalance;

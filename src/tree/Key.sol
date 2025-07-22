@@ -97,10 +97,10 @@ library KeyImpl {
         uint24 rootWidth,
         int24 tickSpacing
     ) internal pure returns (int24 lowTick, int24 highTick) {
-        uint24 low = uint24(_rawBase(self));
-        uint24 high = low + _rawWidth(self) - 1;
+        uint24 lowIdx = uint24(_rawBase(self));
+        uint24 highIdx = uint24(lowIdx + _rawWidth(self) - 1);
 
-        lowTick = TreeTickLib.treeIndexToTick(low, rootWidth, tickSpacing);
-        highTick = TreeTickLib.treeIndexToTick(high, rootWidth, tickSpacing);
+        lowTick = TreeTickLib.treeIndexToTick(lowIdx, rootWidth, tickSpacing);
+        highTick = TreeTickLib.treeIndexToTick(highIdx, rootWidth, tickSpacing);
     }
 }

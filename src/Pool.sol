@@ -8,6 +8,7 @@ import { SqrtPriceMath } from "v3-core/contracts/libraries/SqrtPriceMath.sol";
 import { msb } from "./tree/BitMath.sol";
 import { Node } from "./visitors/Node.sol";
 import { Key } from "./tree/Key.sol";
+import { TreeTickLib } from "./tree/Tick.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -21,11 +22,15 @@ struct PoolInfo {
 using PoolInfoImpl for PoolInfo global;
 
 library PoolInfoImpl {
-    function tokens() internal view returns (address[] memory) {
+    function tokens(PoolInfo memory self) internal view returns (address[] memory) {
         address[] memory tokens = new address[](2);
-        tokens[0] = token0;
-        tokens[1] = token1;
+        tokens[0] = self.token0;
+        tokens[1] = self.token1;
         return tokens;
+    }
+
+    function treeTick(PoolInfo memory self, int24 tick) internal view returns (uint24 treeTick) {
+        return TreeTickLib.tickToTreeIndex(tick, self.treeWidth, self.tickSpacing);
     }
 }
 
@@ -66,8 +71,22 @@ library PoolLib {
         uint128 liq;
         uint256 feeGrowthInside0LastX128;
         uint256 feeGrowthInside1LastX128;
+        // The x and y here are the fees accumulated since the last poke, before the check was updated.
         (liq, feeGrowthInside0LastX128, feeGrowthInside1LastX128, x, y) = poolContract.positions(myKey);
-        // Now catch up the fee growth.
+        (uint256 feeGrowthInside0NowX128, uint256 feeGrowthInside1NowX128) = getInsideFees(pool, lowerTick, upperTick);
+        unchecked {
+            x += FullMath.mulX128(liq, feeGrowthInside0NowX128 - feeGrowthInside0LastX128, false);
+            y += FullMath.mulX128(liq, feeGrowthInside1NowX128 - feeGrowthInside1LastX128, false);
+        }
+    }
+
+    /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
+    function getInsideFees(
+        address pool,
+        int24 lowerTick,
+        int24 upperTick
+    ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         (, int24 currentTick, , , , , ) = poolContract.slot0();
         (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , ) = poolContract.ticks(
             lowerTick
@@ -78,46 +97,16 @@ library PoolLib {
 
         unchecked {
             if (currentTick < lowerTick) {
-                x += FullMath.mulX128(
-                    liq,
-                    lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128 - feeGrowthInside0LastX128,
-                    false
-                );
-                y += FullMath.mulX128(
-                    liq,
-                    lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128 - feeGrowthInside1LastX128,
-                    false
-                );
+                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
             } else if (currentTick >= upperTick) {
-                x += FullMath.mulX128(
-                    liq,
-                    upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128 - feeGrowthInside0LastX128,
-                    false
-                );
-                y += FullMath.mulX128(
-                    liq,
-                    upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128 - feeGrowthInside1LastX128,
-                    false
-                );
+                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
             } else {
                 uint256 feeGrowthGlobal0X128 = poolContract.feeGrowthGlobal0X128();
                 uint256 feeGrowthGlobal1X128 = poolContract.feeGrowthGlobal1X128();
-                x += FullMath.mulX128(
-                    liq,
-                    feeGrowthGlobal0X128 -
-                        lowerFeeGrowthOutside0X128 -
-                        upperFeeGrowthOutside0X128 -
-                        feeGrowthInside0LastX128,
-                    false
-                );
-                y += FullMath.mulX128(
-                    liq,
-                    feeGrowthGlobal1X128 -
-                        lowerFeeGrowthOutside1X128 -
-                        upperFeeGrowthOutside1X128 -
-                        feeGrowthInside1LastX128,
-                    false
-                );
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
             }
         }
     }
