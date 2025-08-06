@@ -7,7 +7,7 @@ import { Store } from "../Store.sol";
 import { PoolInfo, PoolLib, Pool } from "../Pool.sol";
 
 /// Query the values of internal data structures.
-contract TreeFacet {
+contract ViewFacet {
     error LengthMismatch(uint256 baseLength, uint256 widthLength);
 
     /// Get basic information about a pool.

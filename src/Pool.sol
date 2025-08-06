@@ -9,13 +9,15 @@ import { msb } from "./tree/BitMath.sol";
 import { Node } from "./visitors/Node.sol";
 import { Key } from "./tree/Key.sol";
 import { TreeTickLib } from "./tree/Tick.sol";
+import { SlotDerivation } from "openzeppelin-contracts/contracts/utils/SlotDerivation.sol";
+import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientSlot.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
     address poolAddr;
     address token0;
     address token1;
-    uint24 tickSpacing;
+    int24 tickSpacing;
     uint24 treeWidth;
 }
 
@@ -34,14 +36,19 @@ library PoolInfoImpl {
     }
 }
 
-/// Internal storage bookkeeping for pools.
+/// Internal persistent storage bookkeeping for pools.
 struct Pool {
     mapping(Key key => Node) nodes;
+    // The last time the pool was modified.
+    // This is ONLY updated when a new Data struct is created.
+    uint128 timestamp;
 }
 
 /// A helper library for accessing the underlying pool's ABI.
 /// @dev This will have to change for each pool we integrate with.
 library PoolLib {
+    bytes32 private constant POOL_GUARD_SLOT = SlotDerivation.erc7201Slot("ammplify.pool.guard.20250804");
+
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
         IUniswapV3PoolImmutables poolImmutables = IUniswapV3PoolImmutables(pool);
@@ -80,6 +87,20 @@ library PoolLib {
         }
     }
 
+    /**
+     * @notice Wrapper around pool collect function. Collects just fees if no liquidity has been burned.
+     * @param pool to operate on
+     * @param tickLower bound
+     * @param tickUpper bound
+     */
+    function collect(
+        address pool,
+        int24 tickLower,
+        int24 tickUpper
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        return IUniswapV3Pool(pool).collect(address(this), tickLower, tickUpper, type(uint128).max, type(uint128).max);
+    }
+
     /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
     function getInsideFees(
         address pool,
@@ -111,18 +132,61 @@ library PoolLib {
         }
     }
 
+    /// Get the liquidity specific to a particular range.
+    function getLiq(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 liq) {
+        (liq, , , , ) = IUniswapV3Pool(pool).positions(
+            keccak256(abi.encodePacked(address(this), lowerTick, upperTick))
+        );
+    }
+
+    /**
+     * @notice wrapper around pool mint function to handle callback verification
+     * @param pool to operate on
+     * @param tickLower bound
+     * @param tickUpper bound
+     * @param liquidity to mint
+     */
+    function mint(
+        address pool,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liquidity
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        POOL_GUARD_SLOT.asAddress().tstore(pool);
+        (amount0, amount1) = IUniswapV3Pool(pool).mint(address(this), tickLower, tickUpper, liquidity, "");
+        POOL_GUARD_SLOT.asAddress().tstore(address(0));
+    }
+
+    /**
+     * @notice wrapper around pool burn function
+     * @param pool to operate on
+     * @param tickLower bound
+     * @param tickUpper bound
+     * @param liquidity to burn
+     */
+    function burn(
+        address pool,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liquidity
+    ) internal returns (uint256 amount0, uint256 amount1) {
+        return IUniswapV3Pool(pool).burn(tickLower, tickUpper, liquidity);
+    }
+
+    function poolGuard() internal view returns (address) {
+        return POOL_GUARD_SLOT.asAddress().tload();
+    }
+
     /// Answers how much liquidity we can add from the given amounts for the given range, and
     /// how much is leftover.
     /// @dev Rounds liq down.
     function getAssignableLiq(
-        address pool,
         int24 lowTick,
         int24 highTick,
         uint128 x,
         uint128 y,
         uint160 sqrtPriceX96
     ) internal view returns (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         uint160 lowSqrtPriceX96 = TickMath.getSqrtRatioAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtRatioAtTick(highTick);
 
@@ -164,6 +228,25 @@ library PoolLib {
         }
     }
 
+    // How much liquidity is are these assets worth in the given range.
+    function getEquivalentLiq(
+        int24 lowTick,
+        int24 highTick,
+        uint256 x,
+        uint256 y,
+        uint160 sqrtPriceX96,
+        bool roundUp
+    ) internal pure returns (uint128 equivLiq) {
+        (uint256 lx, uint256 ly) = getAmounts(sqrtPriceX96, lowTick, highTick, 1 << 128, roundUp);
+        uint256 liqValueX128 = (FullMath.mulX64(lx, sqrtPriceX96, false) >> 32) + (ly << 96) / sqrtPriceX96;
+        uint256 myValue = (FullMath.mulX128(x, sqrtPriceX96, false) >> 32) + (y << 96) / sqrtPriceX96;
+        if (roundUp) {
+            equivLiq = FullMath.mulDivRoundingUp(myValue, 1 << 128, liqValueX128);
+        } else {
+            equivLiq = FullMath.mulDiv(myValue, 1 << 128, liqValueX128);
+        }
+    }
+
     /// Get the amounts of each token for the liquidity in the given range.
     function getAmounts(
         uint160 sqrtPriceX96,
@@ -171,7 +254,7 @@ library PoolLib {
         int24 highTick,
         uint128 liq,
         bool roundUp
-    ) internal view returns (uint256 x, uint256 y) {
+    ) internal pure returns (uint256 x, uint256 y) {
         uint160 lowSqrtPriceX96 = TickMath.getSqrtRatioAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtRatioAtTick(highTick);
 

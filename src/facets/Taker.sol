@@ -9,6 +9,7 @@ uint256 constant TAKER_VAULT_ID = 80085;
 
 contract TakerFacet is ReentrancyGuardTransient {
     error NotTakerOwner(address owner, address sender);
+    error NotTaker(uint256 assetId);
 
     /// Since our takers are permissioned
     function collateralize(address token, uint256 amount, bytes calldata data) external nonReentrant {
@@ -31,7 +32,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         RFTLib.settle(msg.sender, tokens, balances, data);
     }
 
-    function newAsset(
+    function newTaker(
         address recipient,
         address poolAddr,
         uint24 lowTick,
@@ -49,11 +50,12 @@ contract TakerFacet is ReentrancyGuardTransient {
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
         // This fills in the nodes in the asset.
         WalkerLib.addTakerWalk(pInfo, lowTick, highTick, data);
+        PoolLib.updateLiqs(data.poolAddr, data.changes);
         VaultLib.getProxy(pInfo.token0, xVaultIndex).deposit(TAKER_VAULT_ID, data.xBalance);
         VaultLib.getProxy(pInfo.token1, yVaultIndex).deposit(TAKER_VAULT_ID, data.yBalance);
     }
 
-    function removeAsset(
+    function removeTaker(
         address recipient,
         uint256 assetId,
         uint160 minSqrtPriceX96,
@@ -63,6 +65,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
         Asset storage asset = AssetLib.getAsset(assetId);
         require(asset.owner == msg.sender, NotTakerOwner(asset.owner, msg.sender));
+        require(asset.liqType == LiqType.TAKER, NotTaker(assetId));
 
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
@@ -74,9 +77,10 @@ contract TakerFacet is ReentrancyGuardTransient {
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
         RFTLib.settle(recipient, tokens, balances, rftData);
+        PoolLib.updateLiqs(data.poolAddr, data.changes);
     }
 
-    function viewAsset(
+    function viewTaker(
         uint256 assetId
     )
         external
@@ -84,6 +88,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         returns (address poolAddr, uint128 liq, uint256 balance0, uint256 balance1, uint256 fees0, uint256 fees1)
     {
         Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.liqType == LiqType.TAKER, NotTaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         ViewData memory data = ViewDataImpl.make(pInfo, asset);
         ViewWalkerLib.takerWalk(pInfo, asset.lowTick, asset.highTick, data);

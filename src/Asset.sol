@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { PoolInfo, PoolLib, Pool } from "./Pool.sol";
+import { PoolInfo, PoolLib } from "./Pool.sol";
 import { Key } from "./tree/Key.sol";
-import { LiqType } from "./visitors/Data.sol";
+import { LiqType } from "./walkers/Liq.sol";
 
 struct Asset {
     address owner;
+    /* pool info */
+    address poolAddr;
     /* Position summary */
     int24 lowTick;
     int24 highTick;
     LiqType liqType;
-    int128 liq;
-    /* pool info */
-    address poolAddr;
-    uint256 baseFeeGrowthInside0X128;
-    uint256 baseFeeGrowthInside1X128;
+    uint128 liq; // The original liquidity of the asset.
     /* node info */
     mapping(Key => NodeAsset) nodes;
 }
@@ -25,6 +23,7 @@ struct NodeAsset {
     // For takers, this is a checkpoint of the per liq fees owed.
     // For NC makers, this is a checkpoint of the per liq fees earned.
     // For C makers, this is not used.
+    // These checkpoints include both the swap fees and the reservation fees.
     uint256 fee0CheckX128;
     uint256 fee1CheckX128;
 }
@@ -36,31 +35,37 @@ struct AssetStore {
 }
 
 library AssetLib {
+    // We limit the number of assets per owner to prevent someone from blocking removes by overloading gas
+    // costs by donating positions to other users.
+    uint8 public constant MAX_ASSETS_PER_OWNER = 16;
+
+    error ExcessiveAssetsPerOwner(uint256 count);
+    error AssetNotFound(uint256 assetId, address owner);
+
+    /// Create a new maker asset.
     function newMaker(
         address recipient,
         PoolInfo memory pInfo,
         int24 lowTick,
         int24 highTick,
-        int128 liq,
+        uint128 liq,
         bool isCompounding
     ) internal returns (Asset storage asset, uint256 assetId) {
         AssetStore storage store = Store.assets();
         assetId = store.nextAssetId++;
         asset = store.assets[assetId];
         asset.owner = recipient;
+        asset.poolAddr = pInfo.poolAddr;
         asset.lowTick = lowTick;
         asset.highTick = highTick;
         asset.liqType = isCompounding ? LiqType.MAKER : LiqType.MAKER_NC;
         asset.liq = liq;
-        asset.poolAddr = pInfo.poolAddr;
-        (asset.baseFeeGrowthInside0X128, asset.baseFeeGrowthInside1X128) = PoolLib.getInsideFees(
-            pInfo.poolAddr,
-            lowTick,
-            highTick
-        );
         // The Nodes are to be filled in by a walker.
+        // Add the asset to the owner's bookkeeping.
+        addAssetToOwner(store, assetId, recipient);
     }
 
+    /// Create a new taker asset.
     function newTaker(
         address recipient,
         PoolInfo memory pInfo,
@@ -85,24 +90,42 @@ library AssetLib {
             highTick
         );
         // The Nodes are to be filled in by a walker.
+        addAssetToOwner(store, assetId, recipient);
     }
 
+    /// Fetch an asset by ID (typically for viewing).
     function getAsset(uint256 assetId) internal view returns (Asset storage asset) {
         AssetStore storage store = Store.assets();
         asset = store.assets[assetId];
     }
 
+    /// Remove an asset.
     function removeAsset(uint256 assetId, PoolInfo memory pInfo) internal {
         AssetStore storage store = Store.assets();
         asset = store.assets[assetId];
-        // We make sure the tree ticks are inclusive.
-        uint24 lowIndex = pInfo.treeTick(asset.lowTick);
-        uint24 highIndex = pInfo.treeTick(asset.highTick) - 1;
-        Key[] memory keys = Route.getKeys(asset.lowTick, asset.highTick);
-        for (uint256 i = 0; i < keys.length; i++) {
-            Key key = keys[i];
-            delete asset.nodes[key];
-        }
+        address owner = asset.owner;
+        // The asset nodes will have been removed by the walker.
         delete store.assets[assetId];
+        uint256[] storage ownerAssets = store.ownerAssets[owner];
+        bool found = false;
+        for (uint8 i = 0; i < ownerAssets.length; i++) {
+            if (ownerAssets[i] == assetId) {
+                ownerAssets[i] = ownerAssets[ownerAssets.length - 1];
+                ownerAssets.pop();
+                found = true;
+                break;
+            }
+        }
+        require(found, AssetNotFound(assetId, owner));
+    }
+
+    /* Helpers */
+
+    function addAssetToOwner(AssetStore storage store, uint256 assetId, address owner) private {
+        require(
+            store.ownerAssets[owner].length < MAX_ASSETS_PER_OWNER,
+            ExcessiveAssetsPerOwner(store.ownerAssets[owner].length)
+        );
+        store.ownerAssets[owner].push(assetId);
     }
 }

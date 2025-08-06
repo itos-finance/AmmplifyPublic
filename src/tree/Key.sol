@@ -55,6 +55,14 @@ library KeyImpl {
         return _rawWidth(self) == 1;
     }
 
+    function isLeft(Key self) internal pure returns (bool) {
+        return (_rawBase(self) & _rawWidth(self)) == 0;
+    }
+
+    function isRight(Key self) internal pure returns (bool) {
+        return (_rawBase(self) & _rawWidth(self)) != 0;
+    }
+
     /// Get the next child key to traverse when going down the tree.
     function nextDown(Key self, Key other) internal pure returns (Key) {
         uint48 nextWidth = _rawWidth(other) >> 1;

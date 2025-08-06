@@ -104,12 +104,12 @@ library RouteImpl {
         bytes memory data
     ) internal {
         phaseFunc(Phase.PRE_UP, data);
-        _walkUpRoot(self, upFunc, data);
-        phaseFunc(Phase.ROOT_UP, data);
         _walkUpLeft(self, upFunc, data);
         phaseFunc(Phase.LEFT_UP, data);
         _walkUpRight(self, upFunc, data);
         phaseFunc(Phase.RIGHT_UP, data);
+        _walkUpRoot(self, upFunc, data);
+        phaseFunc(Phase.ROOT_UP, data);
     }
 
     /* Private methods for walking */

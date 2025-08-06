@@ -3,10 +3,18 @@ pragma solidity ^0.8.27;
 
 import { PoolInfo } from "../Pool.sol";
 import { Asset, AssetLib } from "../Asset.sol";
-import { Data, DataImpl } from "../visitors/Data.sol";
+import { LiqType } from "../walkers/Liq.sol";
+import { Data, DataImpl } from "../walkers/Data.sol";
 import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
+import { WalkerLib } from "../walkers/Lib.sol";
+import { PoolLib } from "../Pool.sol";
+import { PoolWalker } from "../walkers/Pool.sol";
 
 contract MakerFacet is ReentrancyGuardTransient {
+    error NotMakerOwner(address owner, address sender);
+    /// Thrown when the asset being view or removed is not a maker asset.
+    error NotMaker(uint256 assetId);
+
     /// @notice Creates a new maker position.
     /// @param poolAddr The address of the pool.
     /// @param lowTick The lower tick of the liquidity range.
@@ -15,7 +23,7 @@ contract MakerFacet is ReentrancyGuardTransient {
     /// @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this.
     /// @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this.
     /// @param data Data passed during RFT to the payer.
-    function newAsset(
+    function newMaker(
         address recipient,
         address poolAddr,
         uint24 lowTick,
@@ -25,21 +33,29 @@ contract MakerFacet is ReentrancyGuardTransient {
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external nonReentrant returns (uint256 assetId) {
+    ) external nonReentrant returns (uint256 _assetId) {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
-        Asset storage asset;
-        (asset, assetId) = AssetLib.newMaker(recipient, pInfo, lowTick, highTick, liq, isCompounding);
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
+            recipient,
+            pInfo,
+            lowTick,
+            highTick,
+            liq,
+            isCompounding
+        );
+        Data memory data = DataImpl.makeAdd(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
         // This fills in the nodes in the asset.
-        WalkerLib.addMakerWalk(pInfo, lowTick, highTick, data);
+        WalkerLib.modify(pInfo, lowTick, highTick, data);
+        // Settle balances.
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
         RFTLib.settle(msg.sender, tokens, balances, rftData);
+        PoolWalker.settle(pInfo, lowTick, highTick, data);
     }
 
-    function removeAsset(
+    function removeMaker(
         address recipient,
         uint256 assetId,
         uint128 minSqrtPriceX96,
@@ -47,18 +63,22 @@ contract MakerFacet is ReentrancyGuardTransient {
         bytes calldata rftData
     ) external nonReentrant returns (address token0, address token1, uint256 balance0, uint256 balance1) {
         Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
+        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
-        WalkerLib.removeMakerWalk(pInfo, lowTick, highTick, data);
-        AssetLib.removeAsset(assetId, pInfo);
+        Data memory data = DataImpl.makeRemove(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        WalkerLib.modify(pInfo, lowTick, highTick, data);
+        AssetLib.removeAsset(assetId, pInfo, data);
+        // Settle balances.
+        PoolWalker.settle(pInfo, lowTick, highTick, data);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
-        balances[0] = data.xBalance;
-        balances[1] = data.yBalance;
+        balances[0] = -int256(data.xBalance);
+        balances[1] = -int256(data.yBalance);
         RFTLib.settle(recipient, tokens, balances, rftData);
     }
 
-    function viewAsset(
+    function viewMaker(
         uint256 assetId
     )
         external
@@ -66,6 +86,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         returns (address poolAddr, uint128 liq, uint256 balance0, uint256 balance1, uint256 fees0, uint256 fees1)
     {
         Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         ViewData memory data = ViewDataImpl.make(pInfo, asset);
         ViewWalkerLib.makerWalk(pInfo, asset.lowTick, asset.highTick, data);
@@ -79,10 +100,13 @@ contract MakerFacet is ReentrancyGuardTransient {
         bytes calldata rftData
     ) external nonReentrant returns (uint256 fees0, uint256 fees1) {
         Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        Data memory data = DataImpl.make(pInfo, -asset.liq, asset.liqType, asset, minSqrtPriceX96, maxSqrtPriceX96);
-        WalkerLib.collectMakerWalk(pInfo, lowTick, highTick, data);
+        Data memory data = DataImpl.makeAdd(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        WalkerLib.collect(pInfo, lowTick, highTick, data);
+
         AssetLib.collectFees(assetId, data);
+        PoolLib.collect(asset.poolAddr, asset.lowTick, asset.highTick);
         address[] memory tokens = pInfo.tokens;
         address[] memory balances = new address[](2);
         balances[0] = data.xBalance;

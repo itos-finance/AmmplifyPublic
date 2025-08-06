@@ -6,17 +6,17 @@ import { Config } from "./Config.sol";
 import { AssetStore } from "./Asset.sol";
 import { VaultStore } from "./vaults/Vault.sol";
 import { FeeStore } from "./Fee.sol";
+import { SlotDerivation } from "openzeppelin-contracts/contracts/utils/SlotDerivation.sol";
 
 struct Storage {
     AssetStore _assets;
     mapping(address poolAddr => Pool) pools;
     VaultStore _vaults;
     FeeStore _fees;
-    Config _config;
 }
 
 library Store {
-    bytes32 public constant STORAGE_SLOT = keccak256("ammplify.storage.20250715");
+    bytes32 public constant STORAGE_SLOT = SlotDerivation.erc7201Slot("ammplify.storage.20250715");
 
     function load() internal pure returns (Storage storage s) {
         bytes32 position = STORAGE_SLOT;
@@ -40,9 +40,5 @@ library Store {
 
     function fees() internal view returns (FeeStore storage f) {
         f = load()._fees;
-    }
-
-    function config() internal view returns (Config storage c) {
-        f = load()._config;
     }
 }
