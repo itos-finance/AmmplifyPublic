@@ -14,8 +14,8 @@ struct Data {
     LiqData liq;
     FeeData fees;
     // Outputs
-    uint256 xBalance;
-    uint256 yBalance;
+    int256 xBalance;
+    int256 yBalance;
     /* Below are written to by walkers */
 }
 
@@ -23,30 +23,12 @@ library DataImpl {
     error PriceSlippageExceeded(uint160 currentSqrtPriceX96, uint160 minSqrtPriceX96, uint160 maxSqrtPriceX96);
 
     /* Factory */
-    function makeAdd(
+    function make(
         PoolInfo memory pInfo,
         Asset storage asset,
         uint160 minSqrtPriceX96,
-        uint160 maxSqrtPriceX96
-    ) internal pure returns (Data memory) {
-        return _make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
-    }
-
-    function makeRemove(
-        PoolInfo memory pInfo,
-        Asset storage asset,
-        uint160 minSqrtPriceX96,
-        uint160 maxSqrtPriceX96
-    ) internal pure returns (Data memory data) {
-        data = _make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
-        data.liq.liq = -data.liq.liq; // Negate the liquidity for removal.
-    }
-
-    function _make(
-        PoolInfo memory pInfo,
-        Asset storage asset,
-        uint160 minSqrtPriceX96,
-        uint160 maxSqrtPriceX96
+        uint160 maxSqrtPriceX96,
+        uint128 liq
     ) private pure returns (Data memory) {
         Pool storage pool = Store.pool(pInfo.poolAddr);
         uint128 treeTimestamp = pool.timestamp;
@@ -73,7 +55,7 @@ library DataImpl {
                 assetSlot: assetSlot,
                 sqrtPriceX96: currentSqrtPriceX96,
                 timestamp: treeTimestamp,
-                liq: LiqDataLib.make(asset, pInfo),
+                liq: LiqDataLib.make(asset, pInfo, liq),
                 fees: FeeDataLib.make(pInfo),
                 // Outputs
                 xBalance: 0,
@@ -99,20 +81,6 @@ library DataImpl {
         uint160 highSqrtPriceX96 = TickMath.getSqrtRatioAtTick(highTick);
         xBorrows = SqrtPriceMath.getAmount0Delta(gmSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
         yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, gmSqrtPriceX96, liq, roundUp);
-    }
-
-    function equivLiq(
-        Data memory self,
-        Key key,
-        uint256 x,
-        uint256 y,
-        bool roundUp
-    ) internal pure returns (uint128 equivLiq) {
-        if (x == 0 && y == 0) {
-            return 0;
-        }
-        (int24 lowTick, int24 highTick) = key.ticks(self.rootWidth, self.tickSpacing);
-        equivLiq = PoolLib.getEquivalentLiq(lowTick, highTick, x, y, self.sqrtPriceX96, roundUp);
     }
 
     /* Helpers */

@@ -61,7 +61,7 @@ library LiqNodeImpl {
 
 struct LiqData {
     LiqType liqType;
-    int256 liq; // The amount of liquidity to add or remove.
+    uint128 liq; // The target liquidity to set the asset node's liq to.
     uint128 compoundThreshold; // The min liquidity worth compounding.
     // Prefix info
     uint128 mLiqPrefix; // Current prefix of maker liquidity.
@@ -107,11 +107,7 @@ library LiqWalker {
 
         // Do the modifications.
         if (visit) {
-            if (data.liq.liq > 0) {
-                add(iter, data, node.liq, uint128(data.liq.liq));
-            } else if (data.liq.liq < 0) {
-                remove(iter, data, node.liq, uint128(-data.liq.liq));
-            }
+            modify(iter, node.liq, data, data.liq.liq);
         } else {
             // If propogating, we can't be at a leaf.
             (Key lk, Key rk) = key.children();
@@ -134,13 +130,8 @@ library LiqWalker {
         (iter.lowTick, iter.highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         compound(iter, node, data);
 
-        // Do the modifications.
         if (visit) {
-            if (data.liq.liq > 0) {
-                add(iter, data, node.liq, uint128(data.liq.liq));
-            } else if (data.liq.liq < 0) {
-                remove(iter, data, node.liq, uint128(-data.liq.liq));
-            }
+            targetAndCollect(iter, node, data);
         }
 
         // Make sure our liquidity is solvent at each node.
@@ -206,6 +197,97 @@ library LiqWalker {
         node.fees.yCFees = leftoverY;
     }
 
+    function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
+        AssetNode storage aNode = data.assetNode(iter.key);
+        // First we collect fees if there are any.
+        // Fee collection happens automatically for compounding liq when modifying liq.
+        collectFees(aNode, node, data);
+
+        // Then we do the liquidity modification.
+        uint128 sliq = aNode.sliq; // Our current liquidity balance.
+        if (data.liqType == LiqType.MAKER) {
+            uint128 equivLiq = PoolLib.getEquivalentLiq(
+                iter.lowTick,
+                iter.highTick,
+                xCFees,
+                yCFees,
+                data.sqrtPriceX96,
+                true
+            );
+            uint128 compoundingLiq = node.mLiq - node.ncLiq + equivLiq;
+            uint256 currentLiq = FullMath.mulDiv(compoundingLiq, sliq, node.shares);
+            uint256 targetSliq = FullMath.mulDiv(node.shares, targetLiq, compoundingLiq);
+            if (currentLiq < targetLiq) {
+                uint256 liqDiff = targetLiq - currentLiq;
+                node.mLiq += liqDiff;
+                node.shares += targetSliq - sliq;
+                node.subtreeMLiq += iter.width * liqDiff;
+                (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liqDiff, true);
+                data.xBalance += int256(xNeeded);
+                data.yBalance += int256(yNeeded);
+            } else if (currentLiq > targetLiq) {
+                uint256 shareRatioX256 = FullMath.mulDivX256(sliq, node.shares, false);
+                liq = FullMath.mulX256(compoundingLiq, shareRatioX256, false);
+                node.mLiq -= liq;
+                node.shares -= sliq;
+                node.subtreeMLiq -= iter.width * liq;
+                uint256 xClaim = FullMath.mulX256(node.xCFees, shareRatioX256, false);
+                node.xCFees -= xClaim;
+                data.xBalance -= int256(xClaim);
+                uint256 yClaim = FullMath.mulX256(node.yCFees, shareRatioX256, false);
+                node.yCFees -= yClaim;
+                data.yBalance -= int256(yClaim);
+                // Now we claim the balances from the liquidity itself.
+                (uint256 xOwed, uint256 yOwed) = data.computeBorrows(iter.key, liq, false);
+                data.xBalance -= int256(xOwed);
+                data.yBalance -= int256(yOwed);
+            }
+
+            node.mLiq += liq;
+            node.shares += sliq;
+            node.subtreeMLiq += iter.width * liq;
+            // No fees to checkpoint.
+            (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
+        } else if (data.liqType == LiqType.MAKER_NC) {
+            sliq = liq;
+            node.mLiq += liq;
+            node.ncLiq += liq;
+            node.subtreeMLiq += iter.width * liq;
+            // Checkpoint maker fees.
+            aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
+            aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
+            (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
+        } else if (data.liqType == LiqType.TAKER) {
+            sliq = liq;
+            node.tLiq += liq;
+            node.subtreeTLiq += width * liq;
+            // You'd think we want to overestimate borrows here but that can be compensated by
+            // the borrow fee function. Instead we care more about the swap that takers will perform
+            // with the borrowed assets, we need to ensure the swap inputs round down.
+            (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liq, false);
+            node.subtreeBorrowedX += xBorrow;
+            node.subtreeBorrowedY += yBorrow;
+            data.xBalance -= int256(xBorrow);
+            data.yBalance -= int256(yBorrow);
+            // Checkpoint taker fees.
+            aNode.fee0CheckX128 = node.takerXFeePerLiqX128;
+            aNode.fee1CheckX128 = node.takerYFeePerLiqX128;
+        }
+        node.dirty = true; // Mark the node as dirty after modification.
+        aNode.sliq = sliq;
+
+        if (data.liqType == LiqType.MAKER || data.liqType == LiqType.MAKER_NC) {
+            add(iter, data, node, liq);
+        } else if (data.liqType == LiqType.TAKER) {
+            remove(iter, data, node);
+            add(iter, data, node, liq);
+        }
+    }
+
     function add(LiqIter memory iter, Data memory data, LiqNode storage node, uint128 liq) internal {
         AssetNode storage aNode = data.assetNode(iter.key);
         uint128 sliq;
@@ -225,8 +307,8 @@ library LiqWalker {
             node.subtreeMLiq += iter.width * liq;
             // No fees to checkpoint.
             (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
-            data.xBalance += xNeeded;
-            data.yBalance += yNeeded;
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
         } else if (data.liqType == LiqType.MAKER_NC) {
             sliq = liq;
             node.mLiq += liq;
@@ -236,8 +318,8 @@ library LiqWalker {
             aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
             (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
-            data.xBalance += xNeeded;
-            data.yBalance += yNeeded;
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
         } else if (data.liqType == LiqType.TAKER) {
             sliq = liq;
             node.tLiq += liq;
@@ -248,19 +330,18 @@ library LiqWalker {
             (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liq, false);
             node.subtreeBorrowedX += xBorrow;
             node.subtreeBorrowedY += yBorrow;
-            data.xBalance += xBorrow;
-            data.yBalance += yBorrow;
+            data.xBalance -= int256(xBorrow);
+            data.yBalance -= int256(yBorrow);
             // Checkpoint taker fees.
-            node.fee0CheckX128 = node.takerXFeePerLiqX128;
-            node.fee1CheckX128 = node.takerYFeePerLiqX128;
+            aNode.fee0CheckX128 = node.takerXFeePerLiqX128;
+            aNode.fee1CheckX128 = node.takerYFeePerLiqX128;
         }
         node.dirty = true; // Mark the node as dirty after modification.
         aNode.sliq = sliq;
     }
 
-    function remove(Key key, Data memory data, LiqNode storage node) internal {
-        uint24 width = key.width();
-        AssetNode storage aNode = data.assetNode(key);
+    function remove(LiqIter memory iter, Data memory data, LiqNode storage node) internal {
+        AssetNode storage aNode = data.assetNode(iter.key);
         uint128 sliq = aNode.sliq;
         if (data.liqType == LiqType.MAKER) {
             uint128 compoundingLiq = node.mLiq - node.ncLiq;
@@ -268,41 +349,101 @@ library LiqWalker {
             liq = FullMath.mulX256(compoundingLiq, shareRatioX256, false);
             node.mLiq -= liq;
             node.shares -= sliq;
-            node.subtreeMLiq -= width * liq;
+            node.subtreeMLiq -= iter.width * liq;
             uint256 xClaim = FullMath.mulX256(node.xCFees, shareRatioX256, false);
             node.xCFees -= xClaim;
-            data.xBalance += xClaim;
+            data.xBalance -= int256(xClaim);
             uint256 yClaim = FullMath.mulX256(node.yCFees, shareRatioX256, false);
             node.yCFees -= yClaim;
-            data.yBalance += yClaim;
+            data.yBalance -= int256(yClaim);
             // Now we claim the balances from the liquidity itself.
-            (uint256 xOwed, uint256 yOwed) = data.computeBorrows(key, liq, false);
-            data.xBalance += xOwed;
-            data.yBalance += yOwed;
+            (uint256 xOwed, uint256 yOwed) = data.computeBorrows(iter.key, liq, false);
+            data.xBalance -= int256(xOwed);
+            data.yBalance -= int256(yOwed);
         } else if (data.liqType == LiqType.MAKER_NC) {
             node.mLiq -= sliq;
             node.ncLiq -= sliq;
-            node.subtreeMLiq -= width * sliq;
-            data.xBalance += FullMath.mulX128(sliq, node.fees.MakerXFeesPerLiqX128 - aNode.fee0CheckX128, false);
-            data.yBalance += FullMath.mulX128(sliq, node.fees.MakerYFeesPerLiqX128 - aNode.fee1CheckX128, false);
+            node.subtreeMLiq -= iter.width * sliq;
+            data.xBalance -= int256(
+                FullMath.mulX128(sliq, node.fees.MakerXFeesPerLiqX128 - aNode.fee0CheckX128, false)
+            );
+            data.yBalance -= int256(
+                FullMath.mulX128(sliq, node.fees.MakerYFeesPerLiqX128 - aNode.fee1CheckX128, false)
+            );
             // Now we claim the balances from the liquidity itself.
-            (uint256 xOwed, uint256 yOwed) = data.computeBorrows(key, sliq, false);
-            data.xBalance += xOwed;
-            data.yBalance += yOwed;
+            (uint256 xOwed, uint256 yOwed) = data.computeBorrows(iter.key, sliq, false);
+            data.xBalance -= int256(xOwed);
+            data.yBalance -= int256(yOwed);
         } else if (data.liqType == LiqType.TAKER) {
             node.tLiq -= sliq;
-            node.subtreeTLiq -= width * sliq;
+            node.subtreeTLiq -= iter.width * sliq;
             // We need to match the rounding when adding tLiq, although we'd like to round up here.
-            (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(key, sliq, false);
+            (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, sliq, false);
             node.subtreeBorrowedX -= xBorrow;
             node.subtreeBorrowedY -= yBorrow;
-            data.xBalance += FullMath.mulX64(sliq, node.takerXFeePerLiqX64 - aNode.fee0CheckX128, true);
-            data.yBalance += FullMath.mulX64(sliq, node.takerYFeePerLiqX64 - aNode.fee1CheckX128, true);
-            data.xBalance += xBorrow;
-            data.yBalance += yBorrow;
+            // The user pays the fees
+            data.xBalance += int256(FullMath.mulX128(sliq, node.takerXFeePerLiqX128 - aNode.fee0CheckX128, true));
+            data.yBalance += int256(FullMath.mulX128(sliq, node.takerYFeePerLiqX128 - aNode.fee1CheckX128, true));
+            // And returns the assets.
+            data.xBalance += int256(xBorrow);
+            data.yBalance += int256(yBorrow);
         }
         node.liq.dirty = true; // Mark the node as dirty after modification.
         delete aNode;
+    }
+
+    /// We modify the liquidity to a target amount and collect fees.
+    /// @dev The target liq is enough to collect fees for compounding liq.
+    function targetLiq(LiqIter memory iter, Node storage node, Data memory data) internal {
+        AssetNode storage aNode = data.assetNode(iter.key);
+        uint128 sliq;
+        if (data.liqType == LiqType.MAKER) {
+            uint128 equivLiq = PoolLib.getEquivalentLiq(
+                iter.lowTick,
+                iter.highTick,
+                xCFees,
+                yCFees,
+                data.sqrtPriceX96,
+                true
+            );
+            uint128 compoundingLiq = node.mLiq - node.ncLiq + equivLiq;
+            sliq = FullMath.mulDiv(node.shares, liq, compoundingLiq);
+            node.mLiq += liq;
+            node.shares += sliq;
+            node.subtreeMLiq += iter.width * liq;
+            // No fees to checkpoint.
+            (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
+        } else if (data.liqType == LiqType.MAKER_NC) {
+            sliq = liq;
+            node.mLiq += liq;
+            node.ncLiq += liq;
+            node.subtreeMLiq += iter.width * liq;
+            // Checkpoint maker fees.
+            aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
+            aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
+            (uint256 xNeeded, uint256 yNeeded) = data.computeBorrows(iter.key, liq, true);
+            data.xBalance += int256(xNeeded);
+            data.yBalance += int256(yNeeded);
+        } else if (data.liqType == LiqType.TAKER) {
+            sliq = liq;
+            node.tLiq += liq;
+            node.subtreeTLiq += width * liq;
+            // You'd think we want to overestimate borrows here but that can be compensated by
+            // the borrow fee function. Instead we care more about the swap that takers will perform
+            // with the borrowed assets, we need to ensure the swap inputs round down.
+            (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liq, false);
+            node.subtreeBorrowedX += xBorrow;
+            node.subtreeBorrowedY += yBorrow;
+            data.xBalance -= int256(xBorrow);
+            data.yBalance -= int256(yBorrow);
+            // Checkpoint taker fees.
+            node.fee0CheckX128 = node.takerXFeePerLiqX128;
+            node.fee1CheckX128 = node.takerYFeePerLiqX128;
+        }
+        node.dirty = true; // Mark the node as dirty after modification.
+        aNode.sliq = sliq;
     }
 
     /// Ensure the liquidity at this node is solvent.
@@ -354,6 +495,25 @@ library LiqWalker {
             node.liq.dirty = true;
             sibling.liq.borrowed += borrow;
             sibling.liq.dirty = true;
+        }
+    }
+
+    /* Helpers' Helpers */
+
+    /// Collect non-liquidating maker fees or pay taker fees.
+    function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
+        uint128 liq = aNode.sliq;
+        if (data.liqType == LiqType.MAKER_NC) {
+            data.xBalance -= int256(FullMath.mulX128(liq, node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128, false));
+            data.yBalance -= int256(FullMath.mulX128(liq, node.fees.makerYFeesPerLiqX128 - aNode.fee1CheckX128, false));
+            aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
+            aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
+        } else if (data.liqType == LiqType.TAKER) {
+            // Now we pay the taker fees.
+            data.xBalance += int256(FullMath.mulX128(liq, node.takerXFeePerLiqX128 - aNode.fee0CheckX128, true));
+            data.yBalance += int256(FullMath.mulX128(liq, node.takerYFeePerLiqX128 - aNode.fee1CheckX128, true));
+            aNode.fee0CheckX128 = node.takerXFeePerLiqX128;
+            aNode.fee1CheckX128 = node.takerYFeePerLiqX128;
         }
     }
 }

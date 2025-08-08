@@ -43,7 +43,7 @@ contract MakerFacet is ReentrancyGuardTransient {
             liq,
             isCompounding
         );
-        Data memory data = DataImpl.makeAdd(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq);
         // This fills in the nodes in the asset.
         WalkerLib.modify(pInfo, lowTick, highTick, data);
         // Settle balances.
@@ -66,7 +66,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        Data memory data = DataImpl.makeRemove(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
         WalkerLib.modify(pInfo, lowTick, highTick, data);
         AssetLib.removeAsset(assetId, pInfo, data);
         // Settle balances.
