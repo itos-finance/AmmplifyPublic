@@ -28,9 +28,24 @@ library FeeLib {
     function init() internal {
         FeeStore storage store = Store.fees();
         store.defaultCompoundThreshold = 1e12; // 1 of each if both tokens are 6 decimals.
-        // TODO: set reasonable default values.
-        store.defaultFeeCurve = SmoothRateCurveConfig({ maxUtilX64: 100, minUtilX64: 0, rateX64: 0 });
-        store.defaultSplitCurve = SmoothRateCurveConfig({ maxUtilX64: 100, minUtilX64: 0, rateX64: 0 });
+        // Target 30% at 60% util. 5% at 0%.
+        store.defaultFeeCurve = SmoothRateCurveConfig({
+            invAlphaX128: 102084710076281535261119195933814292480,
+            betaX64: 14757395258967642112,
+            maxUtilX64: 22136092888451461120, // 120%
+            maxRateX64: 17524406870024073216 // 95%
+        });
+        // This is just for adding a super linear weight to the the split.
+        // We base this around 1 to make a more even split when the difference is low.
+        // E.g., the weight at 0 is ~2, 0.5 is ~3, 0.76 is ~5, 0.9 is ~10, 1 is 100.
+        // @TODO The fee difference at target should be 6x that of 0% util, so
+        // SmoothRateCurves probably don't work here. We should change this.
+        store.defaultSplitCurve = SmoothRateCurveConfig({
+            invAlphaX128: type(uint128).max, // 1
+            betaX64: 36893488147419103232, // 1 (without offset)
+            maxUtilX64: 18631211514446647296, // 101%
+            maxRateX64: 1844674407370955161600 // 100
+        });
     }
 
     /* Getters */
@@ -56,10 +71,10 @@ library FeeLib {
     /// Configuration for calculating the overall fee payment averaged across all takers.
     function getRateCurve(address poolAddr) internal view returns (SmoothRateCurveConfig memory rateCurve) {
         FeeStore storage store = Store.fees();
-        if (store.rateCurves[poolAddr].maxUtilX64 == 0) {
+        if (store.feeCurves[poolAddr].maxUtilX64 == 0) {
             return store.defaultFeeCurve;
         } else {
-            return store.rateCurves[poolAddr];
+            return store.feeCurves[poolAddr];
         }
     }
 

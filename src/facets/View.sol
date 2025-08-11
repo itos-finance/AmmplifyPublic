@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { Node } from "../visitors/Node.sol";
+import { Node } from "../walkers/Node.sol";
 import { Key, KeyImpl } from "../tree/Key.sol";
 import { Store } from "../Store.sol";
 import { PoolInfo, PoolLib, Pool } from "../Pool.sol";
+import { LiqType } from "../walkers/Liq.sol";
+import { Asset, AssetLib } from "../Asset.sol";
 
 /// Query the values of internal data structures.
 contract ViewFacet {
@@ -15,19 +17,26 @@ contract ViewFacet {
         pInfo = PoolLib.getPoolInfo(poolAddr);
     }
 
-    /// Get information about nodes in the pool.
-    function getNodeInfo(
-        address poolAddr,
-        uint24[] calldata base,
-        uint24[] calldata width
-    ) external view returns (Node[] memory node) {
-        Key key = KeyImpl.make(base, width);
-        Pool storage pool = Store.pool(poolAddr);
-        node = new Node[](base.length);
-        require(base.length == width.length, LengthMismatch(base.length, width.length));
+    /// Get basic asset info and then use the appropriate view function in the appropriate facet to get more details.
+    function getAssetInfo(
+        uint256 assetId
+    )
+        external
+        view
+        returns (address owner, address poolAddr, int24 lowTick, int24 highTick, LiqType liqType, uint128 liq)
+    {
+        Asset storage asset = AssetLib.getAsset(assetId);
+        return (asset.owner, asset.poolAddr, asset.lowTick, asset.highTick, asset.liqType, asset.liq);
+    }
 
-        for (uint256 i = 0; i < base.length; i++) {
-            key = KeyImpl.make(base[i], width[i]);
+    /// Get information about nodes in the pool.
+    /// @dev You probably need to query the poolInfo first to get the treeWidth to compute valid keys first.
+    function getNodes(address poolAddr, Key[] calldata keys) external view returns (Node[] memory node) {
+        Pool storage pool = Store.pool(poolAddr);
+        node = new Node[](keys.length);
+
+        for (uint256 i = 0; i < keys.length; i++) {
+            Key key = keys[i];
             node[i] = pool.nodes[key];
         }
     }

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { VaultType } from "./VaultPointer.sol";
+import { VaultType, VaultPointer } from "./VaultPointer.sol";
 import { VaultE4626 } from "./E4626.sol";
+import { VaultProxy } from "./VaultProxy.sol";
 import { Store } from "../Store.sol";
 
 // Holds overall vault information.
@@ -40,7 +41,7 @@ library VaultLib {
     // Thrown during a get if the vault can't be found.
     error VaultNotFound(address);
     // Thrown when there is already a primary and a backup vault.
-    error VaultOccupied(uint256 vault, address token, uint8 index);
+    error VaultOccupied(address vault, address token, uint8 index);
     // Thrown when removing a vault that is still in use.
     error VaultInUse(address vault, address token, uint8 index);
     // Thrown when deleting or swapping a vault but there is no backup for the vertex.
@@ -49,7 +50,7 @@ library VaultLib {
     /// Add a vault for a token.
     /// Adds as the primary vault if one does not exist yet, then the backup vault.
     function add(address token, uint8 idx, address vault, VaultType vType) internal {
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
 
         // First add to vault tracking.
         if (vStore.vaults[token][idx] == address(0)) {
@@ -76,7 +77,7 @@ library VaultLib {
         uint256 outstanding = vPtr.totalBalance(false);
         if (outstanding > BALANCE_DE_MINIMUS) revert RemainingVaultBalance(vault, outstanding);
 
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
         address token = vStore.usedBy[vault];
         uint8 idx = vStore.index[vault];
         if (vStore.vaults[token][idx] == vault) revert VaultInUse(vault, token, idx);
@@ -108,7 +109,7 @@ library VaultLib {
 
     /// Swap the active vault we deposit into.
     function hotSwap(address token, uint8 index) internal returns (address fromVault, address toVault) {
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
         // If there is no backup, then we can't do this.
         if (vStore.backups[token][index] == address(0)) revert NoBackup(token, index);
         // Swap.
@@ -119,18 +120,35 @@ library VaultLib {
         return (active, backup);
     }
 
+    /* Internal Library */
+
+    /// Deposit an amount of a certain token to be owned by the given assetId
+    function deposit(address token, uint8 index, uint256 assetId, uint256 amount) internal {
+        VaultProxy memory vProxy = getProxy(token, index);
+        vProxy.deposit(assetId, amount);
+        vProxy.commit();
+    }
+
+    /// Withdraw and return the total balance owned by the given asset.
+    function withdraw(address token, uint8 index, uint256 assetId) internal returns (uint256 amount) {
+        VaultProxy memory vProxy = getProxy(token, index);
+        amount = vProxy.balance(assetId, false);
+        vProxy.withdraw(assetId, amount);
+        vProxy.commit();
+    }
+
     /* Getters */
 
     /// Get the active and backup addresses for a vault.
     function getVaultAddresses(address token, uint8 index) internal view returns (address active, address backup) {
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
         active = vStore.vaults[token][index];
         backup = vStore.backups[token][index];
     }
 
     /// Fetch a VaultProxy for the vertex's active vaults.
     function getProxy(address token, uint8 index) internal view returns (VaultProxy memory vProxy) {
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
         vProxy.active = getVault(vStore.vaults[token][index]);
         address backup = vStore.backups[token][index];
         if (backup != address(0)) vProxy.backup = getVault(backup);
@@ -138,7 +156,7 @@ library VaultLib {
 
     /// Fetch a Vault
     function getVault(address vault) internal view returns (VaultPointer memory vPtr) {
-        VaultStorage storage vStore = Store.vaults();
+        VaultStore storage vStore = Store.vaults();
         vPtr.vType = vStore.vTypes[vault];
         if (vPtr.vType == VaultType.E4626) {
             VaultE4626 storage v = vStore.e4626s[vault];

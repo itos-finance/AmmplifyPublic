@@ -2,11 +2,12 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3PoolImmutables } from "v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
-import { IUniswapV3Pool } from "v3-core/contracts/interfaces/uniswap/IUniswapV3Pool.sol";
-import { TickMath } from "v3-core/contracts/libraries/TickMath.sol";
-import { SqrtPriceMath } from "v3-core/contracts/libraries/SqrtPriceMath.sol";
+import { IUniswapV3Pool } from "v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
+import { FullMath } from "./FullMath.sol";
+import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
 import { msb } from "./tree/BitMath.sol";
-import { Node } from "./visitors/Node.sol";
+import { Node } from "./walkers/Node.sol";
 import { Key } from "./tree/Key.sol";
 import { TreeTickLib } from "./tree/Tick.sol";
 import { SlotDerivation } from "openzeppelin-contracts/contracts/utils/SlotDerivation.sol";
@@ -25,13 +26,13 @@ using PoolInfoImpl for PoolInfo global;
 
 library PoolInfoImpl {
     function tokens(PoolInfo memory self) internal view returns (address[] memory) {
-        address[] memory tokens = new address[](2);
-        tokens[0] = self.token0;
-        tokens[1] = self.token1;
-        return tokens;
+        address[] memory _tokens = new address[](2);
+        _tokens[0] = self.token0;
+        _tokens[1] = self.token1;
+        return _tokens;
     }
 
-    function treeTick(PoolInfo memory self, int24 tick) internal view returns (uint24 treeTick) {
+    function treeTick(PoolInfo memory self, int24 tick) internal view returns (uint24) {
         return TreeTickLib.tickToTreeIndex(tick, self.treeWidth, self.tickSpacing);
     }
 }
@@ -68,7 +69,7 @@ library PoolLib {
     function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         (, int24 currentTick, , , , , ) = poolContract.slot0();
-        sqrtPriceX96 = TickMath.getSqrtRatioAtTick(currentTick);
+        sqrtPriceX96 = TickMath.getSqrtPriceAtTick(currentTick);
     }
 
     /// This assumes the position in the pool still exists, and queries how much fees are owed.
@@ -187,8 +188,8 @@ library PoolLib {
         uint128 y,
         uint160 sqrtPriceX96
     ) internal view returns (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) {
-        uint160 lowSqrtPriceX96 = TickMath.getSqrtRatioAtTick(lowTick);
-        uint160 highSqrtPriceX96 = TickMath.getSqrtRatioAtTick(highTick);
+        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         if (sqrtPriceX96 < lowSqrtPriceX96) {
             // We are below the range, so we can only add liquidity for token0.
@@ -211,9 +212,8 @@ library PoolLib {
             assignableLiq = uint128((uint256(y) << 128) / unitX128);
             // No leftover y, perhaps lose y dust here but it's okay.
         } else {
-            uint160 currentSqrtPriceX96 = TickMath.getSqrtRatioAtTick(currentTick);
-            uint256 reqXUnitX128 = SqrtPriceMath.getAmount0Delta(currentSqrtPriceX96, highSqrtPriceX96, 1 << 128, true);
-            uint256 reqYUnitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, currentSqrtPriceX96, 1 << 128, true);
+            uint256 reqXUnitX128 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, 1 << 128, true);
+            uint256 reqYUnitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, 1 << 128, true);
             uint256 xLiq = (uint256(x) << 128) / reqXUnitX128;
             uint256 yLiq = (uint256(y) << 128) / reqYUnitX128;
             if (xLiq == yLiq) {
@@ -255,8 +255,8 @@ library PoolLib {
         uint128 liq,
         bool roundUp
     ) internal pure returns (uint256 x, uint256 y) {
-        uint160 lowSqrtPriceX96 = TickMath.getSqrtRatioAtTick(lowTick);
-        uint160 highSqrtPriceX96 = TickMath.getSqrtRatioAtTick(highTick);
+        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         if (liq == 0) {
             return (0, 0);

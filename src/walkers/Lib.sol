@@ -2,11 +2,11 @@
 pragma solidity ^0.8.27;
 
 import { Key } from "../tree/Key.sol";
-import { Route } from "../tree/Route.sol";
+import { Route, Phase, RouteImpl } from "../tree/Route.sol";
 import { FeeWalker } from "./Fee.sol";
 import { LiqWalker } from "./Liq.sol";
 import { Data } from "./Data.sol";
-import { PoolInfo } from "../pool/PoolInfo.sol";
+import { PoolInfo } from "../Pool.sol";
 
 library WalkerLib {
     function modify(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal {
@@ -30,28 +30,11 @@ library WalkerLib {
 }
 
 library ViewWalkerLib {
-    function makerWalk(
-        PoolInfo memory pInfo,
-        uint24 lowTick,
-        uint24 highTick,
-        Data memory data
-    ) internal view returns (NodeDelta[ROUTE_LENGTH] memory changes) {
+    function makerWalk(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal view {
         // Walking logic here
     }
 
-    function takerWalk(
-        PoolInfo memory pInfo,
-        uint24 lowTick,
-        uint24 highTick,
-        Data memory data
-    ) internal view returns (NodeDelta[ROUTE_LENGTH] memory changes) {
+    function takerWalk(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal view {
         // Walking logic here
-    }
-}
-
-library PoolWalkerLib {
-    /// Resolve all of the needed liquidity changes.
-    function settle(PoolInfo memory pInfo, Data memory data, NodeDelta[ROUTE_LENGTH] memory changes) internal {
-        // Settle logic here
     }
 }

@@ -4,9 +4,10 @@ pragma solidity ^0.8.27;
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
-import { VaultLib } from "../vaults/Vault.sol";
+import { VaultLib, VaultType } from "../vaults/Vault.sol";
 import { Store } from "../Store.sol";
 import { TAKER_VAULT_ID } from "./Taker.sol";
+import { FeeStore } from "../Fee.sol";
 
 library AmmplifyAdminRights {
     uint256 public constant TAKER = 0x1;

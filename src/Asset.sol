@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import { PoolInfo, PoolLib } from "./Pool.sol";
 import { Key } from "./tree/Key.sol";
 import { LiqType } from "./walkers/Liq.sol";
+import { Store } from "./Store.sol";
 
 struct Asset {
     address owner;
@@ -13,12 +14,35 @@ struct Asset {
     int24 lowTick;
     int24 highTick;
     LiqType liqType;
+    uint8 xVaultIndex;
+    uint8 yVaultIndex;
     uint128 liq; // The original liquidity of the asset.
+    uint128 timestamp; // The timestamp of when the asset was last modified.
     /* node info */
-    mapping(Key => NodeAsset) nodes;
+    mapping(Key => AssetNode) nodes;
+    /* additional taker info */
+    uint256 xFreezeShares;
+    uint256 yFreezeShares;
 }
 
-struct NodeAsset {
+using AssetImpl for Asset global;
+
+library AssetImpl {
+    function setFreezeShares(
+        Asset storage self,
+        uint8 xVaultIndex,
+        uint8 yVaultIndex,
+        uint256 xAmount,
+        uint256 yAmount
+    ) internal {
+        self.xVaultIndex = xVaultIndex;
+        self.yVaultIndex = yVaultIndex;
+        self.xFreezeShares = xAmount;
+        self.yFreezeShares = yAmount;
+    }
+}
+
+struct AssetNode {
     uint128 sliq; // The share/liq of the node we own.
     // For takers, this is a checkpoint of the per liq fees owed.
     // For NC makers, this is a checkpoint of the per liq fees earned.
@@ -60,6 +84,7 @@ library AssetLib {
         asset.highTick = highTick;
         asset.liqType = isCompounding ? LiqType.MAKER : LiqType.MAKER_NC;
         asset.liq = liq;
+        updateTimestamp(asset);
         // The Nodes are to be filled in by a walker.
         // Add the asset to the owner's bookkeeping.
         addAssetToOwner(store, assetId, recipient);
@@ -79,16 +104,14 @@ library AssetLib {
         assetId = store.nextAssetId++;
         asset = store.assets[assetId];
         asset.owner = recipient;
+        asset.poolAddr = pInfo.poolAddr;
         asset.lowTick = lowTick;
         asset.highTick = highTick;
         asset.liqType = LiqType.TAKER;
         asset.liq = liq;
-        asset.poolAddr = pInfo.poolAddr;
-        (asset.baseFeeGrowthInside0X128, asset.baseFeeGrowthInside1X128) = PoolLib.getInsideFees(
-            pInfo.poolAddr,
-            lowTick,
-            highTick
-        );
+        asset.xVaultIndex = xVaultIndex;
+        asset.yVaultIndex = yVaultIndex;
+        updateTimestamp(asset);
         // The Nodes are to be filled in by a walker.
         addAssetToOwner(store, assetId, recipient);
     }
@@ -100,9 +123,9 @@ library AssetLib {
     }
 
     /// Remove an asset.
-    function removeAsset(uint256 assetId, PoolInfo memory pInfo) internal {
+    function removeAsset(uint256 assetId) internal {
         AssetStore storage store = Store.assets();
-        asset = store.assets[assetId];
+        Asset storage asset = store.assets[assetId];
         address owner = asset.owner;
         // The asset nodes will have been removed by the walker.
         delete store.assets[assetId];
@@ -117,6 +140,12 @@ library AssetLib {
             }
         }
         require(found, AssetNotFound(assetId, owner));
+    }
+
+    /// Update the timestamp of when the asset was last modified.
+    /// @dev This is for calculating JIT penalties.
+    function updateTimestamp(Asset storage asset) internal {
+        asset.timestamp = uint128(block.timestamp);
     }
 
     /* Helpers */
