@@ -58,7 +58,7 @@ struct FeeData {
 }
 
 library FeeDataLib {
-    function make(PoolInfo memory pInfo) internal returns (FeeData memory data) {
+    function make(PoolInfo memory pInfo) internal view returns (FeeData memory data) {
         return
             FeeData({
                 rootWidth: pInfo.treeWidth,
@@ -270,7 +270,7 @@ library FeeWalker {
         }
     }
 
-    function phase(Phase walkPhase, Data memory data) internal {
+    function phase(Phase walkPhase, Data memory data) internal pure {
         if (walkPhase == Phase.LEFT_UP) {
             // At the end of left, if we visited the lca right child then
             // we can just proceed to the root propogation with the same child rates.
@@ -339,7 +339,6 @@ library FeeWalker {
         Data memory data
     )
         internal
-        view
         returns (
             uint256 colMakerXRateX128,
             uint256 colMakerYRateX128,
@@ -461,7 +460,7 @@ library FeeWalker {
 
     /// Increase fees by an amount but limit the output the uint128, giving the extra to the caller through
     /// the data balances.
-    function add128Fees(uint128 a, uint256 b, Data memory data, bool isX) internal view returns (uint128 res) {
+    function add128Fees(uint128 a, uint256 b, Data memory data, bool isX) internal pure returns (uint128 res) {
         if (a + b > type(uint128).max) {
             // If the result overflows, cap it at uint128 max and add the excess to the user's received balances.
             res = type(uint128).max;
@@ -474,7 +473,7 @@ library FeeWalker {
                 data.yBalance -= int256(excess);
             }
         } else {
-            res = a + b;
+            res = uint128(a + b);
         }
     }
 }

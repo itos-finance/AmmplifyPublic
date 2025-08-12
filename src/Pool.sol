@@ -10,8 +10,8 @@ import { msb } from "./tree/BitMath.sol";
 import { Node } from "./walkers/Node.sol";
 import { Key } from "./tree/Key.sol";
 import { TreeTickLib } from "./tree/Tick.sol";
-import { SlotDerivation } from "openzeppelin-contracts/contracts/utils/SlotDerivation.sol";
 import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientSlot.sol";
+import { SafeCast } from "Commons/Math/Cast.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -25,14 +25,14 @@ struct PoolInfo {
 using PoolInfoImpl for PoolInfo global;
 
 library PoolInfoImpl {
-    function tokens(PoolInfo memory self) internal view returns (address[] memory) {
+    function tokens(PoolInfo memory self) internal pure returns (address[] memory) {
         address[] memory _tokens = new address[](2);
         _tokens[0] = self.token0;
         _tokens[1] = self.token1;
         return _tokens;
     }
 
-    function treeTick(PoolInfo memory self, int24 tick) internal view returns (uint24) {
+    function treeTick(PoolInfo memory self, int24 tick) internal pure returns (uint24) {
         return TreeTickLib.tickToTreeIndex(tick, self.treeWidth, self.tickSpacing);
     }
 }
@@ -48,7 +48,12 @@ struct Pool {
 /// A helper library for accessing the underlying pool's ABI.
 /// @dev This will have to change for each pool we integrate with.
 library PoolLib {
-    bytes32 private constant POOL_GUARD_SLOT = SlotDerivation.erc7201Slot("ammplify.pool.guard.20250804");
+    using TransientSlot for bytes32;
+    using TransientSlot for TransientSlot.AddressSlot;
+
+    // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
+    uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
@@ -72,6 +77,8 @@ library PoolLib {
         sqrtPriceX96 = TickMath.getSqrtPriceAtTick(currentTick);
     }
 
+    /*
+    /// @dev Currently unused.
     /// This assumes the position in the pool still exists, and queries how much fees are owed.
     function getFees(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 x, uint128 y) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
@@ -86,7 +93,7 @@ library PoolLib {
             x += FullMath.mulX128(liq, feeGrowthInside0NowX128 - feeGrowthInside0LastX128, false);
             y += FullMath.mulX128(liq, feeGrowthInside1NowX128 - feeGrowthInside1LastX128, false);
         }
-    }
+    } */
 
     /**
      * @notice Wrapper around pool collect function. Collects just fees if no liquidity has been burned.
@@ -110,10 +117,10 @@ library PoolLib {
     ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         (, int24 currentTick, , , , , ) = poolContract.slot0();
-        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , ) = poolContract.ticks(
+        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , , ) = poolContract.ticks(
             lowerTick
         );
-        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , ) = poolContract.ticks(
+        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , , ) = poolContract.ticks(
             upperTick
         );
 
@@ -187,7 +194,7 @@ library PoolLib {
         uint128 x,
         uint128 y,
         uint160 sqrtPriceX96
-    ) internal view returns (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) {
+    ) internal pure returns (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) {
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
@@ -198,8 +205,8 @@ library PoolLib {
                 return (0, leftoverX, leftoverY);
             }
             // Round up to round liq down.
-            uint256 unitX128 = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, 1 << 128, true);
-            assignableLiq = uint128((uint256(x) << 128) / unitX128);
+            uint256 unitX128 = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, X128, true);
+            assignableLiq = uint128((uint256(x) * X128) / unitX128);
             // No leftover x, perhaps lose x dust here but it's okay.
         } else if (sqrtPriceX96 >= highSqrtPriceX96) {
             // We are above the range, so we can only add liquidity for token1.
@@ -208,22 +215,22 @@ library PoolLib {
                 return (0, leftoverX, leftoverY);
             }
             // Round up to round liq down.
-            uint256 unitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, 1 << 128, true);
-            assignableLiq = uint128((uint256(y) << 128) / unitX128);
+            uint256 unitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, X128, true);
+            assignableLiq = uint128((uint256(y) * X128) / unitX128);
             // No leftover y, perhaps lose y dust here but it's okay.
         } else {
-            uint256 reqXUnitX128 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, 1 << 128, true);
-            uint256 reqYUnitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, 1 << 128, true);
-            uint256 xLiq = (uint256(x) << 128) / reqXUnitX128;
-            uint256 yLiq = (uint256(y) << 128) / reqYUnitX128;
+            uint256 reqXUnitX128 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, X128, true);
+            uint256 reqYUnitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, X128, true);
+            uint256 xLiq = (uint256(x) * X128) / reqXUnitX128;
+            uint256 yLiq = (uint256(y) * X128) / reqYUnitX128;
             if (xLiq == yLiq) {
                 assignableLiq = uint128(xLiq);
             } else if (xLiq < yLiq) {
                 assignableLiq = uint128(xLiq);
-                leftoverY = y - FullMath.mulX128(xLiq, reqYUnitX128, true);
+                leftoverY = y - uint128(FullMath.mulX128(xLiq, reqYUnitX128, true));
             } else {
                 assignableLiq = uint128(yLiq);
-                leftoverX = x - FullMath.mulX128(yLiq, reqXUnitX128, true);
+                leftoverX = x - uint128(FullMath.mulX128(yLiq, reqXUnitX128, true));
             }
         }
     }
@@ -237,13 +244,13 @@ library PoolLib {
         uint160 sqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
-        (uint256 lx, uint256 ly) = getAmounts(sqrtPriceX96, lowTick, highTick, 1 << 128, roundUp);
+        (uint256 lx, uint256 ly) = getAmounts(sqrtPriceX96, lowTick, highTick, X128, roundUp);
         uint256 liqValueX128 = (FullMath.mulX64(lx, sqrtPriceX96, false) >> 32) + (ly << 96) / sqrtPriceX96;
         uint256 myValue = (FullMath.mulX128(x, sqrtPriceX96, false) >> 32) + (y << 96) / sqrtPriceX96;
         if (roundUp) {
-            equivLiq = FullMath.mulDivRoundingUp(myValue, 1 << 128, liqValueX128);
+            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X128, liqValueX128));
         } else {
-            equivLiq = FullMath.mulDiv(myValue, 1 << 128, liqValueX128);
+            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X128, liqValueX128));
         }
     }
 

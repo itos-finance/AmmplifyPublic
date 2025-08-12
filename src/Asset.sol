@@ -20,26 +20,6 @@ struct Asset {
     uint128 timestamp; // The timestamp of when the asset was last modified.
     /* node info */
     mapping(Key => AssetNode) nodes;
-    /* additional taker info */
-    uint256 xFreezeShares;
-    uint256 yFreezeShares;
-}
-
-using AssetImpl for Asset global;
-
-library AssetImpl {
-    function setFreezeShares(
-        Asset storage self,
-        uint8 xVaultIndex,
-        uint8 yVaultIndex,
-        uint256 xAmount,
-        uint256 yAmount
-    ) internal {
-        self.xVaultIndex = xVaultIndex;
-        self.yVaultIndex = yVaultIndex;
-        self.xFreezeShares = xAmount;
-        self.yFreezeShares = yAmount;
-    }
 }
 
 struct AssetNode {
@@ -96,7 +76,7 @@ library AssetLib {
         PoolInfo memory pInfo,
         int24 lowTick,
         int24 highTick,
-        int128 liq,
+        uint128 liq,
         uint8 xVaultIndex,
         uint8 yVaultIndex
     ) internal returns (Asset storage asset, uint256 assetId) {

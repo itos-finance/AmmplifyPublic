@@ -10,11 +10,14 @@ import { IDiamondLoupe } from "Commons/Diamond/interfaces/IDiamondLoupe.sol";
 import { IERC173 } from "Commons/ERC/interfaces/IERC173.sol";
 import { IERC165 } from "Commons/ERC/interfaces/IERC165.sol";
 
-import { AdminLib } from "Commons/Util/Admin.sol";
+import { BaseAdminFacet, AdminLib } from "Commons/Util/Admin.sol";
+import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 
 import { AdminFacet } from "./facets/Admin.sol";
 import { MakerFacet } from "./facets/Maker.sol";
 import { TakerFacet } from "./facets/Taker.sol";
+import { PoolFacet } from "./facets/Pool.sol";
+import { ViewFacet } from "./facets/View.sol";
 
 error FunctionNotFound(bytes4 _functionSelector);
 
@@ -22,7 +25,7 @@ contract SimplexDiamond is IDiamond {
     constructor() {
         AdminLib.initOwner(msg.sender);
 
-        FacetCut[] memory cuts = new FacetCut[](5);
+        FacetCut[] memory cuts = new FacetCut[](7);
 
         {
             bytes4[] memory cutFunctionSelectors = new bytes4[](1);
@@ -50,15 +53,29 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory adminSelectors = new bytes4[](8);
-            adminSelectors[0] = AdminFacet.transferOwnership.selector;
-            adminSelectors[1] = AdminFacet.acceptOwnership.selector;
-            adminSelectors[2] = AdminFacet.owner.selector;
-            adminSelectors[3] = AdminFacet.adminRights.selector;
-            adminSelectors[4] = AdminFacet.setFeeCurve.selector;
-            adminSelectors[5] = AdminFacet.setDefaultFeeCurve.selector;
-            adminSelectors[6] = AdminFacet.addVault.selector;
-            adminSelectors[7] = AdminFacet.swapVault.selector;
+            bytes4[] memory adminSelectors = new bytes4[](22);
+            adminSelectors[0] = TimedAdminFacet.transferOwnership.selector;
+            adminSelectors[1] = TimedAdminFacet.acceptOwnership.selector;
+            adminSelectors[2] = TimedAdminFacet.submitRights.selector;
+            adminSelectors[3] = TimedAdminFacet.acceptRights.selector;
+            adminSelectors[4] = TimedAdminFacet.removeRights.selector;
+            adminSelectors[5] = TimedAdminFacet.vetoRights.selector;
+            adminSelectors[6] = BaseAdminFacet.owner.selector;
+            adminSelectors[7] = BaseAdminFacet.adminRights.selector;
+            adminSelectors[8] = AdminFacet.setFeeCurve.selector;
+            adminSelectors[9] = AdminFacet.setDefaultFeeCurve.selector;
+            adminSelectors[10] = AdminFacet.setSplitCurve.selector;
+            adminSelectors[11] = AdminFacet.setDefaultSplitCurve.selector;
+            adminSelectors[12] = AdminFacet.setCompoundThreshold.selector;
+            adminSelectors[13] = AdminFacet.setDefaultCompoundThreshold.selector;
+            adminSelectors[14] = AdminFacet.setJITPenalties.selector;
+            adminSelectors[15] = AdminFacet.getFeeConfig.selector;
+            adminSelectors[16] = AdminFacet.getDefaultFeeConfig.selector;
+            adminSelectors[17] = AdminFacet.viewVaults.selector;
+            adminSelectors[18] = AdminFacet.addVault.selector;
+            adminSelectors[19] = AdminFacet.removeVault.selector;
+            adminSelectors[20] = AdminFacet.swapVault.selector;
+            adminSelectors[21] = AdminFacet.transferVaultBalance.selector;
             cuts[2] = FacetCut({
                 facetAddress: address(new AdminFacet()),
                 action: FacetCutAction.Add,
@@ -68,9 +85,9 @@ contract SimplexDiamond is IDiamond {
 
         {
             bytes4[] memory selectors = new bytes4[](4);
-            selectors[0] = MakerFacet.newAsset.selector;
-            selectors[1] = MakerFacet.removeAsset.selector;
-            selectors[2] = MakerFacet.viewAsset.selector;
+            selectors[0] = MakerFacet.newMaker.selector;
+            selectors[1] = MakerFacet.removeMaker.selector;
+            // selectors[2] = MakerFacet.viewMaker.selector;
             selectors[3] = MakerFacet.collectFees.selector;
 
             cuts[3] = IDiamond.FacetCut({
@@ -84,11 +101,33 @@ contract SimplexDiamond is IDiamond {
             bytes4[] memory selectors = new bytes4[](5);
             selectors[0] = TakerFacet.collateralize.selector;
             selectors[1] = TakerFacet.withdrawCollateral.selector;
-            selectors[2] = TakerFacet.newAsset.selector;
-            selectors[3] = TakerFacet.removeAsset.selector;
-            selectors[4] = TakerFacet.viewAsset.selector;
+            selectors[2] = TakerFacet.newTaker.selector;
+            selectors[3] = TakerFacet.removeTaker.selector;
+            // selectors[4] = TakerFacet.viewTaker.selector;
             cuts[4] = IDiamond.FacetCut({
                 facetAddress: address(new TakerFacet()),
+                action: IDiamond.FacetCutAction.Add,
+                functionSelectors: selectors
+            });
+        }
+
+        {
+            bytes4[] memory selectors = new bytes4[](1);
+            selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
+            cuts[5] = IDiamond.FacetCut({
+                facetAddress: address(new PoolFacet()),
+                action: IDiamond.FacetCutAction.Add,
+                functionSelectors: selectors
+            });
+        }
+
+        {
+            bytes4[] memory selectors = new bytes4[](3);
+            selectors[0] = ViewFacet.getPoolInfo.selector;
+            selectors[1] = ViewFacet.getAssetInfo.selector;
+            selectors[2] = ViewFacet.getNodes.selector;
+            cuts[6] = IDiamond.FacetCut({
+                facetAddress: address(new ViewFacet()),
                 action: IDiamond.FacetCutAction.Add,
                 functionSelectors: selectors
             });

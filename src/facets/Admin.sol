@@ -135,11 +135,11 @@ contract AdminFacet is TimedAdminFacet {
 
     // Internal overrides
 
-    function getRightsUseID(bool) internal view override returns (uint256) {
+    function getRightsUseID(bool) internal pure override returns (uint256) {
         return RIGHTS_USE_ID;
     }
 
-    function getDelay(bool add) public view override returns (uint32) {
+    function getDelay(bool add) public pure override returns (uint32) {
         return add ? 3 days : 1 days;
     }
 }

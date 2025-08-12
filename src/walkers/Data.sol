@@ -40,7 +40,7 @@ library DataImpl {
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         uint128 liq
-    ) private pure returns (Data memory) {
+    ) internal returns (Data memory) {
         Pool storage pool = Store.pool(pInfo.poolAddr);
         uint128 treeTimestamp = pool.timestamp;
         pool.timestamp = uint128(block.timestamp); // Update the pool's timestamp.
@@ -79,7 +79,7 @@ library DataImpl {
         Key key,
         uint128 liq,
         bool roundUp
-    ) internal view returns (uint256 xBorrows, uint256 yBorrows) {
+    ) internal pure returns (uint256 xBorrows, uint256 yBorrows) {
         if (liq == 0) {
             return (0, 0);
         }

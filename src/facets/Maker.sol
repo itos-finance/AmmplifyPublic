@@ -28,8 +28,8 @@ contract MakerFacet is ReentrancyGuardTransient {
     function newMaker(
         address recipient,
         address poolAddr,
-        uint24 lowTick,
-        uint24 highTick,
+        int24 lowTick,
+        int24 highTick,
         uint128 liq,
         bool isCompounding,
         uint160 minSqrtPriceX96,
@@ -49,8 +49,8 @@ contract MakerFacet is ReentrancyGuardTransient {
         // This fills in the nodes in the asset.
         WalkerLib.modify(pInfo, lowTick, highTick, data);
         // Settle balances.
-        address[] memory tokens = pInfo.tokens;
-        address[] memory balances = new address[](2);
+        address[] memory tokens = pInfo.tokens();
+        int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
         RFTLib.settle(msg.sender, tokens, balances, rftData);
@@ -64,7 +64,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external nonReentrant returns (address token0, address token1, uint256 balance0, uint256 balance1) {
+    ) external nonReentrant returns (address token0, address token1, uint256 removedX, uint256 removedY) {
         Asset storage asset = AssetLib.getAsset(assetId);
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
@@ -73,15 +73,18 @@ contract MakerFacet is ReentrancyGuardTransient {
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         // Settle balances.
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
-        uint256 removedX = uint256(-data.xBalance); // These are definitely negative.
-        uint256 removedY = uint256(-data.yBalance);
+        removedX = uint256(-data.xBalance); // These are definitely negative.
+        removedY = uint256(-data.yBalance);
         (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY);
-        AssetLib.removeAsset(assetId, pInfo, data);
-        address[] memory tokens = pInfo.tokens;
-        address[] memory balances = new address[](2);
+        AssetLib.removeAsset(assetId);
+        address[] memory tokens = pInfo.tokens();
+        int256[] memory balances = new int256[](2);
         balances[0] = -int256(removedX); // We know they fit since they can only be less (in magnitude) than before.
         balances[1] = -int256(removedY);
         RFTLib.settle(recipient, tokens, balances, rftData);
+        // Return values
+        token0 = tokens[0];
+        token1 = tokens[1];
     }
 
     /*     function viewMaker(
@@ -111,18 +114,18 @@ contract MakerFacet is ReentrancyGuardTransient {
         require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         // We collect simply by targeting the original liq balance.
-        Data memory data = DataImpl.makeAdd(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         // Update timestamp because for compounding liq, the liq has changed.
         // Plus if you're removing liquidity, you automatically collect on remove so no need to call this first.
-        asset.updateTimestamp();
+        AssetLib.updateTimestamp(asset);
         // The compounds collect all the fees from the underlying positions.
-        address[] memory tokens = pInfo.tokens;
-        address[] memory balances = new address[](2);
+        address[] memory tokens = pInfo.tokens();
+        int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
         RFTLib.settle(recipient, tokens, balances, rftData);
-        fees0 = data.xBalance;
-        fees1 = data.yBalance;
+        fees0 = uint256(-data.xBalance);
+        fees1 = uint256(-data.yBalance);
     }
 }

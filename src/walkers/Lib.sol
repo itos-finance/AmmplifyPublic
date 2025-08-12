@@ -9,32 +9,50 @@ import { Data } from "./Data.sol";
 import { PoolInfo } from "../Pool.sol";
 
 library WalkerLib {
-    function modify(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal {
-        Route memory route = RouteImpl.make(pInfo.treeWidth, lowTick, highTick);
-        route.walk(down, up, phase, data);
+    function modify(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
+        uint24 low = pInfo.treeTick(lowTick);
+        uint24 high = pInfo.treeTick(highTick);
+        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
+        route.walk(down, up, phase, toRaw(data));
     }
 
-    function down(Key key, bool visit, Data memory data) internal {
-        FeeWalker.down(key, visit, data);
+    function down(Key key, bool visit, bytes memory raw) internal {
+        FeeWalker.down(key, visit, toData(raw));
     }
 
-    function up(Key key, bool visit, Data memory data) internal {
+    function up(Key key, bool visit, bytes memory raw) internal {
+        Data memory data = toData(raw);
         FeeWalker.up(key, visit, data);
         LiqWalker.up(key, visit, data);
     }
 
-    function phase(Phase walkPhase, Data memory data) internal {
+    function phase(Phase walkPhase, bytes memory raw) internal pure {
+        Data memory data = toData(raw);
         FeeWalker.phase(walkPhase, data);
         LiqWalker.phase(walkPhase, data);
+    }
+
+    /* Helpers */
+
+    function toRaw(Data memory data) internal pure returns (bytes memory raw) {
+        assembly {
+            raw := data
+        }
+    }
+
+    function toData(bytes memory raw) internal pure returns (Data memory data) {
+        assembly {
+            data := raw
+        }
     }
 }
 
 library ViewWalkerLib {
-    function makerWalk(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal view {
+    function makerWalk(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal view {
         // Walking logic here
     }
 
-    function takerWalk(PoolInfo memory pInfo, uint24 lowTick, uint24 highTick, Data memory data) internal view {
+    function takerWalk(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal view {
         // Walking logic here
     }
 }

@@ -30,7 +30,7 @@ contract TakerFacet is ReentrancyGuardTransient {
     ) external nonReentrant {
         address[] memory tokens = new address[](1);
         tokens[0] = token;
-        address[] memory balances = new address[](1);
+        int256[] memory balances = new int256[](1);
         balances[0] = SafeCast.toInt256(amount);
         RFTLib.settle(msg.sender, tokens, balances, data);
         Store.fees().collateral[recipient][token] += amount;
@@ -46,7 +46,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         Store.fees().collateral[msg.sender][token] -= amount;
         address[] memory tokens = new address[](1);
         tokens[0] = token;
-        address[] memory balances = new address[](1);
+        int256[] memory balances = new int256[](1);
         balances[0] = -SafeCast.toInt256(amount);
         RFTLib.settle(recipient, tokens, balances, data);
     }
@@ -54,13 +54,10 @@ contract TakerFacet is ReentrancyGuardTransient {
     function newTaker(
         address recipient,
         address poolAddr,
-        uint24 lowTick,
-        uint24 highTick,
+        int24[2] calldata ticks,
         uint128 liq,
-        uint8 xVaultIndex,
-        uint8 yVaultIndex,
-        uint160 minSqrtPriceX96,
-        uint160 maxSqrtPriceX96,
+        uint8[2] calldata vaultIndices,
+        uint160[2] calldata sqrtPriceLimitsX96,
         uint160 freezeSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
@@ -69,29 +66,29 @@ contract TakerFacet is ReentrancyGuardTransient {
         (Asset storage asset, uint256 assetId) = AssetLib.newTaker(
             recipient,
             pInfo,
-            lowTick,
-            highTick,
+            ticks[0],
+            ticks[1],
             liq,
-            xVaultIndex,
-            yVaultIndex
+            vaultIndices[0],
+            vaultIndices[1]
         );
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq);
+        Data memory data = DataImpl.make(pInfo, asset, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], liq);
         // This fills in the nodes in the asset.
-        WalkerLib.modify(pInfo, lowTick, highTick, data);
+        WalkerLib.modify(pInfo, ticks[0], ticks[1], data);
         // First we withdraw the liquidity.
-        PoolWalker.settle(pInfo, lowTick, highTick, data);
+        PoolWalker.settle(pInfo, ticks[0], ticks[1], data);
         // The walked balances are the borrowed balances, we swap them to either amount.
         // The walked balances will be negative since they're giving it to the user.
         address[] memory tokens = pInfo.tokens();
-        address[] memory balances = new address[](2);
+        int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
-        (uint256 xFreeze, uint256 yFreeze) = PoolLib.getAmounts(freezeSqrtPriceX96, lowTick, highTick, liq, true);
+        (uint256 xFreeze, uint256 yFreeze) = PoolLib.getAmounts(freezeSqrtPriceX96, ticks[0], ticks[1], liq, true);
         balances[0] += SafeCast.toInt256(xFreeze);
         balances[1] += SafeCast.toInt256(yFreeze);
         RFTLib.settle(msg.sender, tokens, balances, rftData);
-        VaultLib.deposit(tokens[0], xVaultIndex, assetId, xFreeze);
-        VaultLib.deposit(tokens[1], yVaultIndex, assetId, yFreeze);
+        VaultLib.deposit(tokens[0], vaultIndices[0], assetId, xFreeze);
+        VaultLib.deposit(tokens[1], vaultIndices[1], assetId, yFreeze);
         return assetId;
     }
 
@@ -101,7 +98,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external nonReentrant returns (address token0, address token1, uint256 balance0, uint256 balance1) {
+    ) external nonReentrant returns (address token0, address token1, int256 balance0, int256 balance1) {
         Asset storage asset = AssetLib.getAsset(assetId);
         require(asset.owner == msg.sender, NotTakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.TAKER, NotTaker(assetId));
@@ -109,18 +106,23 @@ contract TakerFacet is ReentrancyGuardTransient {
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         address[] memory tokens = pInfo.tokens();
-        address[] memory balances = new address[](2);
+        int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
         balances[1] = data.yBalance;
-        balances[0] -= SafeCast.toInt256(VaultLib.withdraw(tokens[0], asset.xVaultIndex));
-        balances[1] -= SafeCast.toInt256(VaultLib.withdraw(tokens[1], asset.yVaultIndex));
+        balances[0] -= SafeCast.toInt256(VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId));
+        balances[1] -= SafeCast.toInt256(VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId));
         // Closing pays up the fees and leave the collateral alone. The collateral is really just there
         // to make sure while the position is open you can cover the fees. So there's really no need to keep
         // depositing and withdrawing collateral if your opened size stays roughly the same.
         RFTLib.settle(msg.sender, tokens, balances, rftData);
         // Finally we deposit the assets.
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
-        AssetLib.removeAsset(assetId, pInfo, data);
+        AssetLib.removeAsset(assetId);
+        // Return values
+        token0 = tokens[0];
+        token1 = tokens[1];
+        balance0 = -data.xBalance;
+        balance1 = -data.yBalance;
     }
 
     /*     function viewTaker(
