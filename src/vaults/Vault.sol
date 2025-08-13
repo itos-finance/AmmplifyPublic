@@ -137,6 +137,16 @@ library VaultLib {
         vProxy.commit();
     }
 
+    function balanceOf(
+        address token,
+        uint8 index,
+        uint256 assetId,
+        bool roundUp
+    ) internal view returns (uint256 amount) {
+        VaultProxy memory vProxy = getProxy(token, index);
+        amount = vProxy.balance(assetId, roundUp);
+    }
+
     /* Getters */
 
     /// Get the active and backup addresses for a vault.

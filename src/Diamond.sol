@@ -84,11 +84,10 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](4);
+            bytes4[] memory selectors = new bytes4[](3);
             selectors[0] = MakerFacet.newMaker.selector;
-            selectors[1] = MakerFacet.removeMaker.selector;
-            // selectors[2] = MakerFacet.viewMaker.selector;
-            selectors[3] = MakerFacet.collectFees.selector;
+            selectors[1] = MakerFacet.removeMaker.selector; // selectors[2] = MakerFacet.viewMaker.selector;
+            selectors[2] = MakerFacet.collectFees.selector;
 
             cuts[3] = IDiamond.FacetCut({
                 facetAddress: address(new MakerFacet()),
@@ -98,12 +97,11 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](5);
+            bytes4[] memory selectors = new bytes4[](4);
             selectors[0] = TakerFacet.collateralize.selector;
             selectors[1] = TakerFacet.withdrawCollateral.selector;
             selectors[2] = TakerFacet.newTaker.selector;
             selectors[3] = TakerFacet.removeTaker.selector;
-            // selectors[4] = TakerFacet.viewTaker.selector;
             cuts[4] = IDiamond.FacetCut({
                 facetAddress: address(new TakerFacet()),
                 action: IDiamond.FacetCutAction.Add,
@@ -122,10 +120,11 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](3);
+            bytes4[] memory selectors = new bytes4[](4);
             selectors[0] = ViewFacet.getPoolInfo.selector;
             selectors[1] = ViewFacet.getAssetInfo.selector;
             selectors[2] = ViewFacet.getNodes.selector;
+            selectors[3] = ViewFacet.queryAssetBalances.selector;
             cuts[6] = IDiamond.FacetCut({
                 facetAddress: address(new ViewFacet()),
                 action: IDiamond.FacetCutAction.Add,

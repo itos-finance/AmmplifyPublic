@@ -87,21 +87,6 @@ contract MakerFacet is ReentrancyGuardTransient {
         token1 = tokens[1];
     }
 
-    /*     function viewMaker(
-        uint256 assetId
-    )
-        external
-        view
-        returns (address poolAddr, uint128 liq, uint256 balance0, uint256 balance1, uint256 fees0, uint256 fees1)
-    {
-        Asset storage asset = AssetLib.getAsset(assetId);
-        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        ViewData memory data = ViewDataImpl.make(pInfo, asset);
-        ViewWalkerLib.makerWalk(pInfo, asset.lowTick, asset.highTick, data);
-        return (asset.poolAddr, asset.liq, data.xBalance, data.yBalance, data.fees0, data.fees1);
-    } */
-
     // Collecting fees from a position reverts back to the original liquidity profile.
     function collectFees(
         address recipient,

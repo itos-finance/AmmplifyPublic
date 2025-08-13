@@ -124,19 +124,4 @@ contract TakerFacet is ReentrancyGuardTransient {
         balance0 = -data.xBalance;
         balance1 = -data.yBalance;
     }
-
-    /*     function viewTaker(
-        uint256 assetId
-    )
-        external
-        view
-        returns (address poolAddr, uint128 liq, uint256 balance0, uint256 balance1, uint256 fees0, uint256 fees1)
-    {
-        Asset storage asset = AssetLib.getAsset(assetId);
-        require(asset.liqType == LiqType.TAKER, NotTaker(assetId));
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        ViewData memory data = ViewDataImpl.make(pInfo, asset);
-        ViewWalkerLib.takerWalk(pInfo, asset.lowTick, asset.highTick, data);
-        return (asset.poolAddr, asset.liq, data.xBalance, data.yBalance, data.fees0, data.fees1);
-    } */
 }

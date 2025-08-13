@@ -7,6 +7,9 @@ import { Store } from "../Store.sol";
 import { PoolInfo, PoolLib, Pool } from "../Pool.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { Asset, AssetLib } from "../Asset.sol";
+import { VaultLib } from "../vaults/Vault.sol";
+import { ViewData, ViewDataImpl } from "../walkers/View.sol";
+import { ViewWalkerLib } from "../walkers/Lib.sol";
 
 /// Query the values of internal data structures.
 contract ViewFacet {
@@ -38,6 +41,35 @@ contract ViewFacet {
         for (uint256 i = 0; i < keys.length; i++) {
             Key key = keys[i];
             node[i] = pool.nodes[key];
+        }
+    }
+
+    /// Compute the token balances owned/owed by the position.
+    /// @dev We separate the fee and liq balance so we can use the same method for fee earnings and total value.
+    /// @return netBalance0 The amount of token0 owed to the position owner sans fees (Negative is owed by the owner).
+    /// @return netBalance1 The amount of token1 owed to the position owner sans fees (Negative is owed by the owner).
+    /// @return fees0 The amount of fees in token0 owed to a maker or owed by a taker depending on the liq type.
+    /// @return fees1 The amount of fees in token1 owed to a maker or owed by a taker depending on the liq type.
+    function queryAssetBalances(
+        uint256 assetId
+    ) external view returns (int256 netBalance0, int256 netBalance1, uint256 fees0, uint256 fees1) {
+        Asset storage asset = AssetLib.getAsset(assetId);
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        ViewData memory data = ViewDataImpl.make(pInfo, asset);
+        ViewWalkerLib.viewAsset(pInfo, asset.lowTick, asset.highTick, data);
+        if (asset.liqType == LiqType.TAKER) {
+            uint256 vaultX = VaultLib.balanceOf(pInfo.token0, asset.xVaultIndex, assetId, false);
+            uint256 vaultY = VaultLib.balanceOf(pInfo.token1, asset.yVaultIndex, assetId, false);
+            // Balance and fees are owed, and vault balance is owned.
+            netBalance0 = int256(vaultX) - int256(data.liqBalanceX);
+            netBalance1 = int256(vaultY) - int256(data.liqBalanceY);
+            fees0 = data.earningsX;
+            fees1 = data.earningsY;
+        } else {
+            netBalance0 = int256(data.liqBalanceX);
+            netBalance1 = int256(data.liqBalanceY);
+            fees0 = data.earningsX;
+            fees1 = data.earningsY;
         }
     }
 }

@@ -262,12 +262,12 @@ library PoolLib {
         uint128 liq,
         bool roundUp
     ) internal pure returns (uint256 x, uint256 y) {
-        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
-        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-
         if (liq == 0) {
             return (0, 0);
         }
+
+        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         if (sqrtPriceX96 < lowSqrtPriceX96) {
             // We are below the range, so we can only get token0.

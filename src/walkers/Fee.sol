@@ -126,10 +126,10 @@ library FeeWalker {
             uint256 myLiq = node.liq.tLiq * width;
             uint256 perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerXFees, 1 << 128, node.liq.subtreeTLiq);
             node.fees.takerXFeesPerLiqX128 += perTLiqX128;
-            node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, false));
+            node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
             perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerYFees, 1 << 128, node.liq.subtreeTLiq);
             node.fees.takerYFeesPerLiqX128 += perTLiqX128;
-            node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, false));
+            node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
             // Makers
             myLiq = node.liq.mLiq * width;
             uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
@@ -300,7 +300,8 @@ library FeeWalker {
     /// split weights.
     /// @dev This assumes the prefix does not include the current node's liquidity.
     function getLeftRightWeights(
-        Data memory data,
+        LiqData memory liqData,
+        FeeData memory feeData,
         LiqNode storage node,
         LiqNode storage left,
         LiqNode storage right,
@@ -311,22 +312,22 @@ library FeeWalker {
         {
             uint256 leftMLiq = left.subtreeMLiq + myMLiq;
             uint256 leftTLiq = left.subtreeTLiq + myTLiq;
-            uint256 totalMLiq = leftMLiq + data.liq.mLiqPrefix * childWidth;
-            uint256 totalTLiq = leftTLiq + data.liq.tLiqPrefix * childWidth;
+            uint256 totalMLiq = leftMLiq + liqData.mLiqPrefix * childWidth;
+            uint256 totalTLiq = leftTLiq + liqData.tLiqPrefix * childWidth;
             // It's okay to round down here. That's incorporated in the rate curve.
             uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
-            leftWeight = data.fees.splitConfig.calculateRateX64(utilX64);
+            leftWeight = feeData.splitConfig.calculateRateX64(utilX64);
         }
         {
             uint256 rightMLiq = right.subtreeMLiq + myMLiq;
             uint256 rightTLiq = right.subtreeTLiq + myTLiq;
-            uint256 totalMLiq = rightMLiq + data.liq.mLiqPrefix * childWidth;
-            uint256 totalTLiq = rightTLiq + data.liq.tLiqPrefix * childWidth;
+            uint256 totalMLiq = rightMLiq + liqData.mLiqPrefix * childWidth;
+            uint256 totalTLiq = rightTLiq + liqData.tLiqPrefix * childWidth;
             // It's okay to round down here. That's incorporated in the rate curve.
             uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
             // Important to incorporate tliq in the weight so the same ratio, but different tLiqs
             // pay proportionally.
-            rightWeight = data.fees.splitConfig.calculateRateX64(utilX64);
+            rightWeight = feeData.splitConfig.calculateRateX64(utilX64);
         }
     }
 
@@ -428,7 +429,8 @@ library FeeWalker {
     ) internal {
         // We split the earnings by the left and right weights.
         (uint256 leftWeight, uint256 rightWeight) = getLeftRightWeights(
-            data,
+            data.liq,
+            data.fees,
             node.liq,
             leftNode.liq,
             rightNode.liq,
