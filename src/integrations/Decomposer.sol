@@ -98,7 +98,7 @@ contract Decomposer is RFTPayer {
                 INonfungiblePositionManager.DecreaseLiquidityParams({
                     tokenId: positionId,
                     liquidity: liquidity,
-                    amount0Min: 0,
+                    amount0Min: 0, // TODO: do we need some sort of min here?
                     amount1Min: 0,
                     deadline: block.timestamp
                 })

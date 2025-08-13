@@ -10,12 +10,12 @@ import { MockNFPM } from "./mocks/MockNFPM.sol";
 import { StubMaker } from "./mocks/StubMaker.sol";
 
 contract DecomposerTest is Test {
-    MockERC20 t0;
-    MockERC20 t1;
-    MockFactory factory;
-    MockNFPM nfpm;
-    StubMaker maker;
-    Decomposer decomposer;
+    MockERC20 private t0;
+    MockERC20 private t1;
+    MockFactory private factory;
+    MockNFPM private nfpm;
+    StubMaker private maker;
+    Decomposer private decomposer;
 
     function setUp() public {
         t0 = new MockERC20("T0", "T0");
