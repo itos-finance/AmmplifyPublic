@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { IUniswapV3PoolImmutables } from "v3-core/contracts/interfaces/pool/IUniswapV3PoolImmutables.sol";
-import { IUniswapV3Pool } from "v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
+import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { FullMath } from "./FullMath.sol";
 import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
