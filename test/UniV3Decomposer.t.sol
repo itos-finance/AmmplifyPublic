@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 
-import { Decomposer } from "../src/integrations/Decomposer.sol";
+import { UniV3Decomposer } from "../src/integrations/UniV3Decomposer.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockFactory } from "./mocks/MockFactory.sol";
 import { MockNFPM } from "./mocks/MockNFPM.sol";
 import { StubMaker } from "./mocks/StubMaker.sol";
 
-contract DecomposerTest is Test {
+contract UniV3DecomposerTest is Test {
     MockERC20 private t0;
     MockERC20 private t1;
     MockFactory private factory;
     MockNFPM private nfpm;
     StubMaker private maker;
-    Decomposer private decomposer;
+    UniV3Decomposer private decomposer;
 
     function setUp() public {
         t0 = new MockERC20("T0", "T0");
@@ -23,7 +23,7 @@ contract DecomposerTest is Test {
         factory = new MockFactory();
         nfpm = new MockNFPM(address(factory), address(t0), address(t1));
         maker = new StubMaker();
-        decomposer = new Decomposer(address(nfpm), address(maker));
+        decomposer = new UniV3Decomposer(address(nfpm), address(maker));
         factory.setPool(address(0x1234));
     }
 

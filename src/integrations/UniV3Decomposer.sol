@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.28;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Imports must precede all other declarations to satisfy linters.
@@ -14,33 +14,44 @@ import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { INonfungiblePositionManager } from "v3-periphery/interfaces/INonfungiblePositionManager.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
-/// @title Decomposer
+/// @title UniV3Decomposer
 /// @notice  Converts an existing Uniswap-V3 position NFT into an Ammplify Maker
 ///          position in a single transaction.
-contract Decomposer is RFTPayer {
+contract UniV3Decomposer is RFTPayer {
     // Custom errors ------------------------------------------------------
     error OnlyMakerFacet(address caller);
     error NotPositionOwner(address expected, address sender);
     error PoolNotDeployed();
+    error ReentrancyAttempt();
 
     // Immutable configuration
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
+    address private transient caller;
 
     event Decomposed(
+        uint256 indexed newAssetId,
         uint256 indexed oldTokenId,
         address token0,
         address token1,
         uint24 fee,
         int24 tickLower,
         int24 tickUpper,
-        uint128 liquidity,
-        uint256 indexed newAssetId
+        uint128 liquidity
     );
 
     constructor(address _nfpm, address _maker) {
         NFPM = INonfungiblePositionManager(_nfpm);
         MAKER = MakerFacet(_maker);
+    }
+
+    /// @notice Prevents reentrancy by locking the contract during the call.
+    ///         When locked all nonReentrant functions will revert.
+    modifier nonReentrant {
+        require(caller == address(0), ReentrancyAttempt());
+        caller = msg.sender;
+        _;
+        caller = msg.sender;
     }
 
     /// @inheritdoc IRFTPayer
@@ -59,7 +70,7 @@ contract Decomposer is RFTPayer {
             // After primary transfer, sweep any dust the contract may still hold for this token
             uint256 residual = IERC20(token).balanceOf(address(this));
             if (residual > 0) {
-                TransferHelper.safeTransfer(token, msg.sender, residual);
+                TransferHelper.safeTransfer(token, caller, residual);
             }
         }
         return "";
@@ -71,11 +82,10 @@ contract Decomposer is RFTPayer {
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
-    ) external returns (uint256 newAssetId) {
+    ) external nonReentrant returns (uint256 newAssetId) {
         // Verify ownership first via ERC721
         address owner = NFPM.ownerOf(positionId);
         if (owner != msg.sender) revert NotPositionOwner(owner, msg.sender);
-
         // 1. Read position data we care about
         (
             ,
@@ -93,12 +103,13 @@ contract Decomposer is RFTPayer {
         ) = NFPM.positions(positionId);
 
         // 2. Exit position
+        NFPM.safeTransferFrom(msg.sender, address(this), positionId);
         if (liquidity > 0) {
             NFPM.decreaseLiquidity(
                 INonfungiblePositionManager.DecreaseLiquidityParams({
                     tokenId: positionId,
                     liquidity: liquidity,
-                    amount0Min: 0, // TODO: do we need some sort of min here?
+                    amount0Min: 0,
                     amount1Min: 0,
                     deadline: block.timestamp
                 })
@@ -131,6 +142,6 @@ contract Decomposer is RFTPayer {
             rftData
         );
 
-        emit Decomposed(positionId, token0, token1, fee, tickLower, tickUpper, liquidity, newAssetId);
+        emit Decomposed(newAssetId, positionId, token0, token1, fee, tickLower, tickUpper, liquidity);
     }
 }
