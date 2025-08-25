@@ -9,7 +9,7 @@ function lsb(uint24 x) pure returns (uint24) {
 
 function msbBit(uint24 x) pure returns (uint8) {
     unchecked {
-        // Returns the index of the most significant bit (0-indexed
+        // Returns the index of the most significant bit (0-indexed)
         if (x == 0) return 0;
 
         uint8 i = 0xFF;
@@ -33,12 +33,14 @@ function msbBit(uint24 x) pure returns (uint8) {
             x >>= 1;
             i += 1;
         }
-        return i;
+        return i - 1;
     }
 }
 
 function msb(uint24 x) pure returns (uint24) {
     unchecked {
+        if (x == 0) return 0;
+
         return uint24(1) << msbBit(x);
     }
 }
