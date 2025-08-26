@@ -28,6 +28,7 @@ contract KeyTest is Test {
         Key k1 = KeyImpl.make(1, 2);
         Key k2 = KeyImpl.make(1, 2);
         assertTrue(k1.isEq(k2));
+        assertTrue(k2.isEq(k1));
     }
 
     function testIsAbove() public {
@@ -62,70 +63,110 @@ contract KeyTest is Test {
     }
 
     function testIsLeaf() public {
-        Key k1 = KeyImpl.make(2, 1);
-        Key k2 = KeyImpl.make(2, 2);
+        Key k1 = KeyImpl.make(32, 1);
+        Key k2 = KeyImpl.make(32, 2);
         assertTrue(k1.isLeaf());
         assertFalse(k2.isLeaf());
     }
 
     function testIsLeft() public {
-        Key k1 = KeyImpl.make(1, 1);
-        Key k2 = KeyImpl.make(2, 1);
-        assertTrue(k1.isLeft(k2));
-        assertFalse(k2.isLeft(k1));
+        Key k1 = KeyImpl.make(0, 1);
+        Key k2 = KeyImpl.make(1, 1);
+        assertTrue(k1.isLeft());
+        assertFalse(k2.isLeft());
+
+        k1 = KeyImpl.make(32 + 128, 16);
+        assertTrue(k1.isLeft());
+        k1 = KeyImpl.make(32, 32);
+        assertFalse(k1.isLeft());
     }
 
     function testIsRight() public {
         Key k1 = KeyImpl.make(2, 1);
         Key k2 = KeyImpl.make(1, 1);
-        assertTrue(k1.isRight(k2));
-        assertFalse(k2.isRight(k1));
+        assertFalse(k1.isRight());
+        assertTrue(k2.isRight());
+
+        k1 = KeyImpl.make(16, 8);
+        k2 = KeyImpl.make(24, 8);
+        assertFalse(k1.isRight());
+        assertTrue(k2.isRight());
     }
 
     function testNextDown() public {
-        Key k = KeyImpl.make(1, 1);
-        Key next = k.nextDown();
-        assertEq(next.base(), 0);
-        assertEq(next.width(), 1);
+        // When going down the tree we expect to go down towards the key's base.
+        // This is only used by root when we don't have to visit any nodes.
+        // Therefore this just follows to get us closer to the base.
+        Key k = KeyImpl.make(32, 16);
+        Key target = KeyImpl.make(42, 2);
+
+        Key next = k.nextDown(target);
+        assertEq(next.base(), 40);
+        assertEq(next.width(), 8);
+
+        next = next.nextDown(target);
+        assertEq(next.base(), 40);
+        assertEq(next.width(), 4);
+
+        next = next.nextDown(target);
+        assertEq(next.base(), 42);
+        assertEq(next.width(), 2);
     }
 
     function testParent() public {
-        Key k = KeyImpl.make(1, 1);
+        Key k = KeyImpl.make(0x5678, 4);
         Key parent = k.parent();
-        assertEq(parent.base(), 0);
-        assertEq(parent.width(), 1);
+        assertEq(parent.base(), 0x5678);
+        assertEq(parent.width(), 8);
+        parent = parent.parent();
+        assertEq(parent.base(), 0x5670);
+        assertEq(parent.width(), 16);
+        parent = parent.parent();
+        assertEq(parent.base(), 0x5660);
+        assertEq(parent.width(), 32);
+        parent = parent.parent();
+        assertEq(parent.base(), 0x5640);
+        assertEq(parent.width(), 64);
+        parent = parent.parent();
+        assertEq(parent.base(), 0x5600);
+        assertEq(parent.width(), 128);
+        parent = parent.parent();
+        assertEq(parent.base(), 0x5600);
+        assertEq(parent.width(), 256);
     }
 
     function testChildren() public {
-        Key k = KeyImpl.make(1, 1);
-        Key[] memory children = k.children();
-        assertEq(children.length, 2);
-        assertEq(children[0].base(), 0);
-        assertEq(children[0].width(), 1);
-        assertEq(children[1].base(), 1);
-        assertEq(children[1].width(), 1);
+        Key k = KeyImpl.make(0x5678, 8);
+        (Key left, Key right) = k.children();
+        assertEq(left.base(), 0x5678);
+        assertEq(left.width(), 4);
+        assertEq(right.base(), 0x567C);
+        assertEq(right.width(), 4);
     }
 
     function testSibling() public {
-        Key k1 = KeyImpl.make(1, 1);
-        Key k2 = KeyImpl.make(1, 2);
-        assertEq(k1.sibling(), k2);
-        assertEq(k2.sibling(), k1);
+        Key k1 = KeyImpl.make(0x5678, 4);
+        Key k2 = KeyImpl.make(0x567C, 4);
+        assertTrue(k1.sibling().isEq(k2));
+        assertTrue(k2.sibling().isEq(k1));
     }
 
     function testLow() public {
-        Key k = KeyImpl.make(1, 1);
-        Key low = k.low();
-        assertEq(low.base(), 0);
-        assertEq(low.width(), 1);
+        Key k = KeyImpl.make(0x1234, 4);
+        uint24 low = k.low();
+        assertEq(low, 0x1234);
     }
 
     function testHigh() public {
-        Key k = KeyImpl.make(1, 1);
-        Key high = k.high();
-        assertEq(high.base(), 1);
-        assertEq(high.width(), 1);
+        Key k = KeyImpl.make(0x1234, 4);
+        uint24 high = k.high();
+        assertEq(high, 0x1234 + 4 - 1);
     }
 
-    function testTicks() public {}
+    function testTicks() public {
+        Key k = KeyImpl.make(500, 32);
+        (int24 low, int24 high) = k.ticks(1024, 5);
+        assertEq(low, -60); // (500 - 512) * 5
+        assertEq(high, 100); // (532 - 512) * 5
+    }
 }

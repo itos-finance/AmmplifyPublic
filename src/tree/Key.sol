@@ -65,7 +65,7 @@ library KeyImpl {
 
     /// Get the next child key to traverse when going down the tree.
     function nextDown(Key self, Key other) internal pure returns (Key) {
-        uint48 nextWidth = _rawWidth(other) >> 1;
+        uint48 nextWidth = _rawWidth(self) >> 1;
         uint48 rawBase = _rawBase(self);
         uint48 otherBase = _rawBase(other);
         uint48 nextBase = (nextWidth & otherBase > 0) ? rawBase | nextWidth : rawBase;
@@ -96,17 +96,19 @@ library KeyImpl {
         return uint24(_rawBase(self));
     }
 
+    /// @dev Tree high indices are inclusive
     function high(Key self) internal pure returns (uint24) {
         return uint24(_rawBase(self) + _rawWidth(self) - 1);
     }
 
+    /// @dev highTick here should be exclusive.
     function ticks(
         Key self,
         uint24 rootWidth,
         int24 tickSpacing
     ) internal pure returns (int24 lowTick, int24 highTick) {
         uint24 lowIdx = uint24(_rawBase(self));
-        uint24 highIdx = uint24(lowIdx + _rawWidth(self) - 1);
+        uint24 highIdx = uint24(lowIdx + _rawWidth(self)); // Exclusive
 
         lowTick = TreeTickLib.treeIndexToTick(lowIdx, rootWidth, tickSpacing);
         highTick = TreeTickLib.treeIndexToTick(highIdx, rootWidth, tickSpacing);
