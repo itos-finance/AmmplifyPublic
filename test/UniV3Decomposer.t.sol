@@ -18,8 +18,8 @@ contract UniV3DecomposerTest is Test {
     UniV3Decomposer private decomposer;
 
     function setUp() public {
-        t0 = new MockERC20("T0", "T0");
-        t1 = new MockERC20("T1", "T1");
+        t0 = new MockERC20("T0", "T0", 18);
+        t1 = new MockERC20("T1", "T1", 18);
         factory = new MockFactory();
         nfpm = new MockNFPM(address(factory), address(t0), address(t1));
         maker = new StubMaker();

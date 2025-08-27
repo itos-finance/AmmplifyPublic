@@ -15,6 +15,6 @@ contract DataTest is Test, UniV3IntegrationSetup {
 
     function testMake() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        Asset memory asset = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, uint256 assetId) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
     }
 }

@@ -5,12 +5,13 @@ pragma solidity ^0.8.17;
 contract MockERC20 {
     string public name;
     string public symbol;
-    uint8 public decimals = 18;
+    uint8 public decimals;
     mapping(address => uint256) public balanceOf;
 
-    constructor(string memory _n, string memory _s) {
+    constructor(string memory _n, string memory _s, uint8 _d) {
         name = _n;
         symbol = _s;
+        decimals = _d;
     }
 
     function transfer(address to, uint256 value) external returns (bool) {
