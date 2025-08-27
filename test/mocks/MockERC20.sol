@@ -25,7 +25,7 @@ contract MockERC20 {
         return true;
     }
 
-    function approve(address, uint256) external returns (bool) {
+    function approve(address, uint256) external pure returns (bool) {
         return true;
     }
 
