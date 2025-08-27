@@ -81,8 +81,8 @@ contract RouteTest is Test {
         r.walk(down, up, phase, toRaw(data));
         ExpectedKeys memory eKeys;
         eKeys.add(0, 16, false);
-        eKeys.add(0, 16, false);
-        eKeys.add(0, 16, false);
+        eKeys.add(0, 8, false);
+        eKeys.add(0, 4, false);
         eKeys.skip();
         eKeys.add(2, 2, true);
         eKeys.add(0, 2, false);
@@ -174,13 +174,13 @@ contract RouteTest is Test {
         eKeys2.add(8, 8, true);
         eKeys2.add(0, 16, false);
         eKeys2.skip();
-        eKeys.add(24, 2, true);
-        eKeys.add(24, 4, false);
-        eKeys.add(24, 8, false);
-        eKeys.add(16, 8, true);
-        eKeys.add(16, 16, false);
+        eKeys2.add(24, 2, true);
+        eKeys2.add(24, 4, false);
+        eKeys2.add(24, 8, false);
+        eKeys2.add(16, 8, true);
+        eKeys2.add(16, 16, false);
         eKeys2.skip();
-        eKeys.add(0, 32, false);
+        eKeys2.add(0, 32, false);
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 2 Up");
     }
 

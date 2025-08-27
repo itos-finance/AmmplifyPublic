@@ -23,7 +23,6 @@ contract DataTest is Test, UniV3IntegrationSetup {
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         // Setup done.
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
-        console.log(PoolLib.getSqrtPriceX96(pools[0]));
         // We can't really test this here because of how foundry works with expecting reverts.
         // So we'll have to test it in the higher level integration tests.
         // vm.expectRevert(abi.encodeWithSelector(DataImpl.PriceSlippageExceeded.selector, 1 << 96, 2 << 96, 3 << 96));
@@ -44,52 +43,42 @@ contract DataTest is Test, UniV3IntegrationSetup {
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         uint24 base = TreeTickLib.tickToTreeIndex(100, data.fees.rootWidth, data.fees.tickSpacing);
-        Key key = KeyImpl.make(base, 10);
-        (uint256 x, uint256 y) = data.computeBorrows(key, 100, false);
+        Key key = KeyImpl.make(base, 16);
+        (uint256 x, uint256 y) = data.computeBorrows(key, 100e18, false);
         // Pool price changes don't affect borrow amount.
         swapTo(0, 4 << 96);
-        (uint256 x2, uint256 y2) = data.computeBorrows(key, 100, false);
+        (uint256 x2, uint256 y2) = data.computeBorrows(key, 100e18, false);
         assertEq(x, x2, "x2");
         assertEq(y, y2, "y2");
-        (x2, y2) = data.computeBorrows(key, 200, false);
+        (x2, y2) = data.computeBorrows(key, 200e18, false);
         // Roughly doubles the amount.
-        assertEq(x * 2, x2, "x22");
-        assertEq(y * 2, y2, "y22");
+        assertApproxEqAbs(x * 2, x2, 1, "x22");
+        assertApproxEqAbs(y * 2, y2, 1, "y22");
+        // Doubling the with should also double the amounts (roughly).
+        base = TreeTickLib.tickToTreeIndex(20, data.fees.rootWidth, data.fees.tickSpacing);
+        key = KeyImpl.make(base, 32);
+        (x2, y2) = data.computeBorrows(key, 100e18, false);
+        assertApproxEqRel(x * 2, x2, 1e16, "x222");
+        assertApproxEqRel(y * 2, y2, 1e16, "y222");
     }
 
     function testComputeBalances() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
-        console.log("over1");
-        uint24 base = TreeTickLib.tickToTreeIndex(-100, data.fees.rootWidth, data.fees.tickSpacing);
-        console.log("over2");
-        Key key = KeyImpl.make(base, 20);
-        console.log("over3");
+        uint24 base = TreeTickLib.tickToTreeIndex(-640, data.fees.rootWidth, data.fees.tickSpacing);
+        Key key = KeyImpl.make(base, 128);
         // This is centered around 0, so the current balances and the borrows will match.
-        (uint256 bx, uint256 by) = data.computeBorrows(key, 100, false);
-        console.log("over4");
-        (uint256 x, uint256 y) = data.computeBalances(key, 100, false);
-        console.log("over5");
-        assertEq(bx, x);
-        assertEq(by, y);
+        (uint256 bx, uint256 by) = data.computeBorrows(key, 100e18, false);
+        (uint256 x, uint256 y) = data.computeBalances(key, 100e18, false);
+        assertEq(bx, x, "bx");
+        assertEq(by, y, "by");
         assertNotEq(x, 0, "x0");
         assertNotEq(y, 0, "y0");
         // But if the price moves this isn't true anymore.
-        console.log("over6");
-        swapTo(0, 4 << 96);
-        console.log("over7");
-        (uint256 x2, uint256 y2) = data.computeBalances(key, 100, false);
-        console.log("over8");
+        data.sqrtPriceX96 = 4 << 96;
+        (uint256 x2, uint256 y2) = data.computeBalances(key, 100e18, false);
         assertNotEq(x, x2, "x8");
         assertNotEq(y, y2, "y8");
-    }
-
-    function testIsRoot() public {
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
-        Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
-        uint24 base = TreeTickLib.tickToTreeIndex(100, data.fees.rootWidth, data.fees.tickSpacing);
-        Key key = KeyImpl.make(base, 10);
     }
 }

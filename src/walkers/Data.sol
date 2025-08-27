@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { console2 as console } from "forge-std/console2.sol";
-
 import { Key } from "../tree/Key.sol";
 import { Node } from "./Node.sol";
 import { LiqData } from "./Liq.sol";
@@ -56,9 +54,6 @@ library DataImpl {
             assetSlot := asset.slot
         }
         uint160 currentSqrtPriceX96 = PoolLib.getSqrtPriceX96(pInfo.poolAddr);
-        console.log(currentSqrtPriceX96 >= minSqrtPriceX96);
-        console.log(currentSqrtPriceX96);
-        console.log(minSqrtPriceX96);
         require(
             currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
             PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
