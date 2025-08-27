@@ -19,7 +19,11 @@ contract UniV3IntegrationSetup {
     }
 
     function setUpPool() public returns (uint256 idx, address pool, address token0, address token1) {
-        return setUpPool(3000, type(uint256).max / 2); // Give a little of a buffer, but still more than enough.
+        return setUpPool(3000);
+    }
+
+    function setUpPool(uint24 fee) public returns (uint256 idx, address pool, address token0, address token1) {
+        return setUpPool(fee, type(uint256).max / 2); // Give a little of a buffer, but still more than enough.
     }
 
     function setUpPool(
