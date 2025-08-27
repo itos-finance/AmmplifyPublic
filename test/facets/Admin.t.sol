@@ -10,8 +10,11 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { MockERC4626 } from "../mocks/MockERC4626.sol";
 import { VaultType } from "../../src/vaults/Vault.sol";
+import { VaultLib } from "../../src/vaults/Vault.sol";
 
 contract AdminFacetTest is MultiSetupTest {
+    uint256 constant TAKER_VAULT_ID = 80085;
+
     MockERC20 public mockToken;
     MockERC4626 public mockVault;
 
@@ -205,4 +208,61 @@ contract AdminFacetTest is MultiSetupTest {
         assertEq(vault, address(mockVault));
         assertEq(backup, address(0));
     }
+
+    function testRemoveVault() public {
+        // Add a vault first
+        adminFacet.addVault(address(mockToken), 0, address(mockVault), VaultType.E4626);
+
+        // Try to remove the vault - should revert with VaultInUse error
+        // since the vault is currently active
+        vm.expectRevert(
+            abi.encodeWithSignature("VaultInUse(address,address,uint8)", address(mockVault), address(mockToken), 0)
+        );
+        adminFacet.removeVault(address(mockVault));
+
+        // Verify vault is still there
+        (address vault, address backup) = adminFacet.viewVaults(address(mockToken), 0);
+        assertEq(vault, address(mockVault));
+        assertEq(backup, address(0));
+    }
+
+    function testSwapVault() public {
+        // Add initial vault
+        adminFacet.addVault(address(mockToken), 0, address(mockVault), VaultType.E4626);
+
+        // Create a new vault for swapping
+        MockERC4626 newVault = new MockERC4626(ERC20(address(mockToken)), "newVault", "NV");
+
+        // Test that swapVault function reverts with NoBackup error
+        // since there's no backup vault available for the hot swap
+        vm.expectRevert(abi.encodeWithSignature("NoBackup(address,uint8)", address(mockToken), 0));
+        adminFacet.swapVault(address(mockToken), 0);
+
+        // Add a backup vault and attempt to swap
+        adminFacet.addVault(address(mockToken), 0, address(newVault), VaultType.E4626);
+        adminFacet.swapVault(address(mockToken), 0);
+
+        // Verify the vaults have been swapped
+        (address vault, address backup) = adminFacet.viewVaults(address(mockToken), 0);
+        assertEq(vault, address(newVault));
+        assertEq(backup, address(mockVault));
+
+        // Remove the old vault
+        adminFacet.removeVault(address(mockVault));
+    }
+
+    // function testTransferVaultBalance() public {
+    //     // Add source and destination vaults
+    //     adminFacet.addVault(address(mockToken), 0, address(mockVault), VaultType.E4626);
+
+    //     MockERC4626 destVault = new MockERC4626(ERC20(address(mockToken)), "destVault", "DV");
+    //     adminFacet.addVault(address(mockToken), 0, address(destVault), VaultType.E4626);
+
+    //     // TODO: add position, create taker, transfer taker collateral to new vault
+
+    //     // Test that transferVaultBalance function can be called (will revert due to access control or VaultLib call)
+    //     // This tests the basic function signature and access control
+    //     // vm.expectRevert(); // Expect revert due to access control or VaultLib call
+    //     adminFacet.transferVaultBalance(address(mockVault), address(destVault), transferAmount);
+    // }
 }
