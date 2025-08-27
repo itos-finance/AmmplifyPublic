@@ -31,21 +31,9 @@ library ExpectedKeysImpl {
     function skip(ExpectedKeys memory self) internal {
         self.length++;
     }
-
-    function assertEq(
-        ExpectedKeys memory self,
-        Key[16] memory keys,
-        bool[16] memory visits,
-        uint8 length,
-        string memory _msg
-    ) internal {
-        for (uint8 i = 0; i < length; i++) {
-            console.log("expected key assert index", i);
-            assertTrue(keys[i].isEq(self.keys[i]), _msg);
-            assertEq(visits[i], self.visits[i], _msg);
-        }
-    }
 }
+
+using ExpectedKeysImpl for ExpectedKeys;
 
 contract RouteTest is Test {
     function testMakeRoute() public {
@@ -100,7 +88,7 @@ contract RouteTest is Test {
         eKeys.add(0, 2, false);
         eKeys.add(1, 1, true);
         eKeys.skip();
-        eKeys.assertEq(data.downKeys, data.downVisits, data.downLength, "Route 0 Down");
+        assertEqKeys(eKeys, data.downKeys, data.downVisits, data.downLength, "Route 0 Down");
 
         ExpectedKeys memory eKeys2;
         eKeys2.add(1, 1, true);
@@ -111,7 +99,7 @@ contract RouteTest is Test {
         eKeys2.add(0, 4, false);
         eKeys2.add(0, 8, false);
         eKeys2.add(0, 16, false);
-        eKeys2.assertEq(data.upKeys, data.upVisits, data.upLength, "Route 0 Up");
+        assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 0 Up");
     }
 
     function testRoute1() public {
@@ -135,7 +123,7 @@ contract RouteTest is Test {
         eKeys.add(56, 8, false);
         eKeys.add(56, 4, false);
         eKeys.add(56, 2, true);
-        eKeys.assertEq(data.downKeys, data.downVisits, data.downLength, "Route 1 Down");
+        assertEqKeys(eKeys, data.downKeys, data.downVisits, data.downLength, "Route 1 Down");
 
         ExpectedKeys memory eKeys2;
         eKeys2.add(45, 1, true);
@@ -153,7 +141,7 @@ contract RouteTest is Test {
         eKeys2.skip();
         eKeys2.add(32, 32, false);
         eKeys2.add(0, 64, false);
-        eKeys2.assertEq(data.upKeys, data.upVisits, data.upLength, "Route 1 Up");
+        assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 1 Up");
     }
 
     function testRoute2() public {
@@ -176,7 +164,7 @@ contract RouteTest is Test {
         eKeys.add(24, 8, false);
         eKeys.add(24, 4, false);
         eKeys.add(24, 2, true);
-        eKeys.assertEq(data.downKeys, data.downVisits, data.downLength, "Route 2 Down");
+        assertEqKeys(eKeys, data.downKeys, data.downVisits, data.downLength, "Route 2 Down");
 
         ExpectedKeys memory eKeys2;
         eKeys2.add(7, 1, true);
@@ -193,7 +181,7 @@ contract RouteTest is Test {
         eKeys.add(16, 16, false);
         eKeys2.skip();
         eKeys.add(0, 32, false);
-        eKeys2.assertEq(data.upKeys, data.upVisits, data.upLength, "Route 2 Up");
+        assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 2 Up");
     }
 
     function testRoute3() public {
@@ -207,7 +195,7 @@ contract RouteTest is Test {
         eKeys.add(16, 8, true);
         eKeys.skip();
         eKeys.skip();
-        eKeys.assertEq(data.downKeys, data.downVisits, data.downLength, "Route 3 Down");
+        assertEqKeys(eKeys, data.downKeys, data.downVisits, data.downLength, "Route 3 Down");
 
         ExpectedKeys memory eKeys2;
         eKeys2.skip();
@@ -215,7 +203,7 @@ contract RouteTest is Test {
         eKeys2.add(16, 8, true);
         eKeys2.add(16, 16, false);
         eKeys2.add(0, 32, false);
-        eKeys2.assertEq(data.upKeys, data.upVisits, data.upLength, "Route 3 Up");
+        assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 3 Up");
     }
 
     function testRoute4() public {
@@ -233,7 +221,7 @@ contract RouteTest is Test {
         eKeys.add(24, 4, false);
         eKeys.add(24, 2, false);
         eKeys.add(24, 1, true);
-        eKeys.assertEq(data.downKeys, data.downVisits, data.downLength, "Route 4 Down");
+        assertEqKeys(eKeys, data.downKeys, data.downVisits, data.downLength, "Route 4 Down");
 
         ExpectedKeys memory eKeys2;
         eKeys2.skip();
@@ -245,29 +233,7 @@ contract RouteTest is Test {
         eKeys2.skip();
         eKeys2.add(16, 16, false);
         eKeys2.add(0, 32, false);
-        eKeys2.assertEq(data.upKeys, data.upVisits, data.upLength, "Route 4 Up");
-    }
-
-    function assertKeys(
-        RouteTestData memory data,
-        bool isUp,
-        uint24[16] memory expectedBases,
-        uint24[16] memory expectedWidths,
-        bool[16] memory expectedVisits,
-        uint8 expectedLength,
-        string memory identifier
-    ) internal {
-        Key[16] memory keys = isUp ? data.upKeys : data.downKeys;
-        bool[16] memory visits = isUp ? data.upVisits : data.downVisits;
-
-        for (uint8 i = 0; i < expectedLength; i++) {
-            console.log(identifier, "index", i);
-            Key key = keys[i];
-            Key expectedKey = KeyImpl.make(expectedBases[i], expectedWidths[i]);
-            assertTrue(key.isEq(expectedKey), "Key mismatch");
-            assertEq(visits[i], expectedVisits[i], "Visit mismatch");
-        }
-        assertTrue(keys[expectedLength].isEmpty(), "Expected key after length to be empty");
+        assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 4 Up");
     }
 
     // Walk Helpers
@@ -307,6 +273,21 @@ contract RouteTest is Test {
     function toData(bytes memory raw) internal pure returns (RouteTestData memory data) {
         assembly {
             data := raw
+        }
+    }
+
+    function assertEqKeys(
+        ExpectedKeys memory self,
+        Key[16] memory keys,
+        bool[16] memory visits,
+        uint8 length,
+        string memory _msg
+    ) internal {
+        assertEq(length, self.length, _msg);
+        for (uint8 i = 0; i < length; i++) {
+            console.log("expected key assert index", i);
+            assertTrue(keys[i].isEq(self.keys[i]), _msg);
+            assertEq(visits[i], self.visits[i], _msg);
         }
     }
 }

@@ -33,7 +33,7 @@ function msbBit(uint24 x) pure returns (uint8) {
             x >>= 1;
             i += 1;
         }
-        return i - 1;
+        return i;
     }
 }
 
