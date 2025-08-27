@@ -7,6 +7,7 @@ import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
 import { IDiamond } from "Commons/Diamond/interfaces/IDiamond.sol";
 import { DiamondCutFacet } from "Commons/Diamond/facets/DiamondCutFacet.sol";
+
 import { SimplexDiamond } from "../../src/Diamond.sol";
 import { AdminFacet } from "../src/facets/Admin.sol";
 import { MakerFacet } from "../src/facets/Maker.sol";
@@ -14,10 +15,11 @@ import { TakerFacet } from "../src/facets/Taker.sol";
 import { PoolFacet } from "../src/facets/Pool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
 
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 
-contract MultiSetupTest is Test {
+contract MultiSetupTest is Test, UniV3IntegrationSetup {
     // Note: removed the constant tag so we can override INITAL_VALUE in interiting tests
     uint256 public INITIAL_MINT_AMOUNT = 1e30;
     uint128 public INITIAL_VALUE = 1_000_000e18;
