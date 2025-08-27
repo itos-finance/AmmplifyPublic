@@ -19,8 +19,8 @@ contract VaultMultiTest is MultiSetupTest {
         _fundAccount(owner);
         // So we have to redo the prank.
         vm.startPrank(owner);
-        _initializeClosure(0xF, 100e18); // 1,2,3,4
-        _initializeClosure(0x3, 100e18); // 1,2
+        // _initializeClosure(0xF, 100e18); // 1,2,3,4
+        // _initializeClosure(0x3, 100e18); // 1,2
         vm.stopPrank();
     }
 

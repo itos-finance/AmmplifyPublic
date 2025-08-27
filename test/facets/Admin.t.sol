@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
+import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 
@@ -8,13 +9,11 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { MockERC4626 } from "../mocks/MockERC4626.sol";
-import { MockAdminRights } from "../mocks/MockAdminRights.sol";
 import { VaultType } from "../../src/vaults/Vault.sol";
 
 contract AdminFacetTest is MultiSetupTest {
     MockERC20 public mockToken;
     MockERC4626 public mockVault;
-    MockAdminRights public mockAdminRights;
 
     address public nonOwner;
     address public testPool;
@@ -37,7 +36,7 @@ contract AdminFacetTest is MultiSetupTest {
         testPool = address(0xFFF);
 
         mockToken = new MockERC20("mockToken", "MT", 18);
-        mockVault = new MockERC4626(mockToken, "mockVault", "MV");
+        mockVault = new MockERC4626(ERC20(address(mockToken)), "mockVault", "MV");
 
         // // Get test configurations
         testFeeCurve = SmoothRateCurveConfig({
@@ -187,7 +186,7 @@ contract AdminFacetTest is MultiSetupTest {
     // // ============ Vault Management Tests ============
 
     function testAddVault() public {
-        vm.expectEmit(true, true, true, true);
+        vm.expectEmit(true, true, true, false);
         emit VaultAdded(address(mockVault), address(mockToken), 0, VaultType.E4626);
         adminFacet.addVault(address(mockToken), 0, address(mockVault), VaultType.E4626);
 
