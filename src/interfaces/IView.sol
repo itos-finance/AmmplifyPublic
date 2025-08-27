@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { Node } from "./walkers/Node.sol";
-import { Key } from "./tree/Key.sol";
-import { PoolInfo } from "./Pool.sol";
-import { LiqType } from "./walkers/Liq.sol";
+import { Node } from "../walkers/Node.sol";
+import { Key } from "../tree/Key.sol";
+import { PoolInfo } from "../Pool.sol";
+import { LiqType } from "../walkers/Liq.sol";
 
 interface IView {
     // Errors
