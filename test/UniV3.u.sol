@@ -29,7 +29,8 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
     }
 
     function setUpPool(uint24 fee) public returns (uint256 idx, address pool, address token0, address token1) {
-        return setUpPool(fee, type(uint256).max / 2, 0, INIT_SQRT_PRICEX96); // Give a little of a buffer, but still more than enough.
+        // Give a little of a buffer, but still more than enough.
+        return setUpPool(fee, type(uint256).max / 2, 0, INIT_SQRT_PRICEX96);
     }
 
     function setUpPool(
