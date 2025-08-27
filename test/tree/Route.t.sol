@@ -22,13 +22,13 @@ struct ExpectedKeys {
 }
 
 library ExpectedKeysImpl {
-    function add(ExpectedKeys memory self, uint24 base, uint24 width, bool visit) internal {
+    function add(ExpectedKeys memory self, uint24 base, uint24 width, bool visit) internal pure {
         self.keys[self.length] = KeyImpl.make(base, width);
         self.visits[self.length] = visit;
         self.length++;
     }
 
-    function skip(ExpectedKeys memory self) internal {
+    function skip(ExpectedKeys memory self) internal pure {
         self.length++;
     }
 }
@@ -36,7 +36,7 @@ library ExpectedKeysImpl {
 using ExpectedKeysImpl for ExpectedKeys;
 
 contract RouteTest is Test {
-    function testMakeRoute() public {
+    function testMakeRoute() public pure {
         Route memory r = RouteImpl.make(128, 0, 16);
         assertEq(r.rootWidth, 128);
         assertTrue(r.lca.isEq(KeyImpl.make(0, 32)));
@@ -282,7 +282,7 @@ contract RouteTest is Test {
         bool[16] memory visits,
         uint8 length,
         string memory _msg
-    ) internal {
+    ) internal pure {
         assertEq(length, self.length, _msg);
         for (uint8 i = 0; i < length; i++) {
             console.log("expected key assert index", i);

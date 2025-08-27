@@ -20,7 +20,7 @@ contract TickTest is Test {
         index = TreeTickLib.tickToTreeIndex(-63, rootWidth, tickSpacing);
         assertEq(index, 235); // -21 + 256
     }
-    function testTreeIndexToTick() public {
+    function testTreeIndexToTick() public pure {
         uint24 rootWidth = 512;
         int24 tickSpacing = 3;
         int24 tick = TreeTickLib.treeIndexToTick(257, rootWidth, tickSpacing);
