@@ -47,13 +47,14 @@ library ViewRouteImpl {
             return;
         }
         (Key lcaLeft, Key lcaRight) = self.lca.children();
-        // LCA's left can never be part of our breakdown.
-        downFunc(lcaLeft, false, data);
-        Key current = lcaLeft;
         // LCA's right is only visited when the right key is unused.
+        // We visit it first because up visits it last.
         if (self.right.isAbove(lcaRight)) {
             downFunc(lcaRight, true, data);
         }
+        // LCA's left can never be part of our breakdown.
+        downFunc(lcaLeft, false, data);
+        Key current = lcaLeft;
         uint24 leftBase = self.left.base();
 
         while (current.isAbove(self.left)) {
@@ -87,13 +88,14 @@ library ViewRouteImpl {
             return;
         }
         (Key lcaLeft, Key lcaRight) = self.lca.children();
-        // LCA's right can never be part of our breakdown.
-        downFunc(lcaRight, false, data);
-        Key current = lcaRight;
         // LCA's left is only visited when the left key is unused.
+        // We visit it first since up visits it last.
         if (self.left.isAbove(lcaLeft)) {
             downFunc(lcaLeft, true, data);
         }
+        // LCA's right can never be part of our breakdown.
+        downFunc(lcaRight, false, data);
+        Key current = lcaRight;
         uint24 rightBase = self.right.base();
 
         while (current.isAbove(self.right)) {

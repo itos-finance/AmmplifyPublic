@@ -2,21 +2,33 @@
 pragma solidity ^0.8.27;
 
 import { TreeTickLib } from "../../src/tree/Tick.sol";
-import "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 
 contract TickTest is Test {
     function testTickToTreeIndex() public {
-        uint24 rootWidth = 100;
-        int24 tickSpacing = 5;
-        int24 tick = 10;
-        uint24 index = TreeTickLib.tickToTreeIndex(tick, rootWidth, tickSpacing);
-        assertEq(index, uint24(tick / tickSpacing) + rootWidth / 2);
+        uint24 rootWidth = 512;
+        int24 tickSpacing = 3;
+        uint24 index = TreeTickLib.tickToTreeIndex(3, rootWidth, tickSpacing);
+        assertEq(index, 257);
+        index = TreeTickLib.tickToTreeIndex(300, rootWidth, tickSpacing);
+        assertEq(index, 356);
+        vm.expectRevert(abi.encodeWithSelector(TreeTickLib.UnalignedTick.selector, 887, 3));
+        TreeTickLib.tickToTreeIndex(887, rootWidth, tickSpacing);
+        index = TreeTickLib.tickToTreeIndex(888, rootWidth, tickSpacing);
+        assertEq(index, 552); // 296 + 256
+        index = TreeTickLib.tickToTreeIndex(-63, rootWidth, tickSpacing);
+        assertEq(index, 235); // -21 + 256
     }
     function testTreeIndexToTick() public {
-        uint24 rootWidth = 100;
-        int24 tickSpacing = 5;
-        uint24 index = 60;
-        int24 tick = TreeTickLib.treeIndexToTick(index, rootWidth, tickSpacing);
-        assertEq(tick, (int24(index) - int24(rootWidth / 2)) * tickSpacing);
+        uint24 rootWidth = 512;
+        int24 tickSpacing = 3;
+        int24 tick = TreeTickLib.treeIndexToTick(257, rootWidth, tickSpacing);
+        assertEq(tick, 3);
+        tick = TreeTickLib.treeIndexToTick(356, rootWidth, tickSpacing);
+        assertEq(tick, 300);
+        tick = TreeTickLib.treeIndexToTick(552, rootWidth, tickSpacing);
+        assertEq(tick, 888);
+        tick = TreeTickLib.treeIndexToTick(235, rootWidth, tickSpacing);
+        assertEq(tick, -63);
     }
 }

@@ -11,7 +11,7 @@ import { TransferHelper } from "../../lib/Commons/src/Util/TransferHelper.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
-import { INonfungiblePositionManager } from "v3-periphery/interfaces/INonfungiblePositionManager.sol";
+import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfungiblePositionManager.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 /// @title UniV3Decomposer

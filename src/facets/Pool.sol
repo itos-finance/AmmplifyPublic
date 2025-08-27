@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1-or-later
 pragma solidity ^0.8.27;
 
-import { IUniswapV3MintCallback } from "v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
+import { IUniswapV3MintCallback } from "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 

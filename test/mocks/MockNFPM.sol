@@ -2,7 +2,9 @@
 pragma solidity ^0.8.17;
 
 import "./MockERC20.sol";
-import { INonfungiblePositionManager } from "v3-periphery/interfaces/INonfungiblePositionManager.sol";
+import {
+    INonfungiblePositionManager
+} from "../../src/integrations/univ3-periphery/interfaces/INonfungiblePositionManager.sol";
 
 // Mock NFPM implementing minimal interface used by Decomposer
 contract MockNFPM {
