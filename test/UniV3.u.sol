@@ -113,9 +113,9 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         address pool = pools[index];
         (uint160 currentPX96, , , , , , ) = UniswapV3Pool(pool).slot0();
         if (currentPX96 < targetPriceX96) {
-            UniswapV3Pool(pool).swap(address(this), true, type(int256).max, targetPriceX96, "");
-        } else {
             UniswapV3Pool(pool).swap(address(this), false, type(int256).max, targetPriceX96, "");
+        } else {
+            UniswapV3Pool(pool).swap(address(this), true, type(int256).max, targetPriceX96, "");
         }
         _idx = 0;
     }
