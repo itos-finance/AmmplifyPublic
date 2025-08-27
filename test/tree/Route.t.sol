@@ -36,7 +36,7 @@ library ExpectedKeysImpl {
 using ExpectedKeysImpl for ExpectedKeys;
 
 contract RouteTest is Test {
-    function testMakeRoute() public {
+    function testMakeRoute() public pure {
         Route memory r = RouteImpl.make(128, 0, 16);
         assertEq(r.rootWidth, 128);
         assertTrue(r.lca.isEq(KeyImpl.make(0, 32)));
@@ -74,7 +74,7 @@ contract RouteTest is Test {
         assertTrue(r.right.isEq(KeyImpl.make(110, 1)));
     }
 
-    function testRoute0() public {
+    function testRoute0() public pure {
         // Test the route functionality
         Route memory r = RouteImpl.make(16, 1, 3);
         RouteTestData memory data;
@@ -102,7 +102,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 0 Up");
     }
 
-    function testRoute1() public {
+    function testRoute1() public pure {
         // Test the route functionality
         Route memory r = RouteImpl.make(64, 45, 57);
         RouteTestData memory data;
@@ -144,7 +144,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 1 Up");
     }
 
-    function testRoute2() public {
+    function testRoute2() public pure {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 7, 25);
         RouteTestData memory data;
@@ -184,7 +184,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 2 Up");
     }
 
-    function testRoute3() public {
+    function testRoute3() public pure {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 16, 23);
         RouteTestData memory data;
@@ -206,7 +206,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 3 Up");
     }
 
-    function testRoute4() public {
+    function testRoute4() public pure {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 16, 24);
         RouteTestData memory data;
@@ -282,7 +282,7 @@ contract RouteTest is Test {
         bool[16] memory visits,
         uint8 length,
         string memory _msg
-    ) internal {
+    ) internal pure {
         assertEq(length, self.length, _msg);
         for (uint8 i = 0; i < length; i++) {
             console.log("expected key assert index", i);
