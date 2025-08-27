@@ -24,6 +24,10 @@ contract MockNFPM {
     MockERC20 public t0;
     MockERC20 public t1;
 
+    // ERC721 approval tracking
+    mapping(uint256 => address) public getApproved;
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
+
     constructor(address _factory, address _t0, address _t1) {
         factory = _factory;
         t0 = MockERC20(_t0);
@@ -86,5 +90,32 @@ contract MockNFPM {
 
     function burn(uint256 tokenId) external {
         delete positionsMap[tokenId];
+    }
+
+    function approve(address to, uint256 tokenId) external {
+        address owner = positionsMap[tokenId].owner;
+        require(to != owner, "ERC721: approval to current owner");
+        require(
+            msg.sender == owner || isApprovedForAll[owner][msg.sender],
+            "ERC721: approve caller is not token owner or approved for all"
+        );
+
+        getApproved[tokenId] = to;
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external {
+        address owner = positionsMap[tokenId].owner;
+        require(from == owner, "ERC721: transfer from incorrect owner");
+        require(
+            msg.sender == owner || msg.sender == getApproved[tokenId] || isApprovedForAll[owner][msg.sender],
+            "ERC721: caller is not token owner or approved"
+        );
+        require(to != address(0), "ERC721: transfer to the zero address");
+
+        // Update the position owner
+        positionsMap[tokenId].owner = to;
+
+        // Clear any existing approval for this token
+        delete getApproved[tokenId];
     }
 }

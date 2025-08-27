@@ -38,6 +38,7 @@ contract UniV3DecomposerTest is Test {
         factory.setPool(address(0x1234));
         t0.mint(address(decomposer), 0);
         t1.mint(address(decomposer), 0); // ensure zero start
+        nfpm.approve(address(decomposer), pos);
         uint256 newId = decomposer.decompose(pos, false, 0, 0, "");
         assertEq(newId, 1);
         assertEq(maker.calls(), 1);

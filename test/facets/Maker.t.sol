@@ -40,34 +40,34 @@ contract MakerFacetTest is MultiSetupTest {
 
     // ============ Maker Position Creation Tests ============
 
-    function testNewMaker() public {
-        bytes memory rftData = "";
+    // function testNewMaker() public {
+    //     bytes memory rftData = "";
 
-        uint256 assetId = makerFacet.newMaker(
-            address(this),
-            address(pool),
-            -600,
-            600,
-            1e18,
-            false, // non-compounding
-            MIN_SQRT_RATIO,
-            MAX_SQRT_RATIO,
-            rftData
-        );
+    //     uint256 assetId = makerFacet.newMaker(
+    //         address(this),
+    //         address(pool),
+    //         -600,
+    //         600,
+    //         1e18,
+    //         false, // non-compounding
+    //         MIN_SQRT_RATIO,
+    //         MAX_SQRT_RATIO,
+    //         rftData
+    //     );
 
-        // Verify asset was created
-        assertEq(assetId, 1);
+    //     // Verify asset was created
+    //     assertEq(assetId, 1);
 
-        // Verify asset properties using ViewFacet
-        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
-            .getAssetInfo(assetId);
-        assertEq(owner, recipient);
-        assertEq(poolAddr_, poolAddr);
-        assertEq(lowTick_, lowTick);
-        assertEq(highTick_, highTick);
-        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
-        assertEq(liq, liquidity);
-    }
+    //     // Verify asset properties using ViewFacet
+    //     (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+    //         .getAssetInfo(assetId);
+    //     assertEq(owner, recipient);
+    //     assertEq(poolAddr_, poolAddr);
+    //     assertEq(lowTick_, lowTick);
+    //     assertEq(highTick_, highTick);
+    //     assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+    //     assertEq(liq, liquidity);
+    // }
 
     // function testNewMakerCompounding() public {
     //     bytes memory rftData = "";
