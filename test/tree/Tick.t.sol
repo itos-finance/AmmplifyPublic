@@ -6,7 +6,7 @@ import { Test } from "forge-std/Test.sol";
 
 contract TickTest is Test {
     /// forge-config: default.allow_internal_expect_revert = true
-    function testTickToTreeIndex() public pure {
+    function testTickToTreeIndex() public {
         uint24 rootWidth = 512;
         int24 tickSpacing = 3;
         uint24 index = TreeTickLib.tickToTreeIndex(3, rootWidth, tickSpacing);

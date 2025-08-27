@@ -22,13 +22,13 @@ struct ExpectedKeys {
 }
 
 library ExpectedKeysImpl {
-    function add(ExpectedKeys memory self, uint24 base, uint24 width, bool visit) internal {
+    function add(ExpectedKeys memory self, uint24 base, uint24 width, bool visit) internal pure {
         self.keys[self.length] = KeyImpl.make(base, width);
         self.visits[self.length] = visit;
         self.length++;
     }
 
-    function skip(ExpectedKeys memory self) internal {
+    function skip(ExpectedKeys memory self) internal pure {
         self.length++;
     }
 }
@@ -74,7 +74,7 @@ contract RouteTest is Test {
         assertTrue(r.right.isEq(KeyImpl.make(110, 1)));
     }
 
-    function testRoute0() public pure {
+    function testRoute0() public {
         // Test the route functionality
         Route memory r = RouteImpl.make(16, 1, 3);
         RouteTestData memory data;
@@ -102,7 +102,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 0 Up");
     }
 
-    function testRoute1() public pure {
+    function testRoute1() public {
         // Test the route functionality
         Route memory r = RouteImpl.make(64, 45, 57);
         RouteTestData memory data;
@@ -144,7 +144,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 1 Up");
     }
 
-    function testRoute2() public pure {
+    function testRoute2() public {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 7, 25);
         RouteTestData memory data;
@@ -184,7 +184,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 2 Up");
     }
 
-    function testRoute3() public pure {
+    function testRoute3() public {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 16, 23);
         RouteTestData memory data;
@@ -206,7 +206,7 @@ contract RouteTest is Test {
         assertEqKeys(eKeys2, data.upKeys, data.upVisits, data.upLength, "Route 3 Up");
     }
 
-    function testRoute4() public pure {
+    function testRoute4() public {
         // Test the route functionality
         Route memory r = RouteImpl.make(32, 16, 24);
         RouteTestData memory data;
