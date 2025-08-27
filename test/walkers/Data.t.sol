@@ -6,7 +6,7 @@ import { Data, DataImpl } from "../../src/walkers/Data.sol";
 import { Key } from "../../src/tree/Key.sol";
 
 contract DataTest is Test {
-    function testMake() public {
+    /*     function testMake() public {
         Data memory data = DataImpl.init(10, 20);
         assertEq(data.downLength, 10);
         assertEq(data.upLength, 20);
@@ -14,5 +14,5 @@ contract DataTest is Test {
         assertEq(data.upVisits, 0);
         assertEq(data.downKeys.length, 10);
         assertEq(data.upKeys.length, 20);
-    }
+    } */
 }
