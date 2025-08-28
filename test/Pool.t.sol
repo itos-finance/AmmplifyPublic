@@ -98,28 +98,25 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         int24 tickSpacing = pool.tickSpacing();
         int24 tickLower = tickSpacing * -10;
         int24 tickUpper = tickSpacing * 10;
-        uint128 liq = 1;
-        console.log("tickLower", tickLower);
-        console.log("tickUpper", tickUpper);
-        console.log("tickSpacing", tickSpacing);
+        uint128 liq = 1e20;
 
-        (uint160 slot0SqrtPriceX96, int24 slot0Tick, , , , , ) = pool.slot0();
-        console.log("currentTick", slot0Tick);
-
-        IERC20(pool.token0()).approve(address(pool), type(uint256).max);
-        IERC20(pool.token1()).approve(address(pool), type(uint256).max);
+        uint256 balance0 = IERC20(pool.token0()).balanceOf(address(this));
+        uint256 balance1 = IERC20(pool.token1()).balanceOf(address(this));
 
         bypassPoolGuardAssert = true;
         (uint256 directMint0, uint256 directMint1) = pool.mint(address(this), tickLower, tickUpper, liq, "");
         bypassPoolGuardAssert = false;
 
-        // vm.expectCall(
-        //     poolAddr, abi.encodeCall(pool.mint, (address(this), tickLower, tickUpper, liq, ""))
-        // );
-        // (uint256 mint0, uint256 mint1) = PoolLib.mint(poolAddr, tickLower, tickUpper, liq);
+        vm.expectCall(
+            poolAddr, abi.encodeCall(pool.mint, (address(this), tickLower, tickUpper, liq, ""))
+        );
+        (uint256 mint0, uint256 mint1) = PoolLib.mint(poolAddr, tickLower, tickUpper, liq);
 
-        // assertEq(mint0, directMint0, "mint0");
-        // assertEq(mint1, directMint1, "mint1");
+        assertEq(mint0, directMint0, "mint0");
+        assertEq(mint1, directMint1, "mint1");
+
+        assertEq(balance0 - directMint0 - mint0, IERC20(pool.token0()).balanceOf(address(this)), "recieved.token0");
+        assertEq(balance1 - directMint1 - mint1, IERC20(pool.token1()).balanceOf(address(this)), "recieved.token1");
     }
 
     function testBurn() public {
@@ -130,15 +127,37 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
         (uint256 mint0, uint256 mint1) = PoolLib.mint(poolAddr, tickLower, tickUpper, liq);
 
+        vm.expectCall(
+            poolAddr, abi.encodeCall(pool.burn, (tickLower, tickUpper, liq))
+        );
+        (uint256 burn0, uint256 burn1) = PoolLib.burn(poolAddr, tickLower, tickUpper, liq);
+        
+        assertApproxEqAbs(mint0, burn0, 1, "mint0.equals.burn0");
+        assertApproxEqAbs(mint1, burn1, 1, "mint1.equals.burn1");
+    }
+
+    function testCollect() public {
+        int24 tickSpacing = pool.tickSpacing();
+        int24 tickLower = tickSpacing * -10;
+        int24 tickUpper = tickSpacing * 10;
+        uint128 liq = 1e20;
+
+        PoolLib.mint(poolAddr, tickLower, tickUpper, liq);
+        (uint256 burn0, uint256 burn1) = PoolLib.burn(poolAddr, tickLower, tickUpper, liq);
+
         uint256 balance0 = IERC20(pool.token0()).balanceOf(address(this));
         uint256 balance1 = IERC20(pool.token1()).balanceOf(address(this));
 
-        (uint256 burn0, uint256 burn1) = PoolLib.burn(poolAddr, tickLower, tickUpper, liq);
-        assertEq(balance0 + burn0, IERC20(pool.token0()).balanceOf(address(this)), "recieved.token0");
-        assertEq(balance1 + burn1, IERC20(pool.token1()).balanceOf(address(this)), "recieved.token1");
+        vm.expectCall(
+            poolAddr, abi.encodeCall(pool.collect, (address(this), tickLower, tickUpper, type(uint128).max, type(uint128).max))
+        );
+        (uint256 collect0, uint256 collect1) = PoolLib.collect(poolAddr, tickLower, tickUpper);
 
-        assertEq(mint0, burn0, "mint0.equals.burn0");
-        assertEq(mint1, burn1, "mint1.equals.burn1");
+        assertEq(collect0, burn0, "collect0.equals.burn0");
+        assertEq(collect1, burn1, "collect1.equals.burn1");
+
+        assertEq(balance0 + collect0, IERC20(pool.token0()).balanceOf(address(this)), "recieved.token0");
+        assertEq(balance1 + collect1, IERC20(pool.token1()).balanceOf(address(this)), "recieved.token1");
     }
 
     // Get Amounts 
@@ -213,19 +232,10 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
     // Mint Callback 
 
-    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata data) external override {
+    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external override {
         if (!bypassPoolGuardAssert) {
             assertEq(PoolLib.poolGuard(), msg.sender, "poolGuard.mintCallback");
         }
-
-        uint256 balance0 = IERC20(pool.token0()).balanceOf(address(this));
-        uint256 balance1 = IERC20(pool.token1()).balanceOf(address(this));
-
-        console.log("balance0", balance0);
-        console.log("balance1", balance1);
-
-        console.log("amount0Owed", amount0Owed);
-        console.log("amount1Owed", amount1Owed);
 
         TransferHelper.safeTransfer(pool.token0(), msg.sender, amount0Owed);
         TransferHelper.safeTransfer(pool.token1(), msg.sender, amount1Owed);
