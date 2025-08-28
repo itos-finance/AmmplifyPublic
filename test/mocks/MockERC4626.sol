@@ -3,12 +3,19 @@ pragma solidity ^0.8.17;
 
 import { ERC4626 } from "a@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 
 contract MockERC4626 is ERC4626 {
     ERC20 private immutable _asset;
 
     constructor(ERC20 asset, string memory name, string memory symbol) ERC20(name, symbol) ERC4626(asset) {
         _asset = asset;
+    }
+
+    // Adds fees for the user shares
+    function accumulateAssets(address payer, uint256 amount) public {
+        // Add assets to the vault, increases the value of a share
+        TransferHelper.safeTransferFrom(address(_asset), payer, address(this), amount);
     }
 
     function burnAssets(uint256 amount) public {

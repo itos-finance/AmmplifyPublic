@@ -54,28 +54,6 @@ contract UniV3Decomposer is RFTPayer {
         caller = msg.sender;
     }
 
-    /// @inheritdoc IRFTPayer
-    function tokenRequestCB(
-        address[] calldata tokens,
-        int256[] calldata deltas,
-        bytes calldata /* data */
-    ) external override returns (bytes memory) {
-        if (msg.sender != address(MAKER)) revert OnlyMakerFacet(msg.sender);
-        for (uint256 i = 0; i < tokens.length; ++i) {
-            int256 change = deltas[i];
-            address token = tokens[i];
-            if (change > 0) {
-                TransferHelper.safeTransfer(token, msg.sender, uint256(change));
-            }
-            // After primary transfer, sweep any dust the contract may still hold for this token
-            uint256 residual = IERC20(token).balanceOf(address(this));
-            if (residual > 0) {
-                TransferHelper.safeTransfer(token, caller, residual);
-            }
-        }
-        return "";
-    }
-
     function decompose(
         uint256 positionId,
         bool isCompounding,
@@ -143,5 +121,27 @@ contract UniV3Decomposer is RFTPayer {
         );
 
         emit Decomposed(newAssetId, positionId, token0, token1, fee, tickLower, tickUpper, liquidity);
+    }
+
+    /// @inheritdoc IRFTPayer
+    function tokenRequestCB(
+        address[] calldata tokens,
+        int256[] calldata deltas,
+        bytes calldata /* data */
+    ) external override returns (bytes memory) {
+        if (msg.sender != address(MAKER)) revert OnlyMakerFacet(msg.sender);
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            int256 change = deltas[i];
+            address token = tokens[i];
+            if (change > 0) {
+                TransferHelper.safeTransfer(token, msg.sender, uint256(change));
+            }
+            // After primary transfer, sweep any dust the contract may still hold for this token
+            uint256 residual = IERC20(token).balanceOf(address(this));
+            if (residual > 0) {
+                TransferHelper.safeTransfer(token, caller, residual);
+            }
+        }
+        return "";
     }
 }

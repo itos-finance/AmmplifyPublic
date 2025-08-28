@@ -7,6 +7,7 @@ import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
 import { IDiamond } from "Commons/Diamond/interfaces/IDiamond.sol";
 import { DiamondCutFacet } from "Commons/Diamond/facets/DiamondCutFacet.sol";
+import { VaultType } from "../src/vaults/Vault.sol";
 
 import { SimplexDiamond } from "../src/Diamond.sol";
 import { AdminFacet } from "../src/facets/Admin.sol";
@@ -14,15 +15,18 @@ import { MakerFacet } from "../src/facets/Maker.sol";
 import { TakerFacet } from "../src/facets/Taker.sol";
 import { PoolFacet } from "../src/facets/Pool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
+import { PoolInfo } from "../src/Pool.sol";
 
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
+import { MockNFPM } from "./mocks/MockNFPM.sol";
 
 contract MultiSetupTest is Test, UniV3IntegrationSetup {
     // Note: removed the constant tag so we can override INITAL_VALUE in interiting tests
     uint256 public INITIAL_MINT_AMOUNT = 1e30;
     uint128 public INITIAL_VALUE = 1_000_000e18;
+    MockNFPM public nfpm;
 
     /* Diamond */
     address public diamond;
@@ -55,6 +59,11 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
         viewFacet = ViewFacet(diamond);
     }
 
+    function _deployNFPM() internal {
+        // Use the actual factory from the parent class setup
+        nfpm = new MockNFPM(address(factory));
+    }
+
     /// Call this last since it messes with prank.
     function _fundAccount(address account) internal {
         for (uint256 i = 0; i < tokens.length; ++i) {
@@ -67,5 +76,24 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
             MockERC20(tokens[i]).approve(address(diamond), type(uint256).max);
         }
         vm.stopPrank();
+    }
+
+    /// Create vaults for token0 and token1 from a pool using the admin facet
+    /// @param poolAddr The address of the pool to get tokens from
+    function _createPoolVaults(address poolAddr) internal {
+        // Get pool information to find token0 and token1
+        PoolInfo memory pInfo = viewFacet.getPoolInfo(poolAddr);
+
+        // Create MockERC4626 vaults for both tokens
+        MockERC4626 vault0 = new MockERC4626(ERC20(pInfo.token0), "Vault0", "V0");
+        MockERC4626 vault1 = new MockERC4626(ERC20(pInfo.token1), "Vault1", "V1");
+
+        // Add vaults to the admin facet (index 0 for both tokens)
+        adminFacet.addVault(pInfo.token0, 0, address(vault0), VaultType.E4626);
+        adminFacet.addVault(pInfo.token1, 0, address(vault1), VaultType.E4626);
+
+        // Add vaults to the vaults array for tracking
+        vaults.push(vault0);
+        vaults.push(vault1);
     }
 }

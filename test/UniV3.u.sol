@@ -5,9 +5,11 @@ import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
 import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
 import { IUniswapV3SwapCallback } from "v3-core/interfaces/callback/IUniswapV3SwapCallback.sol";
-import { TransferHelper } from "Commons/Util/TransferHelper.sol";
-import { MockERC20 } from "./mocks/MockERC20.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
+import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { TransferHelper } from "Commons/Util/TransferHelper.sol";
+
+import { MockERC20 } from "./mocks/MockERC20.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 
 contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback {
