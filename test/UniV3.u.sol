@@ -125,7 +125,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         TransferHelper.safeTransfer(poolToken1s[_idx], msg.sender, amount1Owed);
     }
 
-    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external {
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external {
         if (amount0Delta > 0) {
             TransferHelper.safeTransfer(poolToken0s[_idx], msg.sender, uint256(amount0Delta));
         } else if (amount1Delta > 0) {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
+import { console2 as console } from "forge-std/console2.sol";
+
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
 import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
@@ -311,23 +313,31 @@ library FeeWalker {
         uint256 myTLiq = node.tLiq * childWidth;
         {
             uint256 leftMLiq = left.subtreeMLiq + myMLiq;
-            uint256 leftTLiq = left.subtreeTLiq + myTLiq;
             uint256 totalMLiq = leftMLiq + liqData.mLiqPrefix * childWidth;
-            uint256 totalTLiq = leftTLiq + liqData.tLiqPrefix * childWidth;
-            // It's okay to round down here. That's incorporated in the rate curve.
-            uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
-            leftWeight = feeData.splitConfig.calculateRateX64(utilX64);
+            if (totalMLiq == 0) {
+                leftWeight = feeData.splitConfig.calculateRateX64(0);
+            } else {
+                uint256 leftTLiq = left.subtreeTLiq + myTLiq;
+                uint256 totalTLiq = leftTLiq + liqData.tLiqPrefix * childWidth;
+                // It's okay to round down here. That's incorporated in the rate curve.
+                uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
+                leftWeight = feeData.splitConfig.calculateRateX64(utilX64);
+            }
         }
         {
             uint256 rightMLiq = right.subtreeMLiq + myMLiq;
-            uint256 rightTLiq = right.subtreeTLiq + myTLiq;
             uint256 totalMLiq = rightMLiq + liqData.mLiqPrefix * childWidth;
-            uint256 totalTLiq = rightTLiq + liqData.tLiqPrefix * childWidth;
-            // It's okay to round down here. That's incorporated in the rate curve.
-            uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
-            // Important to incorporate tliq in the weight so the same ratio, but different tLiqs
-            // pay proportionally.
-            rightWeight = feeData.splitConfig.calculateRateX64(utilX64);
+            if (totalMLiq == 0) {
+                rightWeight = feeData.splitConfig.calculateRateX64(0);
+            } else {
+                uint256 rightTLiq = right.subtreeTLiq + myTLiq;
+                uint256 totalTLiq = rightTLiq + liqData.tLiqPrefix * childWidth;
+                // It's okay to round down here. That's incorporated in the rate curve.
+                uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
+                // Important to incorporate tliq in the weight so the same ratio, but different tLiqs
+                // pay proportionally.
+                rightWeight = feeData.splitConfig.calculateRateX64(utilX64);
+            }
         }
     }
 
@@ -351,6 +361,12 @@ library FeeWalker {
         // We use the liq ratio to calculate the true fee rate the entire column should pay.
         uint256 totalMLiq = width * data.liq.mLiqPrefix + node.liq.subtreeMLiq;
         uint256 totalTLiq = width * data.liq.tLiqPrefix + node.liq.subtreeTLiq;
+        if (totalMLiq == 0 || totalTLiq == 0) {
+            // There is no maker or taker liq in this entire column, so no fees to charge, no fee rates to update,
+            // no unclaimeds to propogate down.
+            // But we do have to return 1 for the taker rates to indicate we've actually calculated them.
+            return (0, 0, 1, 1);
+        }
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
         uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint64((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
@@ -365,7 +381,6 @@ library FeeWalker {
         // This is important for indicating no fees vs. uncalculated fees.
         colTakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalTLiq) + 1;
         colTakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalTLiq) + 1;
-        // We set taker rates to at least 1 to indicate it was calulated, and the fees were just 0.
         colMakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalMLiq);
         colMakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalMLiq);
         // Now add this to our node's fee accounting.
