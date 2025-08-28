@@ -43,8 +43,9 @@ library AssetLib {
     // costs by donating positions to other users.
     uint8 public constant MAX_ASSETS_PER_OWNER = 16;
 
+    error NoRecipient();
     error ExcessiveAssetsPerOwner(uint256 count);
-    error AssetNotFound(uint256 assetId, address owner);
+    error AssetNotFound(uint256 assetId);
 
     /// Create a new maker asset.
     function newMaker(
@@ -55,6 +56,8 @@ library AssetLib {
         uint128 liq,
         bool isCompounding
     ) internal returns (Asset storage asset, uint256 assetId) {
+        // address 0x0 is a valid recipient for maker assets.
+
         AssetStore storage store = Store.assets();
         assetId = store.nextAssetId++;
         asset = store.assets[assetId];
@@ -80,6 +83,11 @@ library AssetLib {
         uint8 xVaultIndex,
         uint8 yVaultIndex
     ) internal returns (Asset storage asset, uint256 assetId) {
+        require(
+            recipient != address(0x0),
+            NoRecipient()
+        );
+
         AssetStore storage store = Store.assets();
         assetId = store.nextAssetId++;
         asset = store.assets[assetId];
@@ -119,7 +127,7 @@ library AssetLib {
                 break;
             }
         }
-        require(found, AssetNotFound(assetId, owner));
+        require(found, AssetNotFound(assetId));
     }
 
     /// Update the timestamp of when the asset was last modified.
