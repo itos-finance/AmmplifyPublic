@@ -243,9 +243,9 @@ library PoolLib {
         uint160 sqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
-        (uint256 lx, uint256 ly) = getAmounts(sqrtPriceX96, lowTick, highTick, X128, roundUp);
-        uint256 liqValueX128 = (FullMath.mulX64(lx, sqrtPriceX96, false) >> 32) + (ly << 96) / sqrtPriceX96;
-        uint256 myValue = (FullMath.mulX128(x, sqrtPriceX96, false) >> 32) + (y << 96) / sqrtPriceX96;
+        (uint256 lxX128, uint256 lyX128) = getAmounts(sqrtPriceX96, lowTick, highTick, X128, roundUp);
+        uint256 liqValueX128 = (FullMath.mulX64(lxX128, sqrtPriceX96, false) >> 32) + (lyX128 << 96) / sqrtPriceX96;
+        uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
         if (roundUp) {
             equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X128, liqValueX128));
         } else {
