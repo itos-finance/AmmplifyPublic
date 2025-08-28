@@ -2,7 +2,7 @@
 pragma solidity >=0.7.5;
 
 import "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "v3-core/contracts/libraries/LowGasSafeMath.sol";
+import "v3-core/libraries/LowGasSafeMath.sol";
 
 import "./PeripheryPayments.sol";
 import "../interfaces/IPeripheryPaymentsWithFee.sol";

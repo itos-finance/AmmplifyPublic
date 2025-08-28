@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity =0.7.6;
+pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
-import "v3-core/contracts/libraries/TickMath.sol";
+import "v3-core/interfaces/IUniswapV3Factory.sol";
+import "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
+import "v3-core/libraries/TickMath.sol";
 
 import "../libraries/PoolAddress.sol";
 import "../libraries/CallbackValidation.sol";

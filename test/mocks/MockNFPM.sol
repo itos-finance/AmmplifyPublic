@@ -5,8 +5,8 @@ import "./MockERC20.sol";
 import {
     INonfungiblePositionManager
 } from "../../src/integrations/univ3-periphery/interfaces/INonfungiblePositionManager.sol";
-import { IUniswapV3Pool } from "../../src/integrations/univ3-periphery/interfaces/IUniswapV3Pool.sol";
-import { IUniswapV3Factory } from "../../lib/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 
 contract MockNFPM is INonfungiblePositionManager {
     struct Pos {

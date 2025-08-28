@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.7.6;
+pragma solidity ^0.8.0;
 
 import "a@openzeppelin/contracts/utils/Strings.sol";
-import "v3-core/contracts/libraries/BitMath.sol";
-import "base64-sol/base64.sol";
+import "v3-core/libraries/BitMath.sol";
+import "../Base64.sol";
 
 /// @title NFTSVG
 /// @notice Provides a function for generating an SVG associated with a Uniswap NFT

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.7.0;
+pragma solidity ^0.8.0;
 pragma abicoder v2;
 
-import "v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "v3-core/contracts/libraries/TickMath.sol";
-import "v3-core/contracts/libraries/BitMath.sol";
-import "v3-core/contracts/libraries/FullMath.sol";
+import "v3-core/interfaces/IUniswapV3Pool.sol";
+import "v3-core/libraries/TickMath.sol";
+import "v3-core/libraries/BitMath.sol";
+import "v3-core/libraries/FullMath.sol";
 import "a@openzeppelin/contracts/utils/Strings.sol";
 import "a@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "a@openzeppelin/contracts/utils/math/SignedMath.sol";
-import "base64-sol/base64.sol";
+import "../Base64.sol";
 import "./HexStrings.sol";
 import "./NFTSVG.sol";
 

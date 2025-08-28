@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.5.0;
+pragma solidity ^0.8.0;
 
-import "v3-core/contracts/libraries/FullMath.sol";
-import "v3-core/contracts/libraries/UnsafeMath.sol";
-import "v3-core/contracts/libraries/FixedPoint96.sol";
+import "v3-core/libraries/FullMath.sol";
+import "v3-core/libraries/UnsafeMath.sol";
+import "v3-core/libraries/FixedPoint96.sol";
 
 /// @title Functions based on Q64.96 sqrt price and liquidity
 /// @notice Exposes two functions from v3-core SqrtPriceMath
