@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
+import { console } from "forge-std/console.sol";
+
 import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
@@ -197,7 +199,7 @@ library PoolLib {
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
-        if (sqrtPriceX96 < lowSqrtPriceX96) {
+        if (sqrtPriceX96 <= lowSqrtPriceX96) {
             // We are below the range, so we can only add liquidity for token0.
             leftoverY = y;
             if (x == 0) {

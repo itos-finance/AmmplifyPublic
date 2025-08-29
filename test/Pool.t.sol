@@ -10,6 +10,7 @@ import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { LiquidityAmounts } from "./utils/LiquidityAmounts.sol";
 
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { PoolLib, PoolInfo } from "../src/Pool.sol";
@@ -269,6 +270,241 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         );
         assertGt(posFeeGrowthInside0X128, 0, "posFeeGrowthInside0X128.gt.0");
         assertGt(posFeeGrowthInside1X128, 0, "posFeeGrowthInside1X128.gt.0");
+    }
+
+    // Assignable Liq
+
+    function testGetAssignableLiqBelowRange() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
+        uint128 x = 200e18;
+        uint128 y = 100e6;
+
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96
+        );
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+
+        assertEq(assignableLiq, expectedLiq, "assignableLiq.equals.expectedLiq");
+        assertApproxEqAbs(leftoverX, x - uint128(usedX), 1, "leftoverX.equals.x.minus.usedX"); // 1 x lost to dust
+        assertEq(leftoverX, 0, "leftoverX.equals.0");
+        assertEq(leftoverY, y - uint128(usedY), "leftoverY.equals.y.minus.usedY");
+    }
+
+    function testGetAssignableLiqBelowRangeZeroX() public {
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            -2000,
+            2000,
+            0,
+            100e6,
+            TickMath.getSqrtPriceAtTick(-3000)
+        );
+        assertEq(assignableLiq, 0, "assignableLiq.equals.0");
+        assertEq(leftoverX, 0, "leftoverX.equals.0");
+        assertEq(leftoverY, 100e6, "leftoverY.equals.y");
+    }
+
+    // verify we can pass max values w/o overflowing 
+    function testGetAssignableLiqBelowRangeOverflowCheck() public {
+        PoolLib.getAssignableLiq(TickMath.MIN_TICK + 1, TickMath.MAX_TICK, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(TickMath.MIN_TICK));
+        PoolLib.getAssignableLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-1));
+    }
+
+    function testGetAssignableLiqAboveRange() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
+        uint128 x = 200e18;
+        uint128 y = 100e6;
+
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96
+        );
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+
+        assertEq(assignableLiq, expectedLiq, "assignableLiq.equals.expectedLiq");
+        assertEq(leftoverX, x - uint128(usedX), "leftoverX.equals.x.minus.usedX");
+        assertApproxEqAbs(leftoverY, y - uint128(usedY), 1, "leftoverY.equals.y.minus.usedY"); // 1 y lost to dust
+        assertEq(leftoverY, 0, "leftoverY.equals.0");
+    }
+
+    function testGetAssignableLiqAboveRangeZeroY() public {
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            -2000,
+            2000,
+            200e18,
+            0,
+            TickMath.getSqrtPriceAtTick(3000)
+        );
+        assertEq(assignableLiq, 0, "assignableLiq.equals.0");
+        assertEq(leftoverX, 200e18, "leftoverX.equals.x");
+        assertEq(leftoverY, 0, "leftoverY.equals.0");
+    }
+
+    // verify we can pass max values w/o overflowing 
+    function testGetAssignableLiqAboveRangeOverflowCheck() public {
+        PoolLib.getAssignableLiq(TickMath.MIN_TICK, TickMath.MAX_TICK, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(TickMath.MAX_TICK));
+        PoolLib.getAssignableLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2));
+    }
+
+    function testGetAssignableLiqInRangeXLiqEqualsYLiq() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
+
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96
+        );
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+
+        assertEq(assignableLiq, expectedLiq, "assignableLiq.equals.expectedLiq");
+        assertApproxEqAbs(leftoverX, x - uint128(usedX), 1, "leftoverX.equals.x.minus.usedX");
+        assertLt(leftoverX, x - uint128(usedX), "leftoverX.lt.x.minus.usedX");
+        assertApproxEqAbs(leftoverY, y - uint128(usedY), 1, "leftoverY.equals.y.minus.usedY");
+        assertLt(leftoverY, y - uint128(usedY), "leftoverY.lt.y.minus.usedY");
+    }
+
+    function testGetAssignableLiqInRangeXLiqLessThanYLiq() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
+        uint128 x = 100e6;
+        uint128 y = 200e18;
+
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96
+        );
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+
+        assertEq(assignableLiq, expectedLiq, "assignableLiq.equals.expectedLiq");
+        assertApproxEqAbs(leftoverX, x - uint128(usedX), 1, "leftoverX.equals.x.minus.usedX");
+        assertLt(leftoverX, x - uint128(usedX), "leftoverX.lt.x.minus.usedX");
+        assertApproxEqAbs(leftoverY, y - uint128(usedY), 1, "leftoverY.equals.y.minus.usedY");
+        assertLt(leftoverY, y - uint128(usedY), "leftoverY.lt.y.minus.usedY");
+    }
+
+    function testGetAssignableLiqInRangeXLiqGreaterThanYLiq() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
+        uint128 x = 200e18;
+        uint128 y = 100e6;
+
+        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96
+        );
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+
+        assertEq(assignableLiq, expectedLiq, "assignableLiq.equals.expectedLiq");
+        assertApproxEqAbs(leftoverX, x - uint128(usedX), 1, "leftoverX.equals.x.minus.usedX");
+        assertLt(leftoverX, x - uint128(usedX), "leftoverX.lt.x.minus.usedX");
+        assertApproxEqAbs(leftoverY, y - uint128(usedY), 1, "leftoverY.equals.y.minus.usedY");
+        assertLt(leftoverY, y - uint128(usedY), "leftoverY.lt.y.minus.usedY");
+    }
+
+    // verify we can pass max values w/o overflowing 
+    function testGetAssignableLiqInRangeOverflowCheckXLiqLessThanYLiq() public {
+        PoolLib.getAssignableLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-3));
+    }
+
+    // verify we can pass max values w/o overflowing 
+    function testGetAssignableLiqInRangeOverflowCheckXLiqGreaterThanYLiq() public {
+        PoolLib.getAssignableLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(3));
+    }
+
+    // verify we can pass max values w/o overflowing 
+    function testGetAssignableLiqInRangeOverflowCheckXLiqEqualsYLiq() public {
+        // note: difficult to hit xLiq == yLiq with larger values for x and y 
+        // hover logic in the other two cases covers logic in this case sufficiently
+        PoolLib.getAssignableLiq(-10, 10, 1e21, 1e21, TickMath.getSqrtPriceAtTick(0));
     }
 
     // Get Amounts
