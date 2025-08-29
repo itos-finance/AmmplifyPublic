@@ -65,6 +65,15 @@ contract NonfungiblePositionManager is
     /// @dev The ID of the next pool that is used for the first time. Skips 0
     uint80 private _nextPoolId = 1;
 
+    /// @dev Array of all token IDs for enumeration
+    uint256[] private _allTokens;
+    /// @dev Mapping from token ID to index in the allTokens array
+    mapping(uint256 => uint256) private _allTokensIndex;
+    /// @dev Mapping from owner to list of owned token IDs
+    mapping(address => mapping(uint256 => uint256)) private _ownedTokens;
+    /// @dev Mapping from token ID to index in the ownedTokens list
+    mapping(uint256 => uint256) private _ownedTokensIndex;
+
     /// @dev The address of the token descriptor contract, which handles generating token URIs for position tokens
     address private immutable _tokenDescriptor;
 
@@ -190,7 +199,9 @@ contract NonfungiblePositionManager is
     }
 
     // save bytecode by removing implementation of unused method
-    function baseURI() public pure override returns (string memory) {}
+    function _baseURI() internal pure override returns (string memory) {
+        return "";
+    }
 
     /// @inheritdoc INonfungiblePositionManager
     function increaseLiquidity(
@@ -386,9 +397,93 @@ contract NonfungiblePositionManager is
         return _positions[tokenId].operator;
     }
 
+    /// @inheritdoc IERC721Enumerable
+    function totalSupply() public view override returns (uint256) {
+        return _allTokens.length;
+    }
+
+    /// @inheritdoc IERC721Enumerable
+    function tokenByIndex(uint256 index) public view override returns (uint256) {
+        require(index < totalSupply(), "ERC721Enumerable: global index out of bounds");
+        return _allTokens[index];
+    }
+
+    /// @inheritdoc IERC721Enumerable
+    function tokenOfOwnerByIndex(address owner, uint256 index) public view override returns (uint256) {
+        require(index < balanceOf(owner), "ERC721Enumerable: owner index out of bounds");
+        return _ownedTokens[owner][index];
+    }
+
     /// @dev Overrides _approve to use the operator in the position, which is packed with the position permit nonce
-    function _approve(address to, uint256 tokenId) internal override(ERC721) {
+    function _approve(address to, uint256 tokenId, address auth, bool emitEvent) internal override {
         _positions[tokenId].operator = to;
-        emit Approval(ownerOf(tokenId), to, tokenId);
+        if (emitEvent) {
+            emit Approval(ownerOf(tokenId), to, tokenId);
+        }
+    }
+
+    /// @dev Override _update to maintain enumeration
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = super._update(to, tokenId, auth);
+
+        if (from == address(0)) {
+            // Token is being minted
+            _addTokenToAllTokensEnumeration(tokenId);
+        } else if (to == address(0)) {
+            // Token is being burned
+            _removeTokenFromAllTokensEnumeration(tokenId);
+        }
+
+        if (from != to) {
+            if (from != address(0)) {
+                _removeTokenFromOwnerEnumeration(from, tokenId);
+            }
+            if (to != address(0)) {
+                _addTokenToOwnerEnumeration(to, tokenId);
+            }
+        }
+
+        return from;
+    }
+
+    /// @dev Private function to add a token to this extension's ownership-tracking data structures.
+    function _addTokenToOwnerEnumeration(address to, uint256 tokenId) private {
+        uint256 length = balanceOf(to) - 1;
+        _ownedTokens[to][length] = tokenId;
+        _ownedTokensIndex[tokenId] = length;
+    }
+
+    /// @dev Private function to add a token to this extension's token tracking data structures.
+    function _addTokenToAllTokensEnumeration(uint256 tokenId) private {
+        _allTokensIndex[tokenId] = _allTokens.length;
+        _allTokens.push(tokenId);
+    }
+
+    /// @dev Private function to remove a token from this extension's ownership-tracking data structures.
+    function _removeTokenFromOwnerEnumeration(address from, uint256 tokenId) private {
+        uint256 lastTokenIndex = balanceOf(from);
+        uint256 tokenIndex = _ownedTokensIndex[tokenId];
+
+        if (tokenIndex != lastTokenIndex) {
+            uint256 lastTokenId = _ownedTokens[from][lastTokenIndex];
+            _ownedTokens[from][tokenIndex] = lastTokenId;
+            _ownedTokensIndex[lastTokenId] = tokenIndex;
+        }
+
+        delete _ownedTokensIndex[tokenId];
+        delete _ownedTokens[from][lastTokenIndex];
+    }
+
+    /// @dev Private function to remove a token from this extension's token tracking data structures.
+    function _removeTokenFromAllTokensEnumeration(uint256 tokenId) private {
+        uint256 lastTokenIndex = _allTokens.length - 1;
+        uint256 tokenIndex = _allTokensIndex[tokenId];
+
+        uint256 lastTokenId = _allTokens[lastTokenIndex];
+        _allTokens[tokenIndex] = lastTokenId;
+        _allTokensIndex[lastTokenId] = tokenIndex;
+
+        delete _allTokensIndex[tokenId];
+        _allTokens.pop();
     }
 }
