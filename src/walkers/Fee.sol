@@ -95,28 +95,34 @@ library FeeWalker {
         if (key.isLeaf()) {
             // If we're at a leaf, we can claim fees.
             // We round up to overpay dust.
-            node.fees.takerXFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                node.fees.unpaidTakerXFees,
-                1 << 128,
-                node.liq.subtreeTLiq
-            );
-            node.fees.takerYFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                node.fees.unpaidTakerYFees,
-                1 << 128,
-                node.liq.subtreeTLiq
-            );
-            node.fees.unpaidTakerXFees = 0;
-            node.fees.unpaidTakerYFees = 0;
+            if (node.liq.subtreeTLiq > 0) {
+                // If the tLiq is zero we would never propogate any fees down anyways.
+                node.fees.takerXFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                    node.fees.unpaidTakerXFees,
+                    1 << 128,
+                    node.liq.subtreeTLiq
+                );
+                node.fees.takerYFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                    node.fees.unpaidTakerYFees,
+                    1 << 128,
+                    node.liq.subtreeTLiq
+                );
+                node.fees.unpaidTakerXFees = 0;
+                node.fees.unpaidTakerYFees = 0;
+            }
 
-            (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerXFees);
-            node.fees.makerXFeesPerLiqX128 += nonCX128;
-            node.fees.xCFees += c;
-            node.fees.unclaimedMakerXFees = 0;
+            if (node.liq.mLiq > 0) {
+                // If there is no mliq, fees wouldn't propogate down.
+                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerXFees);
+                node.fees.makerXFeesPerLiqX128 += nonCX128;
+                node.fees.xCFees += c;
+                node.fees.unclaimedMakerXFees = 0;
 
-            (c, nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerYFees);
-            node.fees.makerYFeesPerLiqX128 += nonCX128;
-            node.fees.yCFees += c;
-            node.fees.unclaimedMakerYFees = 0;
+                (c, nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerYFees);
+                node.fees.makerYFeesPerLiqX128 += nonCX128;
+                node.fees.yCFees += c;
+                node.fees.unclaimedMakerYFees = 0;
+            }
 
             return;
         }
@@ -124,26 +130,35 @@ library FeeWalker {
         // We claim our own fees first.
         {
             uint24 width = key.width();
+            uint256 myLiq;
             // Takers
-            uint256 myLiq = node.liq.tLiq * width;
-            uint256 perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerXFees, 1 << 128, node.liq.subtreeTLiq);
-            node.fees.takerXFeesPerLiqX128 += perTLiqX128;
-            node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
-            perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerYFees, 1 << 128, node.liq.subtreeTLiq);
-            node.fees.takerYFeesPerLiqX128 += perTLiqX128;
-            node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+            if (node.liq.tLiq > 0) {
+                myLiq = node.liq.tLiq * width;
+                uint256 perTLiqX128 = FullMath.mulDivRoundingUp(
+                    node.fees.unpaidTakerXFees,
+                    1 << 128,
+                    node.liq.subtreeTLiq
+                );
+                node.fees.takerXFeesPerLiqX128 += perTLiqX128;
+                node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerYFees, 1 << 128, node.liq.subtreeTLiq);
+                node.fees.takerYFeesPerLiqX128 += perTLiqX128;
+                node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+            }
             // Makers
-            myLiq = node.liq.mLiq * width;
-            uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
-            node.fees.unclaimedMakerXFees -= uint128(myEarnings);
-            (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(myEarnings);
-            node.fees.makerXFeesPerLiqX128 += nonCX128;
-            node.fees.xCFees += c;
-            myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerYFees, myLiq, node.liq.subtreeMLiq);
-            node.fees.unclaimedMakerYFees -= uint128(myEarnings);
-            (c, nonCX128) = node.liq.splitMakerFees(myEarnings);
-            node.fees.makerYFeesPerLiqX128 += nonCX128;
-            node.fees.yCFees += c;
+            if (node.liq.mLiq > 0) {
+                myLiq = node.liq.mLiq * width;
+                uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
+                node.fees.unclaimedMakerXFees -= uint128(myEarnings);
+                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(myEarnings);
+                node.fees.makerXFeesPerLiqX128 += nonCX128;
+                node.fees.xCFees += c;
+                myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerYFees, myLiq, node.liq.subtreeMLiq);
+                node.fees.unclaimedMakerYFees -= uint128(myEarnings);
+                (c, nonCX128) = node.liq.splitMakerFees(myEarnings);
+                node.fees.makerYFeesPerLiqX128 += nonCX128;
+                node.fees.yCFees += c;
+            }
         }
 
         // Now split fees before updating prefixes.
@@ -196,9 +211,9 @@ library FeeWalker {
                 ) = chargeTrueFeeRate(key, node, data);
             }
         } else {
-            // Check for any uncalculated fee rates.
+            // Check for any uncalculated fee rates using the Taker rate.
             (Key leftKey, Key rightKey) = key.children();
-            if (data.fees.leftColMakerXRateX128 == 0) {
+            if (data.fees.leftColTakerXRateX128 == 0) {
                 // The prefix is correct here since we haven't removed ourselves yet.
                 (
                     data.fees.leftColMakerXRateX128,
@@ -365,6 +380,10 @@ library FeeWalker {
             // There is no maker or taker liq in this entire column, so no fees to charge, no fee rates to update,
             // no unclaimeds to propogate down.
             // But we do have to return 1 for the taker rates to indicate we've actually calculated them.
+            // This is okay because without any taker liq in this subtree (or any subtree above) no one will pay this 1.
+            // And makers aren't trying to claim this dust.
+            // The only time it actually manifests is in a subtree above that actually has takers. Their rates will be
+            // higher by at most the subtree nodes visited which is at most 21. This is dwarfed by anything meaningful.
             return (0, 0, 1, 1);
         }
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
@@ -401,7 +420,6 @@ library FeeWalker {
             data,
             false
         );
-
         // Then we calculate the children's fees and split.
         if (!key.isLeaf()) {
             (Key leftChild, Key rightChild) = key.children();
@@ -415,7 +433,8 @@ library FeeWalker {
             uint256 childrenMLiq = leftNode.liq.subtreeMLiq + rightNode.liq.subtreeMLiq;
             uint256 childrenXEarned = FullMath.mulX128(colMakerXRateX128, childrenMLiq, false);
             uint256 childrenYEarned = FullMath.mulX128(colMakerYRateX128, childrenMLiq, false);
-
+            console.log("children splitting");
+            console.log(childrenXPaid, childrenYPaid, childrenXEarned, childrenYEarned);
             childSplit(
                 data,
                 node,
@@ -455,22 +474,50 @@ library FeeWalker {
         // Calculate x weighted split.
         uint256 leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedX;
         uint256 rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedX;
-        uint256 leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
-        uint256 leftPaid = FullMath.mulX256(xPaid, leftRatioX256, false);
+        uint256 leftPaid;
+        uint256 leftEarned;
+        if (leftBorrowWeight == rightBorrowWeight) {
+            // We special case here to catch when both weights are zero, but check equality
+            // to conveniently cheapen other cases where this applies as well.
+            // If the case is zero, zero, then there will be no paids to split, so no fees are lost.
+            leftPaid = xPaid / 2;
+            leftEarned = xEarned / 2;
+        } else if (leftBorrowWeight == 0) {
+            leftPaid = 0;
+            leftEarned = 0;
+        } else if (rightBorrowWeight == 0) {
+            leftPaid = xPaid;
+            leftEarned = xEarned;
+        } else {
+            uint256 leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
+            leftPaid = FullMath.mulX256(xPaid, leftRatioX256, false);
+            leftEarned = FullMath.mulX256(xEarned, leftRatioX256, false);
+        }
+        console.log(leftBorrowWeight, rightBorrowWeight, leftPaid, leftEarned);
         leftNode.fees.unpaidTakerXFees += uint128(leftPaid);
         rightNode.fees.unpaidTakerXFees += uint128(xPaid - leftPaid);
-        uint256 leftEarned = FullMath.mulX256(xEarned, leftRatioX256, false);
         leftNode.fees.unclaimedMakerXFees += uint128(leftEarned);
         rightNode.fees.unclaimedMakerXFees += uint128(xEarned - leftEarned);
 
         // Repeat for Y.
         leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedY;
         rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedY;
-        leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
-        leftPaid = FullMath.mulX256(yPaid, leftRatioX256, false);
+        if (leftBorrowWeight == rightBorrowWeight) {
+            leftPaid = yPaid / 2;
+            leftEarned = yEarned / 2;
+        } else if (leftBorrowWeight == 0) {
+            leftPaid = 0;
+            leftEarned = 0;
+        } else if (rightBorrowWeight == 0) {
+            leftPaid = yPaid;
+            leftEarned = yEarned;
+        } else {
+            uint256 leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
+            leftPaid = FullMath.mulX256(yPaid, leftRatioX256, false);
+            leftEarned = FullMath.mulX256(yEarned, leftRatioX256, false);
+        }
         leftNode.fees.unpaidTakerYFees += uint128(leftPaid);
         rightNode.fees.unpaidTakerYFees += uint128(yPaid - leftPaid);
-        leftEarned = FullMath.mulX256(yEarned, leftRatioX256, false);
         leftNode.fees.unclaimedMakerYFees += uint128(leftEarned);
         rightNode.fees.unclaimedMakerYFees += uint128(yEarned - leftEarned);
     }

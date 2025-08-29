@@ -73,8 +73,7 @@ library PoolLib {
     /// Get the current sqrt price of the pool.
     function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        (, int24 currentTick, , , , , ) = poolContract.slot0();
-        sqrtPriceX96 = TickMath.getSqrtPriceAtTick(currentTick);
+        (sqrtPriceX96, , , , , , ) = poolContract.slot0();
     }
 
     /*

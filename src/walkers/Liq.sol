@@ -55,6 +55,7 @@ library LiqNodeImpl {
     }
 
     /// @notice Splits balance between compounding and non-compounding maker liquidity.
+    /// @dev Callers should check if the mliq is non-zero first.
     /// @return c The nominal amount of fees collected for compounding makers.
     /// @return nonCX128 The rate earned per non-compounding liq.
     function splitMakerFees(LiqNode storage self, uint256 nominal) internal view returns (uint128 c, uint256 nonCX128) {

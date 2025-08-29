@@ -109,7 +109,6 @@ library KeyImpl {
     ) internal pure returns (int24 lowTick, int24 highTick) {
         uint24 lowIdx = uint24(_rawBase(self));
         uint24 highIdx = uint24(lowIdx + _rawWidth(self)); // Exclusive
-
         lowTick = TreeTickLib.treeIndexToTick(lowIdx, rootWidth, tickSpacing);
         highTick = TreeTickLib.treeIndexToTick(highIdx, rootWidth, tickSpacing);
     }
