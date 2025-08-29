@@ -20,13 +20,13 @@ import { PoolInfo } from "../src/Pool.sol";
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
-import { MockNFPM } from "./mocks/MockNFPM.sol";
+import { NonfungiblePositionManager } from "./mocks/nfpm/NonfungiblePositionManager.sol";
 
 contract MultiSetupTest is Test, UniV3IntegrationSetup {
     // Note: removed the constant tag so we can override INITAL_VALUE in interiting tests
     uint256 public INITIAL_MINT_AMOUNT = 1e30;
     uint128 public INITIAL_VALUE = 1_000_000e18;
-    MockNFPM public nfpm;
+    NonfungiblePositionManager public nfpm;
 
     /* Diamond */
     address public diamond;
@@ -60,8 +60,7 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
     }
 
     function _deployNFPM() internal {
-        // Use the actual factory from the parent class setup
-        nfpm = new MockNFPM(address(factory));
+        nfpm = new NonfungiblePositionManager(address(factory), address(0), address(0));
     }
 
     /// Call this last since it messes with prank.

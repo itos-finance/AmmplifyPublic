@@ -8,11 +8,8 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 import { NFTManager } from "../../src/integrations/NFTManager.sol";
 import { UniV3Decomposer } from "../../src/integrations/UniV3Decomposer.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
-import { MockNFPM } from "../mocks/MockNFPM.sol";
 import { MockERC20 } from "../mocks/MockERC20.sol";
-import {
-    INonfungiblePositionManager
-} from "../../src/integrations/univ3-periphery/interfaces/INonfungiblePositionManager.sol";
+import { INonfungiblePositionManager } from "../mocks/nfpm/interfaces/INonfungiblePositionManager.sol";
 
 contract NFTManagerTest is MultiSetupTest {
     NFTManager public nftManager;
@@ -33,6 +30,7 @@ contract NFTManagerTest is MultiSetupTest {
     function setUp() public {
         // Setup the diamond and facets
         _newDiamond();
+        _deployNFPM();
 
         // Setup a pool
         (uint256 poolIdx, address poolAddr, address token0Addr, address token1Addr) = setUpPool(POOL_FEE);
@@ -72,8 +70,7 @@ contract NFTManagerTest is MultiSetupTest {
             amount0Min: 0,
             amount1Min: 0,
             recipient: owner,
-            deadline: block.timestamp + 3600,
-            data: ""
+            deadline: block.timestamp + 3600
         });
 
         (uint256 tokenId, , , ) = nfpm.mint(params);
