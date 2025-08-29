@@ -33,9 +33,18 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(pInfo.token0, pool.token0());
         assertEq(pInfo.token1, pool.token1());
         assertEq(pInfo.tickSpacing, pool.tickSpacing());
-        // assertEq(pInfo.treeWidth, pool.treeWidth());
+        assertEq(pInfo.tickSpacing, 60, "tickSpacing.fee.3000");
+        assertEq(pInfo.treeWidth, 2**15, "treeWidth.fee.3000");
 
-        console.log("pInfo.tickSpacing", pInfo.tickSpacing);
+        setUpPool(500);
+        pInfo = PoolLib.getPoolInfo(pools[1]);
+        assertEq(pInfo.tickSpacing, 10, "tickSpacing.fee.500");
+        assertEq(pInfo.treeWidth, 2**18, "treeWidth.fee.500");
+
+        setUpPool(10000);
+        pInfo = PoolLib.getPoolInfo(pools[2]);
+        assertEq(pInfo.tickSpacing, 200, "tickSpacing.fee.10000");
+        assertEq(pInfo.treeWidth, 2**14, "treeWidth.fee.10000");
     }
 
     function testGetSqrtPriceX96() public {
