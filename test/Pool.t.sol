@@ -2,7 +2,6 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
-import { console } from "forge-std/console.sol";
 
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
@@ -12,7 +11,6 @@ import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { LiquidityAmounts } from "./utils/LiquidityAmounts.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
-
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { PoolLib, PoolInfo } from "../src/Pool.sol";
 
@@ -519,6 +517,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
     // Equivalent Liq
 
+    // TODO: double check conversion 
     function testGetEquivalentLiqBelowRangeConvertingY() public {
         int24 lowTick = -2000;
         int24 highTick = 2000;
@@ -526,7 +525,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         uint128 x = 200e18;
         uint128 y = 200e18;
 
-        (uint128 equivLiq) = PoolLib.getEquivalentLiq(
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
             lowTick,
             highTick,
             x,
@@ -534,24 +533,17 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             sqrtPriceX96,
             false
         );
-        console.log("equivLiq", equivLiq);
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
 
-        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lowTick),
-            TickMath.getSqrtPriceAtTick(highTick),
-            uint256(x),
-            uint256(y)
-        );
-        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lowTick),
-            TickMath.getSqrtPriceAtTick(highTick),
-            expectedLiq
-        );
-        console.log("expectedLiq", expectedLiq);
-        console.log("usedX", usedX);
-        console.log("usedY", usedY);
+        assertEq(equivLiqRoundingDown, 2346044413003865165004, "equivLiqRoundingDown");
+        assertEq(equivLiqRoundingUp, 2346044413003865165005, "equivLiqRoundingUp");
     }
 
     function testGetEquivalentLiqBelowRangeNoY() public {
@@ -603,6 +595,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-1), true);
     }
 
+    // TODO: double check conversion 
     function testGetEquivalentLiqAboveRangeConvertingX() public {
         int24 lowTick = -2000;
         int24 highTick = 2000;
@@ -610,7 +603,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         uint128 x = 200e18;
         uint128 y = 200e18;
 
-        (uint128 equivLiq) = PoolLib.getEquivalentLiq(
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
             lowTick,
             highTick,
             x,
@@ -618,24 +611,17 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             sqrtPriceX96,
             false
         );
-        console.log("equivLiq", equivLiq);
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
 
-        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lowTick),
-            TickMath.getSqrtPriceAtTick(highTick),
-            uint256(x),
-            uint256(y)
-        );
-        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lowTick),
-            TickMath.getSqrtPriceAtTick(highTick),
-            expectedLiq
-        );
-        console.log("expectedLiq", expectedLiq);
-        console.log("usedX", usedX);
-        console.log("usedY", usedY);
+        assertEq(equivLiqRoundingDown, 2346044413003865165004, "equivLiqRoundingDown");
+        assertEq(equivLiqRoundingUp, 2346044413003865165005, "equivLiqRoundingUp");
     }
 
     function testGetEquivalentLiqAboveRangeNoX() public {
@@ -670,6 +656,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             uint256(y)
         );
 
+        // TODO: why is roundingUp equal to actualLiq?
         assertApproxEqAbs(equivLiqRoundingDown, equivLiqRoundingUp, 1, "equivLiqRoundingDown.equals.equivLiqRoundingUp");
         assertLt(equivLiqRoundingDown, equivLiqRoundingUp, "equivLiqRoundingDown.lt.equivLiqRoundingUp");
         assertEq(equivLiqRoundingUp, actualLiq, "equivLiqRoundingUp.equals.actualLiq");
@@ -687,8 +674,99 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2), true);
     }
 
-    function testGetEquivalentLiqInRange() public {
+    function testGetEquivalentLiqInRangeNoConversion() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
 
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
+
+        uint128 actualLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+
+        assertApproxEqAbs(equivLiqRoundingDown, equivLiqRoundingUp, 1, "equivLiqRoundingDown.equals.equivLiqRoundingUp");
+        assertLt(equivLiqRoundingDown, equivLiqRoundingUp, "equivLiqRoundingDown.lt.equivLiqRoundingUp");
+        assertEq(equivLiqRoundingDown, actualLiq, "equivLiqRoundingDown.equals.actualLiq");
+    }
+    
+    // TODO: double check conversion 
+    function testGetEquivalentLiqInRangeConvertingX() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(1000);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
+
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
+
+        assertEq(equivLiqRoundingDown, 2129710359649553392551, "equivLiqRoundingDown");
+        assertEq(equivLiqRoundingUp, 2129710359649553392552, "equivLiqRoundingUp");
+    }
+
+    // TODO: double check conversion 
+    function testGetEquivalentLiqInRangeConvertingY() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-1000);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
+
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
+
+        assertEq(equivLiqRoundingDown, 2129710359649553392551, "equivLiqRoundingDown");
+        assertEq(equivLiqRoundingUp, 2129710359649553392552, "equivLiqRoundingUp");
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
