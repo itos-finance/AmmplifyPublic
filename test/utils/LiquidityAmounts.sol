@@ -127,7 +127,7 @@ library LiquidityAmounts {
         } else if (sqrtPriceX96 < sqrtPriceBX96) {
             amount0 = getAmount0ForLiquidity(sqrtPriceX96, sqrtPriceBX96, liquidity);
             amount1 = getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceX96, liquidity);
-        } else {
+        } else { // sqrtPriceX96 >= sqrtPriceBX96
             amount1 = getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceBX96, liquidity);
         }
     }

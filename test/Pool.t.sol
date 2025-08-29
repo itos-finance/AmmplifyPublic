@@ -11,6 +11,7 @@ import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { LiquidityAmounts } from "./utils/LiquidityAmounts.sol";
+import { SafeCast } from "Commons/Math/Cast.sol";
 
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { PoolLib, PoolInfo } from "../src/Pool.sol";
@@ -514,6 +515,193 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         // note: difficult to hit xLiq == yLiq with larger values for x and y 
         // hover logic in the other two cases covers logic in this case sufficiently
         PoolLib.getAssignableLiq(-10, 10, 1e21, 1e21, TickMath.getSqrtPriceAtTick(0));
+    }
+
+    // Equivalent Liq
+
+    function testGetEquivalentLiqBelowRangeConvertingY() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
+
+        (uint128 equivLiq) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        console.log("equivLiq", equivLiq);
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+        console.log("expectedLiq", expectedLiq);
+        console.log("usedX", usedX);
+        console.log("usedY", usedY);
+    }
+
+    function testGetEquivalentLiqBelowRangeNoY() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
+        uint128 x = 200e18;
+        uint128 y = 0;
+
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
+
+        uint128 actualLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+
+        assertApproxEqAbs(equivLiqRoundingDown, equivLiqRoundingUp, 1, "equivLiqRoundingDown.equals.equivLiqRoundingUp");
+        assertLt(equivLiqRoundingDown, equivLiqRoundingUp, "equivLiqRoundingDown.lt.equivLiqRoundingUp");
+        assertEq(equivLiqRoundingUp, actualLiq, "equivLiqRoundingUp.equals.actualLiq");
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqBelowRangeLiqOverMaxRoundingDown() public {
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 13612996131207439090653226566178355568195406, type(uint128).max));
+        PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-1), false);
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqBelowRangeLiqOverMaxRoundingUp() public {
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 13612996131207439090653226566178354767995391, type(uint128).max));
+        PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-1), true);
+    }
+
+    function testGetEquivalentLiqAboveRangeConvertingX() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
+        uint128 x = 200e18;
+        uint128 y = 200e18;
+
+        (uint128 equivLiq) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        console.log("equivLiq", equivLiq);
+
+        uint128 expectedLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+        (uint256 usedX, uint256 usedY) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            expectedLiq
+        );
+        console.log("expectedLiq", expectedLiq);
+        console.log("usedX", usedX);
+        console.log("usedY", usedY);
+    }
+
+    function testGetEquivalentLiqAboveRangeNoX() public {
+        int24 lowTick = -2000;
+        int24 highTick = 2000;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
+        uint128 x = 0;
+        uint128 y = 200e18;
+
+        (uint128 equivLiqRoundingDown) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            false
+        );
+        (uint128 equivLiqRoundingUp) = PoolLib.getEquivalentLiq(
+            lowTick,
+            highTick,
+            x,
+            y,
+            sqrtPriceX96,
+            true
+        );
+
+        uint128 actualLiq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lowTick),
+            TickMath.getSqrtPriceAtTick(highTick),
+            uint256(x),
+            uint256(y)
+        );
+
+        assertApproxEqAbs(equivLiqRoundingDown, equivLiqRoundingUp, 1, "equivLiqRoundingDown.equals.equivLiqRoundingUp");
+        assertLt(equivLiqRoundingDown, equivLiqRoundingUp, "equivLiqRoundingDown.lt.equivLiqRoundingUp");
+        assertEq(equivLiqRoundingUp, actualLiq, "equivLiqRoundingUp.equals.actualLiq");
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqAboveRangeLiqOverMaxRoundingDown() public {
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 13612996182251070166403099169497108467528216, type(uint128).max));
+        PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2), false);
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqAboveRangeLiqOverMaxRoundingUp() public {
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 13612996182251070166403099169497107667328197, type(uint128).max));
+        PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2), true);
+    }
+
+    function testGetEquivalentLiqInRange() public {
+
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqInRangeLiqOverMaxRoundingDown() public {
+        // Rounding down
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 680768916872643588502673340623806917354623, type(uint128).max));
+        PoolLib.getEquivalentLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(0), false);
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testRevertGetEquivalentLiqInRangeLiqOverMaxRoundingUp() public {
+        vm.expectRevert(abi.encodeWithSelector(SafeCast.UnsafeUCast.selector, 680768916872643588502673340623806913352223, type(uint128).max));
+        PoolLib.getEquivalentLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(0), true);
     }
 
     // Get Amounts
