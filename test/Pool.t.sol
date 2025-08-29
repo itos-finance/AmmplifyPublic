@@ -12,7 +12,19 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 import { LiquidityAmounts } from "./utils/LiquidityAmounts.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 import { UniV3IntegrationSetup } from "./UniV3.u.sol";
-import { PoolLib, PoolInfo } from "../src/Pool.sol";
+import { PoolLib, PoolInfo, PoolInfoImpl } from "../src/Pool.sol";
+
+contract PoolInfoImplTest is Test {
+    function testTokens() public {
+        PoolInfo memory pInfo;
+        pInfo.token0 = address(0x0);
+        pInfo.token1 = address(0x1);
+
+        address[] memory tokens = PoolInfoImpl.tokens(pInfo);
+        assertEq(tokens[0], address(0x0));
+        assertEq(tokens[1], address(0x1));
+    }
+}
 
 contract PoolTest is Test, UniV3IntegrationSetup {
     address poolAddr;
