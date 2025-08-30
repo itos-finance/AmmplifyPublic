@@ -29,7 +29,8 @@ library VaultLib {
 
     event VaultAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
     event BackupAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
-    event VaultRemoved(address indexed vault, address indexed token, uint8 indexed index, address newActiveVault);
+    event BackupRemoved(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
+    event VaultTransfer(address indexed fromVault, address indexed toVault);
     event VaultSwapped(address indexed oldVault, address indexed token, uint8 indexed index, address newActiveVault);
 
     // Thrown when a vault has already been added before.
@@ -56,9 +57,11 @@ library VaultLib {
         if (vStore.vaults[token][idx] == address(0)) {
             // Add as the primary vault
             vStore.vaults[token][idx] = vault;
+            emit VaultAdded(vault, token, idx, vType);
         } else if (vStore.backups[token][idx] == address(0)) {
             // Add as a backup.
             vStore.backups[token][idx] = vault;
+            emit BackupAdded(vault, token, idx, vType);
         } else {
             revert VaultOccupied(vault, token, idx);
         }
@@ -93,6 +96,8 @@ library VaultLib {
         // Clear bookkeeping.
         delete vStore.usedBy[vault];
         delete vStore.index[vault];
+
+        emit BackupRemoved(vault, token, idx, vType);
     }
 
     /// Move an amount of tokens from one vault to another.
@@ -105,6 +110,7 @@ library VaultLib {
         VaultPointer memory to = getVault(toVault);
         to.deposit(userId, amount);
         to.commit();
+        emit VaultTransfer(fromVault, toVault);
     }
 
     /// Swap the active vault we deposit into.
@@ -117,6 +123,9 @@ library VaultLib {
         address backup = vStore.backups[token][index];
         vStore.vaults[token][index] = backup;
         vStore.backups[token][index] = active;
+
+        // old vault, token, index, new vault
+        emit VaultSwapped(active, token, index, backup);
         return (active, backup);
     }
 

@@ -123,11 +123,13 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](4);
+            bytes4[] memory selectors = new bytes4[](6);
             selectors[0] = ViewFacet.getPoolInfo.selector;
             selectors[1] = ViewFacet.getAssetInfo.selector;
             selectors[2] = ViewFacet.getNodes.selector;
             selectors[3] = ViewFacet.queryAssetBalances.selector;
+            selectors[4] = ViewFacet.getCollateralBalance.selector;
+            selectors[5] = ViewFacet.getCollateralBalances.selector;
             cuts[6] = IDiamond.FacetCut({
                 facetAddress: address(new ViewFacet()),
                 action: IDiamond.FacetCutAction.Add,

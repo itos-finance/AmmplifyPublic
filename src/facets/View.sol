@@ -44,6 +44,33 @@ contract ViewFacet {
         }
     }
 
+    /// Get the collateral balance for a specific recipient and token.
+    /// @param recipient The address of the collateral owner
+    /// @param token The address of the token
+    /// @return The amount of collateral deposited by the recipient for the specified token
+    function getCollateralBalance(address recipient, address token) external view returns (uint256) {
+        return Store.fees().collateral[recipient][token];
+    }
+
+    /// Get collateral balances for multiple recipients and tokens.
+    /// @param recipients Array of recipient addresses
+    /// @param tokens Array of token addresses (must be same length as recipients)
+    /// @return Array of collateral balances corresponding to each recipient-token pair
+    function getCollateralBalances(
+        address[] calldata recipients,
+        address[] calldata tokens
+    ) external view returns (uint256[] memory) {
+        if (recipients.length != tokens.length) {
+            revert LengthMismatch(recipients.length, tokens.length);
+        }
+
+        uint256[] memory balances = new uint256[](recipients.length);
+        for (uint256 i = 0; i < recipients.length; i++) {
+            balances[i] = Store.fees().collateral[recipients[i]][tokens[i]];
+        }
+        return balances;
+    }
+
     /// Compute the token balances owned/owed by the position.
     /// @dev We separate the fee and liq balance so we can use the same method for fee earnings and total value.
     /// @return netBalance0 The amount of token0 owed to the position owner sans fees (Negative is owed by the owner).
