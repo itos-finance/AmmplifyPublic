@@ -31,7 +31,7 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Check the pool's current liquidity for this key.
-        Key key = KeyImpl.make(160000, 1600);
+        Key key = KeyImpl.make(6400, 1600);
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         bytes32 posKey = keccak256(abi.encodePacked(address(this), lowTick, highTick));
         (uint128 liq, , , , ) = IUniswapV3Pool(pools[0]).positions(posKey);
