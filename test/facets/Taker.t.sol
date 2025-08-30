@@ -35,15 +35,15 @@ contract TakerFacetTest is MultiSetupTest {
         // This is a rough estimate - in practice you'd want more precise calculations
         uint256 token0Amount = uint256(liquidity_) * 1e6; // Rough estimate
         uint256 token1Amount = uint256(liquidity_) * 1e6; // Rough estimate
-        
+
         bytes memory data = "";
-        
+
         // Mint and approve tokens
         token0.mint(address(this), token0Amount);
         token1.mint(address(this), token1Amount);
         token0.approve(address(takerFacet), token0Amount);
         token1.approve(address(takerFacet), token1Amount);
-        
+
         // Collateralize both tokens
         takerFacet.collateralize(recipient_, address(token0), token0Amount, data);
         takerFacet.collateralize(recipient_, address(token1), token1Amount, data);
@@ -77,7 +77,7 @@ contract TakerFacetTest is MultiSetupTest {
         _createPoolVaults(poolAddr);
     }
 
-    ============ Taker Position Creation Tests ============
+    // ============ Taker Position Creation Tests ============
 
     function testNewTaker() public {
         bytes memory rftData = "";
@@ -241,12 +241,12 @@ contract TakerFacetTest is MultiSetupTest {
         bytes memory rftData = "";
         // Use very small collateral amounts (likely insufficient)
         uint256 smallAmount = 1; // Minimal amount
-        
+
         token0.mint(address(this), smallAmount);
         token1.mint(address(this), smallAmount);
         token0.approve(address(takerFacet), smallAmount);
         token1.approve(address(takerFacet), smallAmount);
-        
+
         takerFacet.collateralize(recipient, address(token0), smallAmount, rftData);
         takerFacet.collateralize(recipient, address(token1), smallAmount, rftData);
 
@@ -266,19 +266,19 @@ contract TakerFacetTest is MultiSetupTest {
 
     function testNewTakerPartialCollateralAfterWithdrawal() public {
         bytes memory rftData = "";
-        
+
         // First, properly collateralize
         _collateralizeTaker(recipient, liquidity);
-        
+
         // Verify we have collateral
         uint256 token0Balance = viewFacet.getCollateralBalance(recipient, address(token0));
         uint256 token1Balance = viewFacet.getCollateralBalance(recipient, address(token1));
         assertGt(token0Balance, 0, "Should have token0 collateral");
         assertGt(token1Balance, 0, "Should have token1 collateral");
-        
+
         // TODO: Add test for withdrawing collateral when that functionality is implemented
         // For now, this test serves as a placeholder and documents the expected behavior
-        
+
         // Successfully create taker with proper collateral
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -290,7 +290,7 @@ contract TakerFacetTest is MultiSetupTest {
             freezeSqrtPriceX96,
             rftData
         );
-        
+
         // Verify asset was created
         assertEq(assetId, 1);
     }
@@ -300,10 +300,10 @@ contract TakerFacetTest is MultiSetupTest {
     function testRemoveTaker() public {
         // First create a taker position
         bytes memory rftData = "";
-        
+
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
-        
+
         uint256 assetId = takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -340,10 +340,10 @@ contract TakerFacetTest is MultiSetupTest {
     function testRemoveTakerNotOwner() public {
         // First create a taker position
         bytes memory rftData = "";
-        
+
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
-        
+
         uint256 assetId = takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -564,8 +564,12 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Close the position and get actual amounts
         vm.prank(recipient);
-        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet
-            .removeTaker(assetId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet.removeTaker(
+            assetId,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Verify tokens match expected pool tokens
         assertEq(token0Addr, address(token0));
@@ -610,8 +614,12 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Close the position and verify we receive tokens
         vm.prank(recipient);
-        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet
-            .removeTaker(assetId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet.removeTaker(
+            assetId,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Verify tokens match expected pool tokens
         assertEq(token0Addr, address(token0));
@@ -656,8 +664,12 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Close the position and verify consistency
         vm.prank(recipient);
-        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet
-            .removeTaker(assetId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet.removeTaker(
+            assetId,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Verify consistency between query and actual values
         assertTrue(actualRemoved0 > 0 || actualRemoved1 > 0, "Should receive tokens on close after large movement");
@@ -707,10 +719,7 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Verify position is valuable when out of range
         (int256 outOfRangeBalance0, int256 outOfRangeBalance1, , ) = viewFacet.queryAssetBalances(assetId);
-        assertTrue(
-            outOfRangeBalance0 > 0 || outOfRangeBalance1 > 0,
-            "Taker should be valuable when out of range"
-        );
+        assertTrue(outOfRangeBalance0 > 0 || outOfRangeBalance1 > 0, "Taker should be valuable when out of range");
 
         // Move price back into range
         targetTick = 0; // Back to center of range

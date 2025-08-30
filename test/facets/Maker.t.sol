@@ -195,8 +195,8 @@ contract MakerFacetTest is MultiSetupTest {
         // Verify return values
         assertEq(removedToken0, address(token0));
         assertEq(removedToken1, address(token1));
-        assertGt(removedX, netBalance0);
-        assertGt(removedY, netBalance1);
+        assertGt(int256(removedX), netBalance0);
+        assertGt(int256(removedY), netBalance1);
 
         // Verify asset was removed
         vm.expectRevert();
