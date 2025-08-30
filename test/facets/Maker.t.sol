@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
+import { TickMath } from "v3-core/libraries/TickMath.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
 
@@ -36,258 +37,457 @@ contract MakerFacetTest is MultiSetupTest {
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
         pool = UniswapV3Pool(_pool);
+
+        // Set up recipient and basic test parameters
+        recipient = address(this);
+        poolAddr = _pool;
+        lowTick = -600;
+        highTick = 600;
+        liquidity = 1e18;
+        minSqrtPriceX96 = MIN_SQRT_RATIO;
+        maxSqrtPriceX96 = MAX_SQRT_RATIO;
+
+        poolInfo = viewFacet.getPoolInfo(poolAddr);
+
+        // Fund this contract for testing
+        _fundAccount(address(this));
+
+        // Create vaults for the pool tokens
+        _createPoolVaults(poolAddr);
     }
 
     // ============ Maker Position Creation Tests ============
 
-    // function testNewMaker() public {
-    //     bytes memory rftData = "";
+    function testNewMaker() public {
+        bytes memory rftData = "";
 
-    //     uint256 assetId = makerFacet.newMaker(
-    //         address(this),
-    //         address(pool),
-    //         -600,
-    //         600,
-    //         1e18,
-    //         false, // non-compounding
-    //         MIN_SQRT_RATIO,
-    //         MAX_SQRT_RATIO,
-    //         rftData
-    //     );
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     // Verify asset was created
-    //     assertEq(assetId, 1);
+        // Verify asset was created
+        assertEq(assetId, 1);
 
-    //     // Verify asset properties using ViewFacet
-    //     (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
-    //         .getAssetInfo(assetId);
-    //     assertEq(owner, recipient);
-    //     assertEq(poolAddr_, poolAddr);
-    //     assertEq(lowTick_, lowTick);
-    //     assertEq(highTick_, highTick);
-    //     assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
-    //     assertEq(liq, liquidity);
-    // }
+        // Verify asset properties using ViewFacet
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
+        assertEq(owner, recipient);
+        assertEq(poolAddr_, poolAddr);
+        assertEq(lowTick_, lowTick);
+        assertEq(highTick_, highTick);
+        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+        assertEq(liq, liquidity);
+    }
 
-    // function testNewMakerCompounding() public {
-    //     bytes memory rftData = "";
+    function testNewMakerCompounding() public {
+        bytes memory rftData = "";
 
-    //     uint256 assetId = makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         true, // compounding
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            true, // compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     // Verify asset was created with compounding type
-    //     (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
-    //     assertEq(uint8(liqType), uint8(LiqType.MAKER));
-    // }
+        // Verify asset was created with compounding type
+        (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
+        assertEq(uint8(liqType), uint8(LiqType.MAKER));
+    }
 
-    // function testNewMakerInvalidTicks() public {
-    //     bytes memory rftData = "";
+    function testNewMakerInvalidTicks() public {
+        bytes memory rftData = "";
 
-    //     // Test with invalid tick order
-    //     vm.expectRevert();
-    //     makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         highTick, // high tick first
-    //         lowTick, // low tick second
-    //         liquidity,
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
-    // }
+        // Test with invalid tick order
+        vm.expectRevert();
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            highTick, // high tick first
+            lowTick, // low tick second
+            liquidity,
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+    }
 
-    // function testNewMakerInvalidLiquidity() public {
-    //     bytes memory rftData = "";
+    function testNewMakerInvalidLiquidity() public {
+        bytes memory rftData = "";
 
-    //     // Test with zero liquidity
-    //     vm.expectRevert();
-    //     makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         0, // zero liquidity
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
-    // }
+        // Test with zero liquidity
+        vm.expectRevert();
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            0, // zero liquidity
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+    }
 
-    // function testNewMakerPriceBounds() public {
-    //     bytes memory rftData = "";
+    function testNewMakerPriceBounds() public {
+        bytes memory rftData = "";
 
-    //     // Test with invalid price bounds
-    //     vm.expectRevert();
-    //     makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         false,
-    //         maxSqrtPriceX96, // min > max
-    //         minSqrtPriceX96,
-    //         rftData
-    //     );
-    // }
+        // Test with invalid price bounds
+        vm.expectRevert();
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false,
+            maxSqrtPriceX96, // min > max
+            minSqrtPriceX96,
+            rftData
+        );
+    }
 
-    // // ============ Maker Position Removal Tests ============
+    // ============ Maker Position Removal Tests ============
 
-    // function testRemoveMaker() public {
-    //     // First create a maker position
-    //     bytes memory rftData = "";
-    //     uint256 assetId = makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+    function testRemoveMaker() public {
+        // First create a maker position
+        bytes memory rftData = "";
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     // Mock the asset owner
-    //     vm.prank(recipient);
+        (int256 netBalance0, int256 netBalance1, uint256 fees0, uint256 fees1) = viewFacet.queryAssetBalances(assetId);
 
-    //     // Remove the maker position
-    //     (address removedToken0, address removedToken1, uint256 removedX, uint256 removedY) = makerFacet.removeMaker(
-    //         recipient,
-    //         assetId,
-    //         uint128(minSqrtPriceX96),
-    //         uint128(maxSqrtPriceX96),
-    //         rftData
-    //     );
+        // Mock the asset owner
+        vm.prank(recipient);
 
-    //     // Verify return values
-    //     assertEq(removedToken0, address(token0));
-    //     assertEq(removedToken1, address(token1));
-    //     assertGt(removedX, 0);
-    //     assertGt(removedY, 0);
+        // Remove the maker position
+        (address removedToken0, address removedToken1, uint256 removedX, uint256 removedY) = makerFacet.removeMaker(
+            recipient,
+            assetId,
+            uint128(minSqrtPriceX96),
+            uint128(maxSqrtPriceX96),
+            rftData
+        );
 
-    //     // Verify asset was removed
-    //     vm.expectRevert();
-    //     viewFacet.getAssetInfo(assetId);
-    // }
+        // Verify return values
+        assertEq(removedToken0, address(token0));
+        assertEq(removedToken1, address(token1));
+        assertGt(removedX, netBalance0);
+        assertGt(removedY, netBalance1);
 
-    // function testRemoveMakerNotOwner() public {
-    //     // First create a maker position
-    //     bytes memory rftData = "";
-    //     uint256 assetId = makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+        // Verify asset was removed
+        vm.expectRevert();
+        viewFacet.getAssetInfo(assetId);
+    }
 
-    //     // Try to remove as non-owner
-    //     address nonOwner = address(0x456);
-    //     vm.prank(nonOwner);
+    function testRemoveMakerNotOwner() public {
+        // First create a maker position
+        bytes memory rftData = "";
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     vm.expectRevert();
-    //     makerFacet.removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
-    // }
+        // Try to remove as non-owner
+        address nonOwner = address(0x456);
+        vm.prank(nonOwner);
 
-    // function testRemoveMakerNotMakerAsset() public {
-    //     // Create a taker asset instead of maker
-    //     // This would require setting up the taker facet first
-    //     // For now, we'll test the revert case by trying to remove a non-existent asset
+        vm.expectRevert();
+        makerFacet.removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
+    }
 
-    //     bytes memory rftData = "";
-    //     vm.expectRevert();
-    //     makerFacet.removeMaker(
-    //         recipient,
-    //         999, // non-existent asset
-    //         uint128(minSqrtPriceX96),
-    //         uint128(maxSqrtPriceX96),
-    //         rftData
-    //     );
-    // }
+    function testRemoveMakerNotMakerAsset() public {
+        // Create a taker asset instead of maker
+        // This would require setting up the taker facet first
+        // For now, we'll test the revert case by trying to remove a non-existent asset
 
-    // // ============ Fee Collection Tests ============
+        bytes memory rftData = "";
+        vm.expectRevert();
+        makerFacet.removeMaker(
+            recipient,
+            999, // non-existent asset
+            uint128(minSqrtPriceX96),
+            uint128(maxSqrtPriceX96),
+            rftData
+        );
+    }
 
-    // function testCollectFees() public {
-    //     // First create a maker position
-    //     bytes memory rftData = "";
-    //     uint256 assetId = makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+    // ============ Fee Collection Tests ============
 
-    //     // Mock the asset owner
-    //     vm.prank(recipient);
+    function testCollectFees() public {
+        // First create a maker position
+        bytes memory rftData = "";
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     // Collect fees
-    //     (uint256 fees0, uint256 fees1) = makerFacet.collectFees(
-    //         recipient,
-    //         assetId,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+        swapTo(0, TickMath.getSqrtRatioAtTick(600));
+        swapTo(0, TickMath.getSqrtRatioAtTick(-600));
 
-    //     // Verify fees were collected
-    //     assertGe(fees0, 0);
-    //     assertGe(fees1, 0);
-    // }
+        // Mock the asset owner
+        vm.prank(recipient);
 
-    // function testCollectFeesNotOwner() public {
-    //     // First create a maker position
-    //     bytes memory rftData = "";
-    //     uint256 assetId = makerFacet.newMaker(
-    //         recipient,
-    //         poolAddr,
-    //         lowTick,
-    //         highTick,
-    //         liquidity,
-    //         false,
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
+        // Collect fees
+        (uint256 fees0, uint256 fees1) = makerFacet.collectFees(
+            recipient,
+            assetId,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    //     // Try to collect fees as non-owner
-    //     address nonOwner = address(0x456);
-    //     vm.prank(nonOwner);
+        // Verify fees were collected
+        assertGe(fees0, 0);
+        assertGe(fees1, 0);
+    }
 
-    //     vm.expectRevert();
-    //     makerFacet.collectFees(recipient, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
-    // }
+    function testCollectFeesNotOwner() public {
+        // First create a maker position
+        bytes memory rftData = "";
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
 
-    // function testCollectFeesNotMakerAsset() public {
-    //     bytes memory rftData = "";
-    //     vm.expectRevert();
-    //     makerFacet.collectFees(
-    //         recipient,
-    //         999, // non-existent asset
-    //         minSqrtPriceX96,
-    //         maxSqrtPriceX96,
-    //         rftData
-    //     );
-    // }
+        // Try to collect fees as non-owner
+        address nonOwner = address(0x456);
+        vm.prank(nonOwner);
+
+        vm.expectRevert();
+        makerFacet.collectFees(recipient, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
+    }
+
+    function testCollectFeesNotMakerAsset() public {
+        bytes memory rftData = "";
+        vm.expectRevert();
+        makerFacet.collectFees(
+            recipient,
+            999, // non-existent asset
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+    }
+
+    // ============ Price Movement and Value Query Tests ============
+
+    function testMakerPositionValueAfterPriceMovement() public {
+        bytes memory rftData = "";
+
+        // Create a maker position
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+
+        // Verify the position was created correctly using ViewFacet
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
+        assertEq(owner, recipient);
+        assertEq(poolAddr_, poolAddr);
+        assertEq(lowTick_, lowTick);
+        assertEq(highTick_, highTick);
+        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+        assertEq(liq, liquidity);
+
+        // Get initial position balances
+        (int256 initialNetBalance0, int256 initialNetBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        // Move price up by swapping to a higher tick
+        int24 targetTick = 300; // Move price up
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        swapTo(0, targetSqrtPriceX96);
+
+        // Query position value after price movement
+        (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        // Verify that balances changed due to price movement
+        // When price goes up, we expect different token0/token1 balances
+        assertTrue(
+            queriedNetBalance0 != initialNetBalance0 || queriedNetBalance1 != initialNetBalance1,
+            "Position balances should change after price movement"
+        );
+
+        // Close the position and get actual amounts
+        (address token0Addr, address token1Addr, uint256 actualRemoved0, uint256 actualRemoved1) = makerFacet
+            .removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
+
+        // Verify tokens match expected pool tokens
+        assertEq(token0Addr, address(token0));
+        assertEq(token1Addr, address(token1));
+
+        // Compare queried values with actual close values
+        // The total value from query should approximately match what we get from closing
+        // For a maker position, net balances should be positive (amounts owed to position owner)
+        assertGt(actualRemoved0, 0, "Should receive some token0 on close");
+        assertGt(actualRemoved1, 0, "Should receive some token1 on close");
+
+        // The queried net balance should reasonably approximate the actual amounts
+        // (allowing for some difference due to fees and precision)
+        if (queriedNetBalance0 > 0) {
+            assertApproxEqRel(
+                uint256(queriedNetBalance0),
+                actualRemoved0,
+                1e17, // 10% tolerance
+                "Queried token0 balance should approximate actual removed amount"
+            );
+        }
+
+        if (queriedNetBalance1 > 0) {
+            assertApproxEqRel(
+                uint256(queriedNetBalance1),
+                actualRemoved1,
+                1e17, // 10% tolerance
+                "Queried token1 balance should approximate actual removed amount"
+            );
+        }
+    }
+
+    function testMakerPositionValueAfterPriceMovementDown() public {
+        bytes memory rftData = "";
+
+        // Create a maker position
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+
+        // Move price down by swapping to a lower tick
+        int24 targetTick = -300; // Move price down
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        swapTo(0, targetSqrtPriceX96);
+
+        // Query position value after price movement
+        (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        // Close the position and get actual amounts
+        (address token0Addr, address token1Addr, uint256 actualRemoved0, uint256 actualRemoved1) = makerFacet
+            .removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
+
+        // Verify tokens match expected pool tokens
+        assertEq(token0Addr, address(token0));
+        assertEq(token1Addr, address(token1));
+
+        // Compare queried values with actual close values for downward price movement
+        assertGt(actualRemoved0, 0, "Should receive some token0 on close");
+        assertGt(actualRemoved1, 0, "Should receive some token1 on close");
+
+        // The queried values should still reasonably match actual values
+        if (queriedNetBalance0 > 0) {
+            assertApproxEqRel(
+                uint256(queriedNetBalance0),
+                actualRemoved0,
+                1e17, // 10% tolerance
+                "Queried token0 balance should approximate actual removed amount after price down"
+            );
+        }
+
+        if (queriedNetBalance1 > 0) {
+            assertApproxEqRel(
+                uint256(queriedNetBalance1),
+                actualRemoved1,
+                1e17, // 10% tolerance
+                "Queried token1 balance should approximate actual removed amount after price down"
+            );
+        }
+    }
+
+    function testMakerPositionValueWithLargePriceMovement() public {
+        bytes memory rftData = "";
+
+        // Create a maker position
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+
+        // Make a large price movement (move close to the edge of our range)
+        int24 targetTick = 500; // Large upward movement, but still within range
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        swapTo(0, targetSqrtPriceX96);
+
+        // Query position value after large price movement
+        (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        // Verify that fees have been earned (should be positive for large movement)
+        assertTrue(queriedFees0 > 0 || queriedFees1 > 0, "Should have earned some fees from large price movement");
+
+        // Close the position and verify consistency
+        (address token0Addr, address token1Addr, uint256 actualRemoved0, uint256 actualRemoved1) = makerFacet
+            .removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
+
+        // Verify consistency between query and actual values
+        assertGt(actualRemoved0, 0, "Should receive some token0 on close after large movement");
+        assertGt(actualRemoved1, 0, "Should receive some token1 on close after large movement");
+    }
 }
