@@ -113,4 +113,9 @@ contract MakerFacet is ReentrancyGuardTransient {
         fees0 = uint256(-data.xBalance);
         fees1 = uint256(-data.yBalance);
     }
+
+    // TODO: Add function to compound a node. But to get the prefix accurately we have to walk down to that node.
+    // Does taker fees need to update first to save on fees cuz mliq is going up?
+    // Non-compounding liq is safe.
+    // function compound(uint256 key)
 }

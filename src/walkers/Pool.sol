@@ -55,6 +55,7 @@ library PoolWalker {
             PoolLib.mint(data.poolAddr, lowTick, highTick, targetLiq - liq);
         } else if (targetLiq < liq) {
             PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
+            PoolLib.collect(data.poolAddr, lowTick, highTick);
         }
     }
 }

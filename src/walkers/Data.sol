@@ -74,6 +74,33 @@ library DataImpl {
             });
     }
 
+    /*
+    /// TODO: currently unused but potentially used for the compound method.
+    /// Used only for compounding (and testing) but the same as make.
+    function makeWithoutAsset(PoolInfo memory pInfo) internal view returns (Data memory) {
+        Pool storage pool = Store.pool(pInfo.poolAddr);
+        uint128 treeTimestamp = pool.timestamp;
+
+        bytes32 poolSlot;
+        assembly {
+            poolSlot := pool.slot
+        }
+
+        return
+            Data({
+                poolAddr: pInfo.poolAddr,
+                poolStore: poolSlot,
+                assetStore: bytes32(0),
+                sqrtPriceX96: PoolLib.getSqrtPriceX96(pInfo.poolAddr),
+                timestamp: treeTimestamp,
+                liq: LiqDataLib.makeEmpty(),
+                fees: FeeDataLib.make(pInfo),
+                // Outputs
+                xBalance: 0,
+                yBalance: 0
+            });
+    } */
+
     function computeBorrows(
         Data memory self,
         Key key,

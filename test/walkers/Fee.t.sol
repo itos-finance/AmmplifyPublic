@@ -26,13 +26,14 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         FeeLib.init();
     }
 
-    function testWalk() public {
+    function testEmptyWalk() public {
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Route setup.
         Route memory route = RouteImpl.make(25600, 400, 13000);
+        // Empty walk.
         route.walk(down, up, phase, WalkerLib.toRaw(data));
     }
 

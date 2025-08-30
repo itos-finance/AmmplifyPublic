@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { console2 as console } from "forge-std/console2.sol";
-
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
 import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
@@ -433,8 +431,6 @@ library FeeWalker {
             uint256 childrenMLiq = leftNode.liq.subtreeMLiq + rightNode.liq.subtreeMLiq;
             uint256 childrenXEarned = FullMath.mulX128(colMakerXRateX128, childrenMLiq, false);
             uint256 childrenYEarned = FullMath.mulX128(colMakerYRateX128, childrenMLiq, false);
-            console.log("children splitting");
-            console.log(childrenXPaid, childrenYPaid, childrenXEarned, childrenYEarned);
             childSplit(
                 data,
                 node,
@@ -493,7 +489,6 @@ library FeeWalker {
             leftPaid = FullMath.mulX256(xPaid, leftRatioX256, false);
             leftEarned = FullMath.mulX256(xEarned, leftRatioX256, false);
         }
-        console.log(leftBorrowWeight, rightBorrowWeight, leftPaid, leftEarned);
         leftNode.fees.unpaidTakerXFees += uint128(leftPaid);
         rightNode.fees.unpaidTakerXFees += uint128(xPaid - leftPaid);
         leftNode.fees.unclaimedMakerXFees += uint128(leftEarned);

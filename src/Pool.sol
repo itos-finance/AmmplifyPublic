@@ -62,11 +62,8 @@ library PoolLib {
         pInfo.token1 = poolImmutables.token1();
 
         pInfo.tickSpacing = poolImmutables.tickSpacing();
-        uint24 tickSpacing = uint24(pInfo.tickSpacing);
-        uint24 numTicks = uint24(TickMath.MAX_TICK) + uint24(-TickMath.MIN_TICK);
-        uint24 treeIndices = numTicks / tickSpacing + (numTicks % tickSpacing == 0 ? 0 : 1);
-        // We find the first power of two that is greater than the number of tree indices to be the width.
-        pInfo.treeWidth = msb(treeIndices) << 1;
+        // We find the first power of two that is less than the number of tree indices to be the width.
+        pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
         return pInfo;
     }
 
@@ -95,7 +92,8 @@ library PoolLib {
     } */
 
     /**
-     * @notice Wrapper around pool collect function. Collects just fees if no liquidity has been burned.
+     * @notice Wrapper around pool collect function.
+     * Collects just fees if no liquidity has been burned, otherwise collects both.
      * @param pool to operate on
      * @param tickLower bound
      * @param tickUpper bound

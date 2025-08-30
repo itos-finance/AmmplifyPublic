@@ -153,9 +153,10 @@ library LiqWalker {
     /// So this is a crucial step to always call when walking over any node.
     /// @dev We update the taker fees here
     function compound(LiqIter memory iter, Node storage node, Data memory data) internal {
-        // Get actual liquidity to compound.
-        (uint256 x, uint256 y) = PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick);
-        // Now we calculate what swap fees are owed by the taker borrows.
+        // Collect fees here BUT these may not be your actual fees to compound because it could be BORROWED liq.
+        // Therefore, we have to just rely on inside fee rates.
+        PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick);
+        // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
             iter.lowTick,
@@ -165,19 +166,26 @@ library LiqWalker {
         uint256 feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
+        // Any takers here need to be charged.
+        node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
+        node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
 
-        x += FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, true);
-        y += FullMath.mulX128(node.liq.tLiq, feeDiffInside1X128, true);
+        // If we have no maker liq in this node, then there is nothing to compound.
+        if (node.liq.mLiq == 0) return;
+
+        // Otherwise, the fees should have been collected (or are avilable from collateral)
+        // and we can compound.
+        uint256 x = FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false);
+        uint256 y = FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false);
 
         uint256 nonCX128;
         (x, nonCX128) = node.liq.splitMakerFees(x);
         node.fees.makerXFeesPerLiqX128 += nonCX128;
         node.fees.xCFees = FeeWalker.add128Fees(node.fees.xCFees, x, data, true);
-        node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
+
         (y, nonCX128) = node.liq.splitMakerFees(y);
         node.fees.makerYFeesPerLiqX128 += nonCX128;
         node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
-        node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
 
         (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
             iter.lowTick,
@@ -203,6 +211,9 @@ library LiqWalker {
 
         // Then we do the liquidity modification.
         uint128 sliq = aNode.sliq; // Our current liquidity balance.
+        bool dirty = true;
+        uint128 targetSliq = targetLiq; // Only changed in the MAKER case
+
         if (data.liq.liqType == LiqType.MAKER) {
             uint128 equivLiq = PoolLib.getEquivalentLiq(
                 iter.lowTick,
@@ -216,7 +227,7 @@ library LiqWalker {
             // hence we allow the overflow error to revert. This won't affect other pools.
             uint128 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
             uint128 currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
-            uint128 targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
+            targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
             if (currentLiq < targetLiq) {
                 uint128 liqDiff = targetLiq - currentLiq;
                 node.liq.mLiq += liqDiff;
@@ -242,6 +253,8 @@ library LiqWalker {
                 (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liq, false);
                 data.xBalance -= int256(xOwed);
                 data.yBalance -= int256(yOwed);
+            } else {
+                dirty = false;
             }
         } else if (data.liq.liqType == LiqType.MAKER_NC) {
             if (sliq < targetLiq) {
@@ -262,6 +275,8 @@ library LiqWalker {
                 (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xOwed);
                 data.yBalance -= int256(yOwed);
+            } else {
+                dirty = false;
             }
         } else if (data.liq.liqType == LiqType.TAKER) {
             if (sliq < targetLiq) {
@@ -288,10 +303,12 @@ library LiqWalker {
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xBalance);
                 data.yBalance += int256(yBalance);
+            } else {
+                dirty = false;
             }
         }
-        node.liq.dirty = true; // Mark the node as dirty after modification.
-        aNode.sliq = sliq;
+        node.liq.dirty = node.liq.dirty || dirty; // Mark the node as dirty after modification.
+        aNode.sliq = targetSliq;
     }
 
     /// Ensure the liquidity at this node is solvent.
