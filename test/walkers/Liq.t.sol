@@ -113,17 +113,21 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.mLiq = 200e8;
         n.liq.subtreeMLiq = 1000e8;
         n.fees.xCFees = 500;
+        uint128 equivLiq = PoolLib.getEquivalentLiq(low, high, 500, 0, data.sqrtPriceX96, true);
         n.liq.ncLiq = 100e8;
         n.liq.shares = 200e8;
         aNode.sliq = 100e8;
-        LiqWalker.modify(iter, n, data, 20e8);
+        // The asset owns half the liq here and we want 2/5th of their position left.
+        LiqWalker.modify(iter, n, data, ((100e8 + equivLiq) * 2) / 10);
         assertTrue(n.liq.dirty);
-        assertEq(aNode.sliq, 40e8, "0");
-        assertEq(n.liq.shares, 140e8, "1");
-        assertApproxEqAbs(n.liq.mLiq, 170e8, 1, "2");
+        assertApproxEqAbs(aNode.sliq, 40e8, 1, "0");
+        assertLt(aNode.sliq, 40e8, "00");
+        assertApproxEqAbs(n.liq.shares, 140e8, 1, "1");
+        assertLt(n.liq.shares, 140e8, "11");
+        assertEq(n.liq.mLiq, 170e8, "2");
         assertLt(data.xBalance, 0, "3");
         assertEq(data.yBalance, 0, "4"); // Since we're above the range.
-        assertApproxEqAbs(n.fees.xCFees, 350, 1, "5");
+        assertEq(n.fees.xCFees, 350, "5");
     }
 
     function testModifyNCMakerAdd() public {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
+import { console2 as console } from "forge-std/console2.sol";
+
 import { Key } from "../tree/Key.sol";
 import { Node } from "./Node.sol";
 import { Data } from "./Data.sol";
@@ -74,6 +76,10 @@ struct LiqData {
     uint128 tLiqPrefix; // Current prefix of taker liquidity.
     uint128 rootMLiq; // The root to LCA maker liquidity.
     uint128 rootTLiq; // The root to LCA taker liquidity.
+    uint128 leftMLiqPrefix; // The final prefix after the left walk down.
+    uint128 leftTLiqPrefix;
+    uint128 rightMLiqPrefix; // The final prefix after the right walk down.
+    uint128 rightTLiqPrefix;
 }
 
 library LiqDataLib {
@@ -90,7 +96,11 @@ library LiqDataLib {
                 mLiqPrefix: 0,
                 tLiqPrefix: 0,
                 rootMLiq: 0,
-                rootTLiq: 0
+                rootTLiq: 0,
+                leftMLiqPrefix: 0,
+                leftTLiqPrefix: 0,
+                rightMLiqPrefix: 0,
+                rightTLiqPrefix: 0
             });
     }
 }
@@ -109,6 +119,12 @@ library LiqWalker {
 
     function up(Key key, bool visit, Data memory data) internal {
         Node storage node = data.node(key);
+
+        // (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        // console.log("calling into");
+        // console.log(low);
+        // console.log(high);
+
         LiqIter memory iter;
         {
             (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
@@ -121,6 +137,9 @@ library LiqWalker {
         // Do the modifications.
         if (visit) {
             modify(iter, node, data, data.liq.liq);
+            // console.log("modified");
+            // console.log(low);
+            // console.log(high);
         } else {
             // If propogating, we can't be at a leaf.
             (Key lk, Key rk) = key.children();
@@ -141,10 +160,20 @@ library LiqWalker {
             data.liq.rootMLiq = data.liq.mLiqPrefix;
             data.liq.rootTLiq = data.liq.tLiqPrefix;
         } else if (walkPhase == Phase.LEFT_DOWN) {
+            data.liq.leftMLiqPrefix = data.liq.mLiqPrefix;
+            data.liq.leftTLiqPrefix = data.liq.tLiqPrefix;
             data.liq.mLiqPrefix = data.liq.rootMLiq;
             data.liq.tLiqPrefix = data.liq.rootTLiq;
-        } // else if (walkPhase == Phase.RIGHT_DOWN) {}
-        // No action needed for right down phase.
+        } else if (walkPhase == Phase.RIGHT_DOWN) {
+            data.liq.rightMLiqPrefix = data.liq.mLiqPrefix;
+            data.liq.rightTLiqPrefix = data.liq.tLiqPrefix;
+        } else if (walkPhase == Phase.PRE_UP) {
+            data.liq.mLiqPrefix = data.liq.leftMLiqPrefix;
+            data.liq.tLiqPrefix = data.liq.leftTLiqPrefix;
+        } else if (walkPhase == Phase.LEFT_UP) {
+            data.liq.mLiqPrefix = data.liq.rightMLiqPrefix;
+            data.liq.tLiqPrefix = data.liq.rightTLiqPrefix;
+        }
     }
 
     /* Helpers */
@@ -205,7 +234,7 @@ library LiqWalker {
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
         AssetNode storage aNode = data.assetNode(iter.key);
-        // First we collect fees if there are any.
+        // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
         collectFees(aNode, node, data);
 
@@ -215,19 +244,27 @@ library LiqWalker {
         uint128 targetSliq = targetLiq; // Only changed in the MAKER case
 
         if (data.liq.liqType == LiqType.MAKER) {
-            uint128 equivLiq = PoolLib.getEquivalentLiq(
-                iter.lowTick,
-                iter.highTick,
-                node.fees.xCFees,
-                node.fees.yCFees,
-                data.sqrtPriceX96,
-                true
-            );
-            // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
-            // hence we allow the overflow error to revert. This won't affect other pools.
-            uint128 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
-            uint128 currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
-            targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
+            uint128 compoundingLiq = 0;
+            uint128 currentLiq = 0;
+            targetSliq = targetLiq; // Shares start equal to liq.
+            if (node.liq.shares != 0) {
+                // For adding liquidity, we need to consider existing fees
+                // and what amount of equivalent liq they're worth.
+                uint128 equivLiq = PoolLib.getEquivalentLiq(
+                    iter.lowTick,
+                    iter.highTick,
+                    node.fees.xCFees,
+                    node.fees.yCFees,
+                    data.sqrtPriceX96,
+                    true
+                );
+                // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
+                // hence we allow the overflow error to revert. This won't affect other pools.
+                compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
+                currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
+                // The shares we'll have afterwards.
+                targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
+            }
             if (currentLiq < targetLiq) {
                 uint128 liqDiff = targetLiq - currentLiq;
                 node.liq.mLiq += liqDiff;
@@ -237,9 +274,15 @@ library LiqWalker {
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
             } else if (currentLiq > targetLiq) {
+                // When subtracting liquidity, since we've already considered the equiv liq in adding,
+                // we can just remove the share-proportion of liq and fees (not equiv).
+                compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
+                // console.log("sliqs", sliq, targetSliq);
+                // console.log("liqs", currentLiq, compoundingLiq);
                 uint128 sliqDiff = sliq - targetSliq;
                 uint256 shareRatioX256 = FullMath.mulDivX256(sliqDiff, node.liq.shares, false);
                 uint128 liq = uint128(FullMath.mulX256(compoundingLiq, shareRatioX256, false));
+                // console.log("share", shareRatioX256, liq);
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
                 node.liq.subtreeMLiq -= iter.width * liq;
@@ -280,18 +323,27 @@ library LiqWalker {
             }
         } else if (data.liq.liqType == LiqType.TAKER) {
             if (sliq < targetLiq) {
+                console.log("adding taker");
                 uint128 liqDiff = targetLiq - sliq;
                 node.liq.tLiq += liqDiff;
                 node.liq.subtreeTLiq += iter.width * liqDiff;
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
+                // console.log("adding taker bisect 0");
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
                 node.liq.subtreeBorrowedX += xBorrow;
                 node.liq.subtreeBorrowedY += yBorrow;
                 // But the actual balances they get are based on the current price.
+                // console.log("adding taker bisect 1");
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, false);
+                // console.log("adding taker bisect 2");
+                // console.log(xBalance);
+                // console.log(data.xBalance);
+                // console.log(yBalance);
+                // console.log(data.yBalance);
                 data.xBalance -= int256(xBalance);
                 data.yBalance -= int256(yBalance);
+                // console.log("adding taker bisect 2");
             } else if (sliq > targetLiq) {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.tLiq -= liqDiff;
@@ -308,7 +360,9 @@ library LiqWalker {
             }
         }
         node.liq.dirty = node.liq.dirty || dirty; // Mark the node as dirty after modification.
+        console.log("end", aNode.sliq, targetSliq);
         aNode.sliq = targetSliq;
+        console.log("no problem?");
     }
 
     /// Ensure the liquidity at this node is solvent.
@@ -316,8 +370,15 @@ library LiqWalker {
     function solveLiq(LiqIter memory iter, Node storage node, Data memory data) internal {
         int256 netLiq = node.liq.net();
 
+        (int24 low, int24 high) = iter.key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        console.log("solving", netLiq);
+        console.log(low);
+        console.log(high);
+        console.log(node.liq.mLiq, node.liq.borrowed);
+        console.log(node.liq.tLiq, node.liq.lent);
+
         if (data.isRoot(iter.key)) {
-            require(netLiq > 0, InsufficientBorrowLiquidity(netLiq));
+            require(netLiq >= 0, InsufficientBorrowLiquidity(netLiq));
             return;
         }
 
@@ -345,6 +406,9 @@ library LiqWalker {
             node.liq.dirty = true;
             sibling.liq.borrowed -= repayable;
             sibling.liq.dirty = true;
+            console.log("final");
+            console.log(node.liq.mLiq, node.liq.borrowed);
+            console.log(node.liq.tLiq, node.liq.lent);
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
             Node storage sibling = data.node(iter.key.sibling());
@@ -360,6 +424,9 @@ library LiqWalker {
             node.liq.dirty = true;
             sibling.liq.borrowed += borrow;
             sibling.liq.dirty = true;
+            console.log("final");
+            console.log(node.liq.mLiq, node.liq.borrowed);
+            console.log(node.liq.tLiq, node.liq.lent);
         }
     }
 
@@ -374,11 +441,13 @@ library LiqWalker {
             aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
         } else if (data.liq.liqType == LiqType.TAKER) {
+            // console.log("paying taker fees");
             // Now we pay the taker fees.
             data.xBalance += int256(FullMath.mulX128(liq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true));
             data.yBalance += int256(FullMath.mulX128(liq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true));
             aNode.fee0CheckX128 = node.fees.takerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.takerYFeesPerLiqX128;
+            // console.log("taker fees paid");
         }
     }
 
