@@ -154,6 +154,7 @@ library ViewWalker {
         AssetNode storage aNode = data.assetNode(key);
 
         // Inherit the unclaimed/unpaid from the parent node since we can't assign.
+        (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         uint256 unclaimedX;
         uint256 unclaimedY;
         uint256 unpaidX;
@@ -174,7 +175,7 @@ library ViewWalker {
         // Plus we don't want to overwrite the unclaims/unpaids inherited by our sibling.
         if (visit) {
             // First we claim the existing fee earnings.
-            claimCurrentFees(node, aNode, data);
+            claimCurrentFees(node, aNode, data, low, high);
 
             // Now claim the unclaimed/unpaid fees.
             if (data.liq.liqType == LiqType.TAKER) {
@@ -202,14 +203,19 @@ library ViewWalker {
             // If we're not visiting, we just have to propogate down the unclaims/unpaids to the visit nodes.
             uint24 width = key.width();
             // Takers
-            uint256 nodeLiq = node.liq.tLiq * width;
-            unpaidX -= FullMath.mulDiv(unpaidX, nodeLiq, node.liq.subtreeTLiq);
-            unpaidY -= FullMath.mulDiv(unpaidY, nodeLiq, node.liq.subtreeTLiq);
+            uint256 nodeLiq;
+            if (node.liq.subtreeTLiq != 0) {
+                nodeLiq = node.liq.tLiq * width;
+                unpaidX -= FullMath.mulDiv(unpaidX, nodeLiq, node.liq.subtreeTLiq);
+                unpaidY -= FullMath.mulDiv(unpaidY, nodeLiq, node.liq.subtreeTLiq);
+            }
 
             // Makers
-            nodeLiq = node.liq.mLiq * width;
-            unclaimedX -= FullMath.mulDivRoundingUp(unclaimedX, nodeLiq, node.liq.subtreeMLiq);
-            unclaimedY -= FullMath.mulDivRoundingUp(unclaimedY, nodeLiq, node.liq.subtreeMLiq);
+            if (node.liq.subtreeMLiq != 0) {
+                nodeLiq = node.liq.mLiq * width;
+                unclaimedX -= FullMath.mulDivRoundingUp(unclaimedX, nodeLiq, node.liq.subtreeMLiq);
+                unclaimedY -= FullMath.mulDivRoundingUp(unclaimedY, nodeLiq, node.liq.subtreeMLiq);
+            }
 
             // Now split fees before updating prefixes.
             (Key leftChild, Key rightChild) = key.children();
@@ -230,20 +236,56 @@ library ViewWalker {
             // Calculate x weighted split.
             uint256 leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedX;
             uint256 rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedX;
-            uint256 leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
-            data.leftChildUnpaidX = FullMath.mulX256(unpaidX, leftRatioX256, false);
-            data.rightChildUnpaidY = unpaidX - data.leftChildUnpaidX;
-            data.leftChildUnclaimedX = FullMath.mulX256(unclaimedX, leftRatioX256, false);
-            data.rightChildUnclaimedX = unclaimedX - data.leftChildUnclaimedX;
+            uint256 leftPaid;
+            uint256 leftEarned;
+            if (leftBorrowWeight == rightBorrowWeight) {
+                leftPaid = unpaidX / 2;
+                leftEarned = unclaimedX / 2;
+            } else if (leftBorrowWeight == 0) {
+                leftPaid = 0;
+                leftEarned = 0;
+            } else if (rightBorrowWeight == 0) {
+                leftPaid = unpaidX;
+                leftEarned = unclaimedX;
+            } else {
+                uint256 leftRatioX256 = FullMath.mulDivX256(
+                    leftBorrowWeight,
+                    leftBorrowWeight + rightBorrowWeight,
+                    false
+                );
+                leftPaid = FullMath.mulX256(unpaidX, leftRatioX256, false);
+                leftEarned = FullMath.mulX256(unclaimedX, leftRatioX256, false);
+            }
+            data.leftChildUnpaidX = leftPaid;
+            data.rightChildUnpaidY = unpaidX - leftPaid;
+            data.leftChildUnclaimedX = leftEarned;
+            data.rightChildUnclaimedX = unclaimedX - leftEarned;
 
             // Repeat for Y.
             leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedY;
             rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedY;
-            leftRatioX256 = FullMath.mulDivX256(leftBorrowWeight, leftBorrowWeight + rightBorrowWeight, false);
-            data.leftChildUnpaidY = FullMath.mulX256(unpaidY, leftRatioX256, false);
-            data.rightChildUnpaidY = unpaidY - data.leftChildUnpaidY;
-            data.leftChildUnclaimedY = FullMath.mulX256(unclaimedY, leftRatioX256, false);
-            data.rightChildUnclaimedY = unclaimedY - data.leftChildUnclaimedY;
+            if (leftBorrowWeight == rightBorrowWeight) {
+                leftPaid = unpaidY / 2;
+                leftEarned = unclaimedY / 2;
+            } else if (leftBorrowWeight == 0) {
+                leftPaid = 0;
+                leftEarned = 0;
+            } else if (rightBorrowWeight == 0) {
+                leftPaid = unpaidY;
+                leftEarned = unclaimedY;
+            } else {
+                uint256 leftRatioX256 = FullMath.mulDivX256(
+                    leftBorrowWeight,
+                    leftBorrowWeight + rightBorrowWeight,
+                    false
+                );
+                leftPaid = FullMath.mulX256(unpaidY, leftRatioX256, false);
+                leftEarned = FullMath.mulX256(unclaimedY, leftRatioX256, false);
+            }
+            data.leftChildUnpaidY = leftPaid;
+            data.rightChildUnpaidY = unpaidY - leftPaid;
+            data.leftChildUnclaimedY = leftEarned;
+            data.rightChildUnclaimedY = unclaimedY - leftEarned;
 
             // Now we can add to the prefix since we're not visiting.
             data.liq.mLiqPrefix += node.liq.mLiq;
@@ -273,17 +315,47 @@ library ViewWalker {
 
     /* Helpers */
 
-    function claimCurrentFees(Node storage node, AssetNode storage aNode, ViewData memory data) internal view {
+    function claimCurrentFees(
+        Node storage node,
+        AssetNode storage aNode,
+        ViewData memory data,
+        int24 low,
+        int24 high
+    ) internal view {
+        (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
+            data.poolAddr,
+            low,
+            high
+        );
+        uint256 fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
+        uint256 fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         if (data.liq.liqType == LiqType.MAKER) {
             // We just claim our shares.
+            // If the sliq and shares are zero, you should fail anyways.
             data.earningsX += FullMath.mulDiv(node.fees.xCFees, aNode.sliq, node.liq.shares);
             data.earningsY += FullMath.mulDiv(node.fees.yCFees, aNode.sliq, node.liq.shares);
         } else if (data.liq.liqType == LiqType.MAKER_NC) {
-            data.earningsX += FullMath.mulX128(aNode.sliq, node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128, false);
-            data.earningsY += FullMath.mulX128(aNode.sliq, node.fees.makerYFeesPerLiqX128 - aNode.fee1CheckX128, false);
+            data.earningsX += FullMath.mulX128(
+                aNode.sliq,
+                fee0DiffX128 + node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128,
+                false
+            );
+            data.earningsY += FullMath.mulX128(
+                aNode.sliq,
+                fee1DiffX128 + node.fees.makerYFeesPerLiqX128 - aNode.fee1CheckX128,
+                false
+            );
         } else {
-            data.earningsX += FullMath.mulX128(aNode.sliq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
-            data.earningsY += FullMath.mulX128(aNode.sliq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
+            data.earningsX += FullMath.mulX128(
+                aNode.sliq,
+                fee0DiffX128 + node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128,
+                true
+            );
+            data.earningsY += FullMath.mulX128(
+                aNode.sliq,
+                fee1DiffX128 + node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128,
+                true
+            );
         }
     }
 
@@ -301,6 +373,9 @@ library ViewWalker {
         // We use the liq ratio to calculate the true fee rate the entire column should pay.
         uint256 totalMLiq = width * data.liq.mLiqPrefix + node.liq.subtreeMLiq;
         uint256 totalTLiq = width * data.liq.tLiqPrefix + node.liq.subtreeTLiq;
+        if (totalMLiq == 0 || totalTLiq == 0) {
+            return;
+        }
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
         uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint64((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
