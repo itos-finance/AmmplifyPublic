@@ -30,7 +30,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
     address private transient caller;
-    uint256 public constant LIQUIDITY_OFFSET = 42;
+    uint128 public constant LIQUIDITY_OFFSET = 42;
 
     event Decomposed(
         uint256 indexed newAssetId,
