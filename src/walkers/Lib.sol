@@ -19,7 +19,8 @@ library WalkerLib {
     }
 
     function down(Key key, bool visit, bytes memory raw) internal {
-        FeeWalker.down(key, visit, toData(raw));
+        Data memory data = toData(raw);
+        FeeWalker.down(key, visit, data);
     }
 
     function up(Key key, bool visit, bytes memory raw) internal {

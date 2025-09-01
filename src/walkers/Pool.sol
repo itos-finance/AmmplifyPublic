@@ -41,6 +41,7 @@ library PoolWalker {
     /// @dev internal just for testing. Not used elsewhere.
     function updateLiq(Key key, Node storage node, Data memory data) internal {
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+
         // Because we lookup the liq instead of what we think we have,
         // we avoid any potential slow divergences. But it means if someone donates
         // liquidity to this node, that amount in tokens won't be deposited and will be lost.

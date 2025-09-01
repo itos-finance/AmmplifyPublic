@@ -322,9 +322,14 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertTrue(n.liq.dirty, "4");
         assertTrue(sib.liq.dirty, "5");
         assertTrue(parent.liq.dirty, "6");
-        assertEq(parent.liq.lent, 100e8 - 20, "7");
-        assertEq(sib.liq.net(), 50, "8");
+        assertEq(parent.liq.preLend, -20, "7");
+        assertEq(sib.liq.preBorrow, -20, "8");
+        assertEq(sib.liq.net(), 70, "8"); // Won't change until solved.
         assertEq(n.liq.net(), 10e8 - 20, "9");
+        LiqWalker.solveLiq(iter, sib, data);
+        assertEq(sib.liq.net(), 50, "10");
+        LiqWalker.solveLiq(iter, parent, data); // Finalizes the repayment
+        assertEq(parent.liq.lent, 100e8 - 20, "11");
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
@@ -352,11 +357,14 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         data.liq.compoundThreshold = 1e12;
         LiqWalker.solveLiq(iter, n, data);
         Node storage sib = data.node(key.sibling());
-        assertEq(n.liq.borrowed, 1e12);
-        assertEq(sib.liq.borrowed, 1e12);
-        assertEq(sib.liq.net(), 1e12);
-        assertTrue(n.liq.dirty);
-        assertTrue(sib.liq.dirty);
+        assertEq(n.liq.borrowed, 1e12, "0");
+        assertEq(sib.liq.preBorrow, 1e12, "1");
+        assertEq(sib.liq.net(), 0, "2"); // Stays 0 until solved.
+        assertTrue(n.liq.dirty, "3");
+        assertTrue(sib.liq.dirty, "4");
+        LiqWalker.solveLiq(iter, sib, data);
+        assertEq(sib.liq.borrowed, 1e12, "5");
+        assertEq(sib.liq.net(), 1e12, "6"); // Stays 0 until solved.
         // However if the root nets negatively then it errors.
         Key parentKey = key.parent();
         (low, high) = parentKey.ticks(data.fees.rootWidth, data.fees.tickSpacing);
@@ -368,9 +376,9 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
             highTick: high
         });
         Node storage parent = data.node(parentKey);
-        assertEq(parent.liq.net(), -1e12);
-        assertEq(parent.liq.lent, 1e12);
-        assertTrue(parent.liq.dirty);
+        assertEq(parent.liq.net(), 0, "7");
+        assertEq(parent.liq.preLend, 1e12, "8");
+        assertTrue(parent.liq.dirty, "9");
         vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, -1e12));
         LiqWalker.solveLiq(iter, parent, data);
     }

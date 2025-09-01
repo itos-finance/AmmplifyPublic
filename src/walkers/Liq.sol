@@ -10,6 +10,7 @@ import { Asset, AssetNode } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 import { FeeLib } from "../Fee.sol";
 import { FeeWalker } from "./Fee.sol";
+import { SafeCast } from "Commons/Math/Cast.sol";
 
 enum LiqType {
     MAKER,
@@ -33,6 +34,8 @@ struct LiqNode {
     // Liq Redistribution
     uint128 borrowed;
     uint128 lent;
+    int128 preBorrow;
+    int128 preLend;
     // Dirty bit for liquidity modifications.
     bool dirty;
 }
@@ -50,8 +53,9 @@ library LiqNodeImpl {
     }
 
     /// The net liquidity owned by the node's position.
-    function net(LiqNode storage self) internal view returns (int256) {
-        return int256(uint256(self.borrowed) + uint256(self.mLiq)) - int256(uint256(self.tLiq) + uint256(self.lent));
+    function net(LiqNode storage self) internal view returns (int128) {
+        // Ensure liquidity at each node won't be greater than 2^127 - 1.
+        return SafeCast.toInt128(self.borrowed + self.mLiq) - SafeCast.toInt128(self.tLiq + self.lent);
     }
 
     /// @notice Splits balance between compounding and non-compounding maker liquidity.
@@ -175,7 +179,7 @@ library LiqWalker {
         // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
         // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
         // having more fees than that.
-        if (node.liq.mLiq > 0) {
+        if (node.liq.net() > 0) {
             PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick, true);
         }
         // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
@@ -347,7 +351,21 @@ library LiqWalker {
     /// Ensure the liquidity at this node is solvent.
     /// @dev Call this after modifying liquidity.
     function solveLiq(LiqIter memory iter, Node storage node, Data memory data) internal {
-        int256 netLiq = node.liq.net();
+        // First settle our borrows and lends from siblings and children.
+        if (node.liq.preBorrow > 0) {
+            node.liq.borrowed += uint128(node.liq.preBorrow);
+        } else {
+            node.liq.borrowed -= uint128(-node.liq.preBorrow);
+        }
+        node.liq.preBorrow = 0;
+        if (node.liq.preLend > 0) {
+            node.liq.lent += uint128(node.liq.preLend);
+        } else {
+            node.liq.lent -= uint128(-node.liq.preLend);
+        }
+        node.liq.preLend = 0;
+
+        int128 netLiq = node.liq.net();
 
         if (data.isRoot(iter.key)) {
             require(netLiq >= 0, InsufficientBorrowLiquidity(netLiq));
@@ -358,40 +376,41 @@ library LiqWalker {
             return;
         } else if (netLiq > 0 && node.liq.borrowed > 0) {
             // Check if we can repay liquidity.
-            uint128 repayable = min(uint128(uint256(netLiq)), node.liq.borrowed);
+            uint128 repayable = min(uint128(netLiq), node.liq.borrowed);
             Node storage sibling = data.node(iter.key.sibling());
-            int256 sibLiq = sibling.liq.net();
+            int128 sibLiq = sibling.liq.net();
             if (sibLiq <= 0 || sibling.liq.borrowed == 0) {
                 // We cannot repay any borrowed liquidity.
                 return;
             }
-            repayable = min(repayable, uint128(uint256(sibLiq)));
+            repayable = min(repayable, uint128(sibLiq));
             repayable = min(repayable, sibling.liq.borrowed);
             if (repayable <= data.liq.compoundThreshold) {
                 // Below the compound threshold it's too small to worth repaying.
                 return;
             }
             Node storage parent = data.node(iter.key.parent());
-            parent.liq.lent -= repayable;
+            int128 iRepayable = SafeCast.toInt128(repayable);
+            parent.liq.preLend -= iRepayable;
             parent.liq.dirty = true;
-            node.liq.borrowed -= repayable;
+            node.liq.borrowed -= uint128(iRepayable);
             node.liq.dirty = true;
-            sibling.liq.borrowed -= repayable;
+            sibling.liq.preBorrow -= iRepayable;
             sibling.liq.dirty = true;
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
             Node storage sibling = data.node(iter.key.sibling());
             Node storage parent = data.node(iter.key.parent());
-            uint128 borrow = uint128(uint256(-netLiq));
-            if (borrow < data.liq.compoundThreshold) {
+            int128 borrow = -netLiq;
+            if (borrow < int128(data.liq.compoundThreshold)) {
                 // We borrow at least this amount.
-                borrow = data.liq.compoundThreshold;
+                borrow = int128(data.liq.compoundThreshold);
             }
-            parent.liq.lent += borrow;
+            parent.liq.preLend += borrow;
             parent.liq.dirty = true;
-            node.liq.borrowed += borrow;
+            node.liq.borrowed += uint128(borrow);
             node.liq.dirty = true;
-            sibling.liq.borrowed += borrow;
+            sibling.liq.preBorrow += borrow;
             sibling.liq.dirty = true;
         }
     }
