@@ -13,9 +13,12 @@ import { RFTLib } from "Commons/Util/RFT.sol";
 import { FeeLib } from "../Fee.sol";
 
 contract MakerFacet is ReentrancyGuardTransient {
+    uint128 public constant MIN_MAKER_LIQUIDITY = 1e6;
+
     error NotMakerOwner(address owner, address sender);
     /// Thrown when the asset being view or removed is not a maker asset.
     error NotMaker(uint256 assetId);
+    error DeMinimusMaker(uint128 liq);
 
     /// @notice Creates a new maker position.
     /// @param poolAddr The address of the pool.
@@ -36,6 +39,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
+        if (liq < MIN_MAKER_LIQUIDITY) revert DeMinimusMaker(liq);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
@@ -96,6 +100,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         bytes calldata rftData
     ) external nonReentrant returns (uint256 fees0, uint256 fees1) {
         Asset storage asset = AssetLib.getAsset(assetId);
+        require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         // We collect simply by targeting the original liq balance.

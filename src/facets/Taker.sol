@@ -18,8 +18,12 @@ import { LiqType } from "../walkers/Liq.sol";
 uint256 constant TAKER_VAULT_ID = 80085;
 
 contract TakerFacet is ReentrancyGuardTransient {
+    // Higher requirement than makers.
+    uint128 public constant MIN_TAKER_LIQUIDITY = 1e12;
+
     error NotTakerOwner(address owner, address sender);
     error NotTaker(uint256 assetId);
+    error DeMinimusTaker(uint128 liq);
 
     /// Our takers are permissioned, but anyone can collateralize for them.
     function collateralize(
@@ -61,6 +65,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         uint160 freezeSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
+        if (liq < MIN_TAKER_LIQUIDITY) revert DeMinimusTaker(liq);
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         (Asset storage asset, uint256 assetId) = AssetLib.newTaker(
@@ -111,6 +116,8 @@ contract TakerFacet is ReentrancyGuardTransient {
         balances[1] = data.yBalance;
         balances[0] -= SafeCast.toInt256(VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId));
         balances[1] -= SafeCast.toInt256(VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId));
+        balance0 = -balances[0];
+        balance1 = -balances[1];
         // Closing pays up the fees and leave the collateral alone. The collateral is really just there
         // to make sure while the position is open you can cover the fees. So there's really no need to keep
         // depositing and withdrawing collateral if your opened size stays roughly the same.
@@ -121,7 +128,5 @@ contract TakerFacet is ReentrancyGuardTransient {
         // Return values
         token0 = tokens[0];
         token1 = tokens[1];
-        balance0 = -data.xBalance;
-        balance1 = -data.yBalance;
     }
 }
