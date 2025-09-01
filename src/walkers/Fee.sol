@@ -138,10 +138,20 @@ library FeeWalker {
                     node.liq.subtreeTLiq
                 );
                 node.fees.takerXFeesPerLiqX128 += perTLiqX128;
-                node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                if (myLiq == node.liq.subtreeTLiq) {
+                    // If we're the entire subtree, we can just zero it out.
+                    node.fees.unpaidTakerXFees = 0;
+                } else {
+                    // Otherwise we round up to avoid underpaying dust.
+                    node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                }
                 perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerYFees, 1 << 128, node.liq.subtreeTLiq);
                 node.fees.takerYFeesPerLiqX128 += perTLiqX128;
-                node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                if (myLiq == node.liq.subtreeTLiq) {
+                    node.fees.unpaidTakerYFees = 0;
+                } else {
+                    node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                }
             }
             // Makers
             if (node.liq.mLiq > 0) {

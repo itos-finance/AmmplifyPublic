@@ -16,7 +16,6 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
-import { MockERC4626 } from "../mocks/MockERC4626.sol";
 
 /// @dev The minimum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MIN_TICK)
 uint160 constant MIN_SQRT_RATIO = 4295128739;
@@ -889,7 +888,7 @@ contract TakerFacetTest is MultiSetupTest {
         assertGt(inRangeBalance1, outOfRangeBalance1, "excess Y");
     }
 
-    function testTakerCollateralEarnsFees() public {
+    function testTakerFeesOverTime() public {
         bytes memory rftData = "";
 
         // Collateralize before creating taker position
@@ -908,6 +907,7 @@ contract TakerFacetTest is MultiSetupTest {
             rftData
         );
 
+        // Create a taker position
         uint256 assetId = takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -919,60 +919,328 @@ contract TakerFacetTest is MultiSetupTest {
             rftData
         );
 
-        // Checkpoint the initial taker position value
-        (int256 initialBalance0, int256 initialBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
-            .queryAssetBalances(assetId);
+        // No swaps, just time, the taker should owe fees.
+        (int256 initBalance0, int256 initBalance1, uint256 initFees0, uint256 initFees1) = viewFacet.queryAssetBalances(
+            assetId
+        );
 
-        console.log("Initial taker balance0:", initialBalance0);
-        console.log("Initial taker balance1:", initialBalance1);
-        console.log("Initial taker fees0:", initialFees0);
-        console.log("Initial taker fees1:", initialFees1);
-
-        // Get initial collateral balances
-        uint256 initialCollateral0 = viewFacet.getCollateralBalance(recipient, address(token0));
-        uint256 initialCollateral1 = viewFacet.getCollateralBalance(recipient, address(token1));
-
-        console.log("Initial collateral0:", initialCollateral0);
-        console.log("Initial collateral1:", initialCollateral1);
-
-        // Add fees to the vault (simulating vault earnings by inflating vault value)
-        uint256 vaultFeeAmount = 5e18;
-        token0.mint(address(this), vaultFeeAmount);
-        token1.mint(address(this), vaultFeeAmount);
-
-        // Approve and add assets directly to the vaults to increase share value
-        token0.approve(address(vaults[0]), vaultFeeAmount);
-        token1.approve(address(vaults[1]), vaultFeeAmount);
-
-        // Use MockERC4626's accumulateAssets to add value to the vaults
-        // This increases the value of existing shares without minting new shares
-        MockERC4626(address(vaults[0])).accumulateAssets(address(this), vaultFeeAmount);
-        MockERC4626(address(vaults[1])).accumulateAssets(address(this), vaultFeeAmount);
-
-        // Check that position's value is higher after vault earnings
+        vm.warp(block.timestamp + 100 days);
         (int256 finalBalance0, int256 finalBalance1, uint256 finalFees0, uint256 finalFees1) = viewFacet
             .queryAssetBalances(assetId);
 
-        console.log("Final taker balance0:", finalBalance0);
-        console.log("Final taker balance1:", finalBalance1);
+        assertEq(initBalance0, finalBalance0, "balances don't change0");
+        assertEq(initBalance1, finalBalance1, "balances don't change1");
 
-        // Get final collateral balances
-        uint256 finalCollateral0 = viewFacet.getCollateralBalance(recipient, address(token0));
-        uint256 finalCollateral1 = viewFacet.getCollateralBalance(recipient, address(token1));
+        // Check that the taker now owes fees
+        assertGt(finalFees0, initFees0, "Taker should owe more fees for token0");
+        assertGt(finalFees1, initFees1, "Taker should owe more fees for token1");
+    }
 
-        console.log("Final collateral0:", finalCollateral0);
-        console.log("Final collateral1:", finalCollateral1);
+    function testFreezeBalances() public {
+        bytes memory rftData = "";
 
-        // The collateral amounts should remain the same since we added value to vaults, not collateral
-        assertEq(finalCollateral0, initialCollateral0, "Token0 collateral should remain unchanged");
-        assertEq(finalCollateral1, initialCollateral1, "Token1 collateral should remain unchanged");
+        // Collateralize before creating taker position
+        _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 3,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        // Create taker positions with different freeze prices.
+        uint256 assetId0 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            100 << 96,
+            rftData
+        );
+
+        uint256 assetId1 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            1 << 96,
+            rftData
+        );
+
+        uint256 assetId2 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            1 << 90,
+            rftData
+        );
+
+        (int256 b00, int256 b01, , ) = viewFacet.queryAssetBalances(assetId0);
+        (int256 b10, int256 b11, , ) = viewFacet.queryAssetBalances(assetId1);
+        (int256 b20, int256 b21, , ) = viewFacet.queryAssetBalances(assetId2);
+
+        // The higher the price the more y they should have.
+        assertGt(b01, b11, "0");
+        assertGt(b11, b21, "1");
+        // And the lower the price the more x they have.
+        assertLt(b00, b10, "2");
+        assertLt(b10, b20, "3");
+    }
+
+    function testLiquiditySufficiency() public {
+        bytes memory rftData = "";
+
+        // Collateralize before creating taker position
+        _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        // Create a taker position
+        uint256 assetId0 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+        // Add these views to ensure they don't revert.
+        viewFacet.queryAssetBalances(assetId0);
+
+        // Now we have another taker take the rest of the avilable liquidity.
+        uint256 assetId1 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+        viewFacet.queryAssetBalances(assetId0);
+
+        console.log("fully borrowed out");
+
+        // A third will fail.
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        // Removing a previous one will free up liquidity to add another.
+        takerFacet.removeTaker(assetId0, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], "");
+
+        console.log("Removed old");
+
+        uint256 assetId2 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+        viewFacet.queryAssetBalances(assetId2);
+
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        console.log("adding more liq");
+
+        // Adding more liquidity to a wider range will allow us to add more as well.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0] - 1200,
+            ticks[1] + 1200,
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        console.log("but borrowing it out immediately");
+
+        // We only have liq for one more.
+        uint256 assetId3 = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+        viewFacet.queryAssetBalances(assetId3);
+
+        console.log("And reverting next");
+
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        console.log("using disjoint makers");
+
+        // And we can use disjoint makers to get the liquidity we need.
+        int24 middleTick = ticks[0] + (ticks[1] - ticks[0]) / 2;
+        // just half is insufficient.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0] - 1200,
+            middleTick,
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        console.log("using disjoint makers second half");
+
+        // but both is enough.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            middleTick,
+            ticks[1],
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        // This succeeds.
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+    }
+
+    function testOverlappingInsufficientLiquidity() public {
+        bytes memory rftData = "";
+
+        // Collateralize before creating taker position
+        _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        int24 middleTick = ticks[0] + (ticks[1] - ticks[0]) / 2;
+
+        // Create a taker position
+        int24[2] memory lowTicks = [ticks[0], middleTick];
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            lowTicks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        int24[2] memory highTicks = [middleTick - 60, ticks[1]];
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            highTicks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
     }
 
     /* TODO tests.
-    Taker fees over time
-    Test freeze sqrt price
     Test vault earnings for taker
-    Test sufficient Taker liq from disjoint makers
-    Test insufficient Taker Liq
     */
 }
