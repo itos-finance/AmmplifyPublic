@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { console2 as console } from "forge-std/console2.sol";
-
 import { Key } from "../tree/Key.sol";
 import { Route, Phase, RouteImpl } from "../tree/Route.sol";
 import { ViewRouteImpl } from "../tree/ViewRoute.sol";
@@ -26,9 +24,7 @@ library WalkerLib {
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        // console.log("calling into fee");
         FeeWalker.up(key, visit, data);
-        // console.log("calling into liq");
         LiqWalker.up(key, visit, data);
     }
 
@@ -56,7 +52,7 @@ library WalkerLib {
 library ViewWalkerLib {
     function viewAsset(PoolInfo memory pInfo, int24 lowTick, int24 highTick, ViewData memory data) internal view {
         uint24 low = pInfo.treeTick(lowTick);
-        uint24 high = pInfo.treeTick(highTick);
+        uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
         ViewRouteImpl.walkDown(route, down, phase, toRaw(data));
     }
