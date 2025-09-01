@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
+import { console2 as console } from "forge-std/console2.sol";
+
 import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console } from "forge-std/console.sol";
@@ -8,6 +10,7 @@ import { console } from "forge-std/console.sol";
 import { MultiSetupTest } from "../MultiSetup.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
+import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
@@ -54,7 +57,6 @@ contract TakerFacetTest is MultiSetupTest {
 
     function setUp() public {
         _newDiamond();
-
         // Grant TAKER rights to this test contract using the TimedAdmin system
         // Since this is a test, we'll submit rights and then time travel to accept them
         adminFacet.submitRights(address(this), AmmplifyAdminRights.TAKER, true);
@@ -70,7 +72,7 @@ contract TakerFacetTest is MultiSetupTest {
         console.log("Test contract rights after granting:", rights);
         require(rights & AmmplifyAdminRights.TAKER != 0, "Failed to grant TAKER rights");
 
-        (uint256 idx, address _pool, address _token0, address _token1) = setUpPool();
+        (, address _pool, address _token0, address _token1) = setUpPool();
         // Provide much more liquidity to support taker borrowing
         // Add liquidity in a wider range with much larger amounts
         addPoolLiq(0, -1200, 1200, 1000e18);
@@ -83,10 +85,11 @@ contract TakerFacetTest is MultiSetupTest {
         recipient = address(this);
         poolAddr = address(pool);
         ticks = [-600, 600];
-        liquidity = 1e17; // Reduce taker liquidity to 0.1 ETH equivalent
-        vaultIndices = [0, 1]; // token0 uses vault index 0, token1 uses vault index 1
+
+        liquidity = 1e18;
+        vaultIndices = [0, 1];
         sqrtPriceLimitsX96 = [MIN_SQRT_RATIO, MAX_SQRT_RATIO];
-        freezeSqrtPriceX96 = 1.5e18;
+        freezeSqrtPriceX96 = 3 << 95; // Above range, 1.5 = sqrt(price)
 
         poolInfo = viewFacet.getPoolInfo(poolAddr);
 
@@ -95,30 +98,28 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Create vaults for the pool tokens BEFORE creating any positions
         _createPoolVaults(poolAddr);
-
-        // Create maker positions to provide liquidity for takers to borrow
-        // This should be done as owner since makers don't require special rights
-        bytes memory rftData = "";
-        makerFacet.newMaker(
-            address(this),
-            _pool,
-            -600,
-            600,
-            10e18, // Provide 10 ETH worth of maker liquidity in the taker range
-            false, // non-compounding
-            MIN_SQRT_RATIO,
-            MAX_SQRT_RATIO,
-            rftData
-        );
     }
 
     // ============ Taker Position Creation Tests ============
 
-    function testNewTaker() public {
+    function testNewTakerBasic() public {
         bytes memory rftData = "";
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // First create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -132,7 +133,7 @@ contract TakerFacetTest is MultiSetupTest {
         );
 
         // Verify asset was created
-        assertEq(assetId, 1);
+        assertEq(assetId, 2);
 
         // Verify asset properties using ViewFacet
         (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
@@ -314,6 +315,19 @@ contract TakerFacetTest is MultiSetupTest {
         // TODO: Add test for withdrawing collateral when that functionality is implemented
         // For now, this test serves as a placeholder and documents the expected behavior
 
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
         // Successfully create taker with proper collateral
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -327,17 +341,30 @@ contract TakerFacetTest is MultiSetupTest {
         );
 
         // Verify asset was created
-        assertEq(assetId, 1);
+        assertEq(assetId, 2);
     }
 
     // ============ Taker Position Removal Tests ============
 
-    function testRemoveTaker() public {
+    function testRemoveTakerBasic() public {
         // First create a taker position
         bytes memory rftData = "";
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -364,7 +391,7 @@ contract TakerFacetTest is MultiSetupTest {
         // Verify return values
         assertEq(removedToken0, address(token0));
         assertEq(removedToken1, address(token1));
-        assertGt(removedX, 0);
+        assertLt(removedX, 0); // Since the freeze price is above the pool's current price.
         assertGt(removedY, 0);
 
         // Verify asset was removed
@@ -378,6 +405,19 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -520,6 +560,19 @@ contract TakerFacetTest is MultiSetupTest {
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
 
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
         // Create a taker position
         uint256 assetId = takerFacet.newTaker(
             recipient,
@@ -542,14 +595,11 @@ contract TakerFacetTest is MultiSetupTest {
         assertEq(uint8(liqType), uint8(LiqType.TAKER));
         assertEq(liq, liquidity);
 
-        // Get initial position balances - should be zero or close to zero for new taker
-        (int256 initialNetBalance0, int256 initialNetBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
-            .queryAssetBalances(assetId);
+        // Get initial position balances - should be in Y and owe X since we're freezing above.
+        (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);
 
-        // For a taker position in range, the net balance should be zero or negative
-        // (taker owes tokens to the protocol)
-        assertLe(initialNetBalance0, 0, "Taker should not have positive token0 balance when in range");
-        assertLe(initialNetBalance1, 0, "Taker should not have positive token1 balance when in range");
+        assertLt(initialNetBalance0, 0, "we owe X at first");
+        assertGt(initialNetBalance1, 0, "we have Y at first");
     }
 
     function testTakerPositionValueAfterPriceMovementUp() public {
@@ -557,6 +607,19 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Create a taker position with range [-600, 600]
         uint256 assetId = takerFacet.newTaker(
@@ -574,6 +637,11 @@ contract TakerFacetTest is MultiSetupTest {
         (int256 initialNetBalance0, int256 initialNetBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
             .queryAssetBalances(assetId);
 
+        assertApproxEqAbs(initialFees0, 0, 6, "0"); // It's possible to have some dust owed upon opening.
+        assertApproxEqAbs(initialFees1, 0, 6, "1");
+        assertLt(initialNetBalance0, 0, "2"); // Froze into y, no x.
+        assertGt(initialNetBalance1, 0, "3"); // Have y
+
         // Move price above the taker range (above tick 600)
         int24 targetTick = 800; // Move price outside the range
         uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
@@ -583,19 +651,11 @@ contract TakerFacetTest is MultiSetupTest {
         (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
             .queryAssetBalances(assetId);
 
-        // Verify that balances changed due to price movement
-        // When price moves outside taker range, taker position should become valuable
-        assertTrue(
-            queriedNetBalance0 != initialNetBalance0 || queriedNetBalance1 != initialNetBalance1,
-            "Taker position balances should change after price movement outside range"
-        );
-
         // When price is above the range, taker should have positive net balance
-        // (taker benefits from being out of range)
-        assertTrue(
-            queriedNetBalance0 > 0 || queriedNetBalance1 > 0,
-            "Taker should have positive net balance when price is outside range"
-        );
+        assertApproxEqAbs(queriedNetBalance0, 0, 3, "No X owed since we're above");
+        assertApproxEqAbs(queriedNetBalance1, 0, 3, "Same Y now we're above range");
+        assertTrue(queriedFees0 > 0 && queriedFees1 > 0, "Taker owes fees for the swap.");
+        console.log("fees", queriedFees0, queriedFees1);
 
         // Close the position and get actual amounts
         vm.prank(recipient);
@@ -610,8 +670,20 @@ contract TakerFacetTest is MultiSetupTest {
         assertEq(token0Addr, address(token0));
         assertEq(token1Addr, address(token1));
 
-        // For a taker position out of range, we should receive positive amounts
-        assertTrue(actualRemoved0 > 0 || actualRemoved1 > 0, "Should receive some tokens on close when out of range");
+        // match the amounts.
+        // The queried values should reasonably match the actual removed amounts
+        assertApproxEqAbs(
+            queriedNetBalance0 - int256(queriedFees0),
+            actualRemoved0,
+            2,
+            "Queried token0 balance should approximate actual removed amount"
+        );
+        assertApproxEqAbs(
+            queriedNetBalance1 - int256(queriedFees1),
+            actualRemoved1,
+            2,
+            "Queried token1 balance should approximate actual removed amount"
+        );
     }
 
     function testTakerPositionValueAfterPriceMovementDown() public {
@@ -619,6 +691,19 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Create a taker position with range [-600, 600]
         uint256 assetId = takerFacet.newTaker(
@@ -641,11 +726,11 @@ contract TakerFacetTest is MultiSetupTest {
         (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
             .queryAssetBalances(assetId);
 
-        // When price is below the range, taker should have positive net balance
-        assertTrue(
-            queriedNetBalance0 > 0 || queriedNetBalance1 > 0,
-            "Taker should have positive net balance when price is below range"
-        );
+        // When price is below the range, taker should owe X but have Y.
+        assertLt(queriedNetBalance0, 0, "owe X");
+        assertGt(queriedNetBalance1, 0, "have Y");
+        assertGt(queriedFees0, 0, "owe fees for X");
+        assertGt(queriedFees1, 0, "owe fees for Y");
 
         // Close the position and verify we receive tokens
         vm.prank(recipient);
@@ -660,8 +745,20 @@ contract TakerFacetTest is MultiSetupTest {
         assertEq(token0Addr, address(token0));
         assertEq(token1Addr, address(token1));
 
-        // For a taker position out of range, we should receive positive amounts
-        assertTrue(actualRemoved0 > 0 || actualRemoved1 > 0, "Should receive some tokens on close when out of range");
+        // match the amounts.
+        // The queried values should reasonably match the actual removed amounts
+        assertApproxEqAbs(
+            queriedNetBalance0 - int256(queriedFees0),
+            actualRemoved0,
+            2,
+            "Queried token0 balance should approximate actual removed amount"
+        );
+        assertApproxEqAbs(
+            queriedNetBalance1 - int256(queriedFees1),
+            actualRemoved1,
+            2,
+            "Queried token1 balance should approximate actual removed amount"
+        );
     }
 
     function testTakerPositionValueWithLargePriceMovement() public {
@@ -669,6 +766,19 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Create a taker position
         uint256 assetId = takerFacet.newTaker(
@@ -691,42 +801,34 @@ contract TakerFacetTest is MultiSetupTest {
         (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
             .queryAssetBalances(assetId);
 
-        // With large price movement outside range, taker should have significant positive balance
-        assertTrue(
-            queriedNetBalance0 > 0 || queriedNetBalance1 > 0,
-            "Taker should have positive net balance after large price movement outside range"
-        );
+        // With large price movement up, taker will have matched the frozen balance.
+        assertApproxEqAbs(queriedNetBalance0, 0, 3, "No X owed since we're above");
+        assertApproxEqAbs(queriedNetBalance1, 0, 3, "Same Y now we're above range");
+        assertTrue(queriedFees0 > 0 && queriedFees1 > 0, "Taker owes fees for the swap.");
+        console.log("fees", queriedFees0, queriedFees1);
 
         // Close the position and verify consistency
         vm.prank(recipient);
-        (address token0Addr, address token1Addr, int256 actualRemoved0, int256 actualRemoved1) = takerFacet.removeTaker(
+        (, , int256 actualRemoved0, int256 actualRemoved1) = takerFacet.removeTaker(
             assetId,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
         );
 
-        // Verify consistency between query and actual values
-        assertTrue(actualRemoved0 > 0 || actualRemoved1 > 0, "Should receive tokens on close after large movement");
-
         // The queried values should reasonably match the actual removed amounts
-        if (queriedNetBalance0 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance0),
-                uint256(actualRemoved0),
-                2e17, // 20% tolerance (taker positions can be more volatile)
-                "Queried token0 balance should approximate actual removed amount"
-            );
-        }
-
-        if (queriedNetBalance1 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance1),
-                uint256(actualRemoved1),
-                2e17, // 20% tolerance
-                "Queried token1 balance should approximate actual removed amount"
-            );
-        }
+        assertApproxEqAbs(
+            queriedNetBalance0 - int256(queriedFees0),
+            actualRemoved0,
+            2,
+            "Queried token0 balance should approximate actual removed amount"
+        );
+        assertApproxEqAbs(
+            queriedNetBalance1 - int256(queriedFees1),
+            actualRemoved1,
+            2,
+            "Queried token1 balance should approximate actual removed amount"
+        );
     }
 
     function testTakerPositionBackInRange() public {
@@ -734,6 +836,19 @@ contract TakerFacetTest is MultiSetupTest {
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
 
         // Create a taker position
         uint256 assetId = takerFacet.newTaker(
@@ -753,8 +868,12 @@ contract TakerFacetTest is MultiSetupTest {
         swapTo(0, targetSqrtPriceX96);
 
         // Verify position is valuable when out of range
-        (int256 outOfRangeBalance0, int256 outOfRangeBalance1, , ) = viewFacet.queryAssetBalances(assetId);
-        assertTrue(outOfRangeBalance0 > 0 || outOfRangeBalance1 > 0, "Taker should be valuable when out of range");
+        (int256 outOfRangeBalance0, int256 outOfRangeBalance1, uint256 fees0, uint256 fees1) = viewFacet
+            .queryAssetBalances(assetId);
+        // Since we're above range we're actually in the freeze balances.
+        assertApproxEqAbs(outOfRangeBalance0, 0, 3, "No X owed since we're above");
+        assertApproxEqAbs(outOfRangeBalance1, 0, 3, "Same Y now we're above range");
+        assertTrue(fees0 > 0 && fees1 > 0, "Taker owes fees for the swap.");
 
         // Move price back into range
         targetTick = 0; // Back to center of range
@@ -764,10 +883,16 @@ contract TakerFacetTest is MultiSetupTest {
         // Query position value when back in range
         (int256 inRangeBalance0, int256 inRangeBalance1, , ) = viewFacet.queryAssetBalances(assetId);
 
-        // When back in range, taker position should be less valuable (or negative)
-        assertTrue(
-            (inRangeBalance0 <= outOfRangeBalance0) && (inRangeBalance1 <= outOfRangeBalance1),
-            "Taker should be less valuable when back in range"
-        );
+        // When back in range, you'll have excess y and owe x.
+        assertLt(inRangeBalance0, 0, "owe X");
+        assertGt(inRangeBalance1, outOfRangeBalance1, "excess Y");
     }
+
+    /* TODO tests.
+    Taker fees over time
+    Test freeze sqrt price
+    Test vault earnings for taker
+    Test sufficient Taker liq from disjoint makers
+    Test insufficient Taker Liq
+    */
 }

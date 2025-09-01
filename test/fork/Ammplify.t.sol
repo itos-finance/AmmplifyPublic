@@ -21,17 +21,15 @@ contract Ammplify is AmmplifyForkBase {
     // Position tracking
     uint256 public testPositionId;
 
-    function setUp() public override {
-        super.setUp();
+    function forkSetup() internal virtual override {
+        super.forkSetup();
 
         // Set up test users
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
 
-        // Fund users with tokens if forking
-        if (forking) {
-            _fundUsers();
-        }
+        // Fund users with tokens
+        _fundUsers();
     }
 
     function _fundUsers() internal {
@@ -50,7 +48,7 @@ contract Ammplify is AmmplifyForkBase {
         vm.stopPrank();
     }
 
-    function test_DiamondDeployment() public forkOnly {
+    function test_DiamondDeployment() public view forkOnly {
         // Verify diamond was deployed
         assertTrue(address(diamond) != address(0), "Diamond should be deployed");
 

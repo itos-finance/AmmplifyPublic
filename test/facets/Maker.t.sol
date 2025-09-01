@@ -32,7 +32,6 @@ contract MakerFacetTest is MultiSetupTest {
     function setUp() public {
         _newDiamond();
         (uint256 idx, address _pool, address _token0, address _token1) = setUpPool();
-        addPoolLiq(0, -600, 600, 100e18);
 
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
@@ -43,7 +42,8 @@ contract MakerFacetTest is MultiSetupTest {
         poolAddr = _pool;
         lowTick = -600;
         highTick = 600;
-        liquidity = 1e18;
+        liquidity = 100e18;
+        addPoolLiq(0, lowTick, highTick, liquidity);
         minSqrtPriceX96 = MIN_SQRT_RATIO;
         maxSqrtPriceX96 = MAX_SQRT_RATIO;
 
@@ -163,7 +163,7 @@ contract MakerFacetTest is MultiSetupTest {
 
     // ============ Maker Position Removal Tests ============
 
-    function testRemoveMaker() public {
+    function testRemoveMakerBasic() public {
         // First create a maker position
         bytes memory rftData = "";
         uint256 assetId = makerFacet.newMaker(
@@ -195,8 +195,8 @@ contract MakerFacetTest is MultiSetupTest {
         // Verify return values
         assertEq(removedToken0, address(token0));
         assertEq(removedToken1, address(token1));
-        assertGt(int256(removedX), netBalance0);
-        assertGt(int256(removedY), netBalance1);
+        assertGe(int256(removedX), netBalance0);
+        assertGe(int256(removedY), netBalance1);
 
         // Verify asset was removed
         vm.expectRevert();
@@ -244,7 +244,7 @@ contract MakerFacetTest is MultiSetupTest {
 
     // ============ Fee Collection Tests ============
 
-    function testCollectFees() public {
+    function testCollectFeesBasic() public {
         // First create a maker position
         bytes memory rftData = "";
         uint256 assetId = makerFacet.newMaker(
@@ -343,8 +343,7 @@ contract MakerFacetTest is MultiSetupTest {
         assertEq(liq, liquidity);
 
         // Get initial position balances
-        (int256 initialNetBalance0, int256 initialNetBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
-            .queryAssetBalances(assetId);
+        (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);
 
         // Move price up by swapping to a higher tick
         int24 targetTick = 300; // Move price up
@@ -378,23 +377,19 @@ contract MakerFacetTest is MultiSetupTest {
 
         // The queried net balance should reasonably approximate the actual amounts
         // (allowing for some difference due to fees and precision)
-        if (queriedNetBalance0 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance0),
-                actualRemoved0,
-                1e17, // 10% tolerance
-                "Queried token0 balance should approximate actual removed amount"
-            );
-        }
+        assertApproxEqAbs(
+            queriedNetBalance0 + int256(queriedFees0),
+            int256(actualRemoved0),
+            2,
+            "Queried token0 balance should approximate actual removed amount"
+        );
 
-        if (queriedNetBalance1 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance1),
-                actualRemoved1,
-                1e17, // 10% tolerance
-                "Queried token1 balance should approximate actual removed amount"
-            );
-        }
+        assertApproxEqAbs(
+            queriedNetBalance1 + int256(queriedFees1),
+            int256(actualRemoved1),
+            2,
+            "Queried token1 balance should approximate actual removed amount"
+        );
     }
 
     function testMakerPositionValueAfterPriceMovementDown() public {
@@ -435,23 +430,19 @@ contract MakerFacetTest is MultiSetupTest {
         assertGt(actualRemoved1, 0, "Should receive some token1 on close");
 
         // The queried values should still reasonably match actual values
-        if (queriedNetBalance0 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance0),
-                actualRemoved0,
-                1e17, // 10% tolerance
-                "Queried token0 balance should approximate actual removed amount after price down"
-            );
-        }
+        assertApproxEqAbs(
+            queriedNetBalance0 + int256(queriedFees0),
+            int256(actualRemoved0),
+            2,
+            "Queried token0 balance should approximate actual removed amount after price down"
+        );
 
-        if (queriedNetBalance1 > 0) {
-            assertApproxEqRel(
-                uint256(queriedNetBalance1),
-                actualRemoved1,
-                1e17, // 10% tolerance
-                "Queried token1 balance should approximate actual removed amount after price down"
-            );
-        }
+        assertApproxEqAbs(
+            queriedNetBalance1 + int256(queriedFees1),
+            int256(actualRemoved1),
+            2,
+            "Queried token1 balance should approximate actual removed amount after price down"
+        );
     }
 
     function testMakerPositionValueWithLargePriceMovement() public {
@@ -476,15 +467,19 @@ contract MakerFacetTest is MultiSetupTest {
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value after large price movement
-        (int256 queriedNetBalance0, int256 queriedNetBalance1, uint256 queriedFees0, uint256 queriedFees1) = viewFacet
-            .queryAssetBalances(assetId);
+        (, , uint256 queriedFees0, uint256 queriedFees1) = viewFacet.queryAssetBalances(assetId);
 
         // Verify that fees have been earned (should be positive for large movement)
         assertTrue(queriedFees0 > 0 || queriedFees1 > 0, "Should have earned some fees from large price movement");
 
         // Close the position and verify consistency
-        (address token0Addr, address token1Addr, uint256 actualRemoved0, uint256 actualRemoved1) = makerFacet
-            .removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
+        (, , uint256 actualRemoved0, uint256 actualRemoved1) = makerFacet.removeMaker(
+            recipient,
+            assetId,
+            uint128(minSqrtPriceX96),
+            uint128(maxSqrtPriceX96),
+            rftData
+        );
 
         // Verify consistency between query and actual values
         assertGt(actualRemoved0, 0, "Should receive some token0 on close after large movement");

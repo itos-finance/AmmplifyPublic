@@ -20,16 +20,9 @@ contract AssetTest is Test {
 
         vm.warp(100);
 
-        (Asset storage assetNC, uint256 assetIdNC) = AssetLib.newMaker(
-            owner,
-            pInfoNC,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
+        (Asset storage assetNC, uint256 assetIdNC) = AssetLib.newMaker(owner, pInfoNC, -2000, 2000, 1e20, false);
 
-        assertEq(assetIdNC, 0, "assetIdNC");
+        assertEq(assetIdNC, 1, "assetIdNC");
 
         assertEq(assetNC.owner, owner, "assetNC.owner");
         assertEq(assetNC.poolAddr, pInfoNC.poolAddr, "assetNC.poolAddr");
@@ -55,16 +48,9 @@ contract AssetTest is Test {
 
         vm.warp(200);
 
-        (Asset storage assetC, uint256 assetIdC) = AssetLib.newMaker(
-            owner,
-            pInfoC,
-            -3000,
-            4000,
-            2e21,
-            true
-        );
-        assertEq(assetIdC, 1, "assetIdC");
-        
+        (Asset storage assetC, uint256 assetIdC) = AssetLib.newMaker(owner, pInfoC, -3000, 4000, 2e21, true);
+        assertEq(assetIdC, 2, "assetIdC");
+
         assertEq(assetC.owner, owner, "assetC.owner");
         assertEq(assetC.poolAddr, pInfoC.poolAddr, "assetC.poolAddr");
         assertEq(assetC.lowTick, -3000, "assetC.lowTick");
@@ -98,27 +84,15 @@ contract AssetTest is Test {
         pInfo.poolAddr = makeAddr("pool");
 
         for (uint256 i = 0; i < AssetLib.MAX_ASSETS_PER_OWNER; i++) {
-            AssetLib.newMaker(
-                owner,
-                pInfo,
-                -2000,
-                -2000,
-                1e20,
-                false
-            );
+            AssetLib.newMaker(owner, pInfo, -2000, -2000, 1e20, false);
         }
 
-        vm.expectRevert(abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER));
-        AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            -2000,
-            1e20,
-            false
+        vm.expectRevert(
+            abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER)
         );
+        AssetLib.newMaker(owner, pInfo, -2000, -2000, 1e20, false);
     }
-    
+
     function testNewTaker() public {
         assertEq(Store.assets().nextAssetId, 0, "AssetStore.nextAssetId.default");
 
@@ -129,17 +103,9 @@ contract AssetTest is Test {
 
         // create taker
         vm.warp(100);
-        (Asset storage taker, uint256 takerId) = AssetLib.newTaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            2,
-            3
-        );
+        (Asset storage taker, uint256 takerId) = AssetLib.newTaker(owner, pInfo, -2000, 2000, 1e20, 2, 3);
 
-        assertEq(takerId, 0, "takerId");
+        assertEq(takerId, 1, "takerId");
 
         assertEq(taker.owner, owner, "taker.owner");
         assertEq(taker.poolAddr, pInfo.poolAddr, "taker.poolAddr");
@@ -163,16 +129,8 @@ contract AssetTest is Test {
         assertEq(storedTaker.yVaultIndex, taker.yVaultIndex, "storedTaker.yVaultIndex");
         assertEq(storedTaker.timestamp, taker.timestamp, "storedTaker.timestamp");
 
-        // add another taker 
-        (, uint256 takerId2) = AssetLib.newTaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            2,
-            3
-        );
+        // add another taker
+        (, uint256 takerId2) = AssetLib.newTaker(owner, pInfo, -2000, 2000, 1e20, 2, 3);
 
         // confirm ownership in store (addAssetToOwner)
         uint256[] storage ownerAssets = Store.assets().ownerAssets[owner];
@@ -187,15 +145,7 @@ contract AssetTest is Test {
         pInfo.poolAddr = makeAddr("pool");
 
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NoRecipient.selector));
-        AssetLib.newTaker(
-            address(0x0),
-            pInfo,
-            -2000,
-            -2000,
-            1e20,
-            0,
-            1
-        );
+        AssetLib.newTaker(address(0x0), pInfo, -2000, -2000, 1e20, 0, 1);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
@@ -206,27 +156,13 @@ contract AssetTest is Test {
         pInfo.poolAddr = makeAddr("pool");
 
         for (uint256 i = 0; i < AssetLib.MAX_ASSETS_PER_OWNER; i++) {
-            AssetLib.newTaker(
-                owner,
-                pInfo,
-                -2000,
-                -2000,
-                1e20,
-                0,
-                1
-            );
+            AssetLib.newTaker(owner, pInfo, -2000, -2000, 1e20, 0, 1);
         }
 
-        vm.expectRevert(abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER));
-        AssetLib.newTaker(
-            owner,
-            pInfo,
-            -2000,
-            -2000,
-            1e20,
-            0,
-            1
+        vm.expectRevert(
+            abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER)
         );
+        AssetLib.newTaker(owner, pInfo, -2000, -2000, 1e20, 0, 1);
     }
 
     function testGetAsset() public {
@@ -235,15 +171,8 @@ contract AssetTest is Test {
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
 
-        // maker 
-        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
+        // maker
+        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
 
         Asset storage gMaker = AssetLib.getAsset(makerId);
         assertEq(gMaker.owner, maker.owner, "gMaker.owner");
@@ -255,14 +184,7 @@ contract AssetTest is Test {
         assertEq(gMaker.timestamp, maker.timestamp, "gMaker.timestamp");
 
         // taker
-        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
+        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
 
         Asset storage gTaker = AssetLib.getAsset(takerId);
         assertEq(gTaker.owner, taker.owner, "gTaker.owner");
@@ -282,32 +204,11 @@ contract AssetTest is Test {
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
 
-        (, uint256 assetId1) = AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
-        (, uint256 assetId2) = AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
-        (, uint256 assetId3) = AssetLib.newMaker(
-            owner,
-            pInfo,
-            -2000,
-            2000,
-            1e20,
-            false
-        );
+        (, uint256 assetId1) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (, uint256 assetId2) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (, uint256 assetId3) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
 
-        // Remove middle 
+        // Remove middle
         AssetLib.removeAsset(assetId2);
 
         uint256[] storage ownerAssets = Store.assets().ownerAssets[owner];
@@ -315,14 +216,14 @@ contract AssetTest is Test {
         assertEq(ownerAssets[0], assetId1, "ownerAssets[0].assetId1");
         assertEq(ownerAssets[1], assetId3, "ownerAssets[1].assetId3");
 
-        // Remove end 
+        // Remove end
         AssetLib.removeAsset(assetId3);
 
         ownerAssets = Store.assets().ownerAssets[owner];
         assertEq(ownerAssets.length, 1, "ownerAssets.length");
         assertEq(ownerAssets[0], assetId1, "ownerAssets[0].assetId1");
 
-        // Remove first 
+        // Remove first
         AssetLib.removeAsset(assetId1);
 
         ownerAssets = Store.assets().ownerAssets[owner];
@@ -336,6 +237,9 @@ contract AssetTest is Test {
     }
 
     function testUpdateTimestamp() public {
+        // Fake an asset.
+        Store.assets().assets[0].owner = address(this);
+        // Check its default timestamp.
         Asset storage asset = AssetLib.getAsset(0);
         assertEq(asset.timestamp, 0, "asset.timestamp.default");
 

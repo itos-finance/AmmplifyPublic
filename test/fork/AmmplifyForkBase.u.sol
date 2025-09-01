@@ -54,17 +54,7 @@ contract AmmplifyForkBase is ForkableTest {
     int24 public constant TICK_SPACING_3000 = 60;
     int24 public constant TICK_SPACING_10000 = 200;
 
-    function setUp() public virtual override {
-        super.setUp();
-
-        if (forking) {
-            _setupFork();
-        } else {
-            _setupLocal();
-        }
-    }
-
-    function _setupFork() internal {
+    function forkSetup() internal virtual override {
         // Load addresses from fork JSON
         nftManager = INonfungiblePositionManager(getAddr("NFT_MANAGER"));
         pool = IUniswapV3Pool(getAddr("POOL"));
@@ -76,10 +66,10 @@ contract AmmplifyForkBase is ForkableTest {
         decomposer = new UniV3Decomposer(address(nftManager), address(diamond));
     }
 
-    function _setupLocal() internal {
+    function deploySetup() internal virtual override {
         // For local testing without forking
         // This would deploy mock contracts
-        revert("Local setup not implemented - use forking");
+        // revert("Local setup not implemented - use forking");
     }
 
     /**

@@ -161,7 +161,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             poolAddr,
             abi.encodeCall(pool.collect, (address(this), tickLower, tickUpper, type(uint128).max, type(uint128).max))
         );
-        (uint256 collect0, uint256 collect1) = PoolLib.collect(poolAddr, tickLower, tickUpper);
+        (uint256 collect0, uint256 collect1) = PoolLib.collect(poolAddr, tickLower, tickUpper, false);
 
         assertEq(collect0, burn0, "collect0.equals.burn0");
         assertEq(collect1, burn1, "collect1.equals.burn1");

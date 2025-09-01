@@ -45,6 +45,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.fees.xCFees = 100e18;
         n.fees.yCFees = 200e18;
         n.liq.mLiq = 5e8;
+        addPoolLiq(0, 160000, 160010, 5e8);
         LiqWalker.compound(iter, n, data);
         assertGt(n.liq.mLiq, 5e8, "mLiq");
     }
