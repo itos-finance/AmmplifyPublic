@@ -6,12 +6,10 @@ import { ViewRouteImpl } from "../../src/tree/ViewRoute.sol";
 import { Test } from "forge-std/Test.sol";
 
 contract ViewRouteTest is Test {
-    function testWalkDownStub() public {
+    function testWalkDownStub() public pure {
         // This is a stub, as walkDown requires function pointers and Route
-        Route memory r;
-        bytes memory data;
         // You would need to implement mock functions for downFunc and phaseFunc
         // For now, just assert true as a placeholder
-        assertTrue(true);
+        assert(true);
     }
 }

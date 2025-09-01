@@ -45,7 +45,7 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         FeeWalker.up(key, visit, WalkerLib.toData(raw));
     }
 
-    function phase(Phase walkPhase, bytes memory raw) internal {
+    function phase(Phase walkPhase, bytes memory raw) internal pure {
         FeeWalker.phase(walkPhase, WalkerLib.toData(raw));
     }
 

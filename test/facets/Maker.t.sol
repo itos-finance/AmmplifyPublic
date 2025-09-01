@@ -31,7 +31,7 @@ contract MakerFacetTest is MultiSetupTest {
 
     function setUp() public {
         _newDiamond();
-        (uint256 idx, address _pool, address _token0, address _token1) = setUpPool();
+        (, address _pool, address _token0, address _token1) = setUpPool();
 
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
@@ -178,7 +178,7 @@ contract MakerFacetTest is MultiSetupTest {
             rftData
         );
 
-        (int256 netBalance0, int256 netBalance1, uint256 fees0, uint256 fees1) = viewFacet.queryAssetBalances(assetId);
+        (int256 netBalance0, int256 netBalance1, , ) = viewFacet.queryAssetBalances(assetId);
 
         // Mock the asset owner
         vm.prank(recipient);

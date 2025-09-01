@@ -52,19 +52,19 @@ abstract contract ERC721Permit is BlockTimestamp, ERC721, IERC721Permit {
         address spender,
         uint256 tokenId,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        uint8 /* v */,
+        bytes32 /* r */,
+        bytes32 /* s */
     ) external payable override {
         require(_blockTimestamp() <= deadline, "Permit expired");
 
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR(),
-                keccak256(abi.encode(PERMIT_TYPEHASH, spender, tokenId, _getAndIncrementNonce(tokenId), deadline))
-            )
-        );
+        // bytes32 digest = keccak256(
+        //     abi.encodePacked(
+        //         "\x19\x01",
+        //         DOMAIN_SEPARATOR(),
+        //         keccak256(abi.encode(PERMIT_TYPEHASH, spender, tokenId, _getAndIncrementNonce(tokenId), deadline))
+        //     )
+        // );
         address owner = ownerOf(tokenId);
         require(spender != owner, "ERC721Permit: approval to current owner");
 

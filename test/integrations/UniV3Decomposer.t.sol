@@ -17,7 +17,7 @@ contract UniV3DecomposerTest is MultiSetupTest {
         _newDiamond();
         _deployNFPM();
 
-        (uint256 idx, address pool, address _token0, address _token1) = setUpPool();
+        (, , address _token0, address _token1) = setUpPool();
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
         decomposer = new UniV3Decomposer(address(nfpm), address(diamond));
@@ -76,6 +76,6 @@ contract UniV3DecomposerTest is MultiSetupTest {
         // Set reasonable price bounds - allowing full range to avoid slippage issues
         uint160 minSqrtPriceX96 = 4295128739; // Very low price
         uint160 maxSqrtPriceX96 = 1461446703485210103287273052203988822378723970341; // Very high price
-        uint256 newId = decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
+        decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
     }
 }

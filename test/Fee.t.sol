@@ -16,7 +16,7 @@ contract FeeTest is Test {
 
     // Init
 
-    function testInit() public {
+    function testInit() public view {
         FeeStore storage store = Store.fees();
         assertEq(store.defaultCompoundThreshold, 1e12);
         _assertDefaultFeeCurve(store.defaultFeeCurve);
@@ -116,14 +116,14 @@ contract FeeTest is Test {
 
     // Helpers
 
-    function _assertDefaultFeeCurve(SmoothRateCurveConfig memory rateCurve) internal {
+    function _assertDefaultFeeCurve(SmoothRateCurveConfig memory rateCurve) internal pure {
         assertEq(rateCurve.invAlphaX128, 102084710076281535261119195933814292480, "defaultFeeCurve.invAlphaX128");
         assertEq(rateCurve.betaX64, 14757395258967642112, "defaultFeeCurve.betaX64");
         assertEq(rateCurve.maxUtilX64, 22136092888451461120, "defaultFeeCurve.maxUtilX64"); // 120%
         assertEq(rateCurve.maxRateX64, 17524406870024073216, "defaultFeeCurve.maxRateX64"); // 95%
     }
 
-    function _assertDefaultSplitCurve(SmoothRateCurveConfig memory splitCurve) internal {
+    function _assertDefaultSplitCurve(SmoothRateCurveConfig memory splitCurve) internal pure {
         assertEq(splitCurve.invAlphaX128, type(uint128).max, "defaultSplitCurve.invAlphaX128"); // 1
         assertEq(splitCurve.betaX64, 36893488147419103232, "defaultSplitCurve.betaX64"); // 1 (without offset)
         assertEq(splitCurve.maxUtilX64, 18631211514446647296, "defaultSplitCurve.maxUtilX64"); // 101%

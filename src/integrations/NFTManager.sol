@@ -9,6 +9,7 @@ import { RFTLib, RFTPayer } from "Commons/Util/RFT.sol";
 import { Auto165Lib } from "Commons/ERC/Auto165.sol";
 import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721Receiver } from "a@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 import { Asset, AssetLib } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
@@ -20,7 +21,7 @@ import { MakerFacet } from "../facets/Maker.sol";
 import { UniV3Decomposer } from "./UniV3Decomposer.sol";
 import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfungiblePositionManager.sol";
 
-contract NFTManager is ERC721, Ownable, RFTPayer {
+contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
     using Strings for uint256;
 
     error NotAssetOwner(uint256 assetId, address owner, address sender);
@@ -63,6 +64,8 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
         MAKER_FACET = MakerFacet(_makerFacet);
         DECOMPOSER = UniV3Decomposer(_decomposer);
         NFPM = INonfungiblePositionManager(_nfpm);
+
+        NFPM.setApprovalForAll(address(DECOMPOSER), true);
     }
 
     /**
@@ -365,9 +368,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(ownerOf(tokenId) != address(0), "Token does not exist");
 
-        // Generate SVG on-chain
-        string memory svg = _generateSVG(tokenId);
-
         // Create metadata JSON
         string memory metadata = _generateMetadata(tokenId);
 
@@ -382,7 +382,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
     function _generateSVG(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
         Asset storage asset = AssetLib.getAsset(assetId);
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
 
         string memory color = _getColorForLiqType(asset.liqType);
 
@@ -531,6 +530,16 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
         return super.supportsInterface(interfaceId) || Auto165Lib.contains(interfaceId);
+    }
+
+    /// @inheritdoc IERC721Receiver
+    function onERC721Received(
+        address /* operator */,
+        address /* from */,
+        uint256 /* tokenId */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 
     /**

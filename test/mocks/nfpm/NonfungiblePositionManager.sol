@@ -415,7 +415,7 @@ contract NonfungiblePositionManager is
     }
 
     /// @dev Overrides _approve to use the operator in the position, which is packed with the position permit nonce
-    function _approve(address to, uint256 tokenId, address auth, bool emitEvent) internal override {
+    function _approve(address to, uint256 tokenId, address /* auth */, bool emitEvent) internal override {
         _positions[tokenId].operator = to;
         if (emitEvent) {
             emit Approval(ownerOf(tokenId), to, tokenId);

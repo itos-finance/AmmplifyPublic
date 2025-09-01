@@ -15,7 +15,7 @@ import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { PoolLib, PoolInfo, PoolInfoImpl } from "../src/Pool.sol";
 
 contract PoolInfoImplTest is Test {
-    function testTokens() public {
+    function testTokens() public pure {
         PoolInfo memory pInfo;
         pInfo.token0 = address(0x0);
         pInfo.token1 = address(0x1);
@@ -294,7 +294,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
     // Assignable Liq
 
-    function testGetAssignableLiqBelowRange() public {
+    function testGetAssignableLiqBelowRange() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
@@ -329,7 +329,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(leftoverY, y - uint128(usedY), "leftoverY.equals.y.minus.usedY");
     }
 
-    function testGetAssignableLiqBelowRangeZeroX() public {
+    function testGetAssignableLiqBelowRangeZeroX() public pure {
         (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
             -2000,
             2000,
@@ -343,7 +343,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // verify we can pass max values w/o overflowing
-    function testGetAssignableLiqBelowRangeOverflowCheck() public {
+    function testGetAssignableLiqBelowRangeOverflowCheck() public pure {
         PoolLib.getAssignableLiq(
             TickMath.MIN_TICK + 1,
             TickMath.MAX_TICK,
@@ -354,7 +354,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolLib.getAssignableLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-1));
     }
 
-    function testGetAssignableLiqAboveRange() public {
+    function testGetAssignableLiqAboveRange() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
@@ -389,7 +389,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(leftoverY, 0, "leftoverY.equals.0");
     }
 
-    function testGetAssignableLiqAboveRangeZeroY() public {
+    function testGetAssignableLiqAboveRangeZeroY() public pure {
         (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
             -2000,
             2000,
@@ -403,7 +403,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // verify we can pass max values w/o overflowing
-    function testGetAssignableLiqAboveRangeOverflowCheck() public {
+    function testGetAssignableLiqAboveRangeOverflowCheck() public pure {
         PoolLib.getAssignableLiq(
             TickMath.MIN_TICK,
             TickMath.MAX_TICK,
@@ -414,7 +414,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolLib.getAssignableLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2));
     }
 
-    function testGetAssignableLiqInRangeXLiqEqualsYLiq() public {
+    function testGetAssignableLiqInRangeXLiqEqualsYLiq() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
@@ -450,7 +450,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertLt(leftoverY, y - uint128(usedY), "leftoverY.lt.y.minus.usedY");
     }
 
-    function testGetAssignableLiqInRangeXLiqLessThanYLiq() public {
+    function testGetAssignableLiqInRangeXLiqLessThanYLiq() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
@@ -486,7 +486,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertLt(leftoverY, y - uint128(usedY), "leftoverY.lt.y.minus.usedY");
     }
 
-    function testGetAssignableLiqInRangeXLiqGreaterThanYLiq() public {
+    function testGetAssignableLiqInRangeXLiqGreaterThanYLiq() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
@@ -523,17 +523,17 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // verify we can pass max values w/o overflowing
-    function testGetAssignableLiqInRangeOverflowCheckXLiqLessThanYLiq() public {
+    function testGetAssignableLiqInRangeOverflowCheckXLiqLessThanYLiq() public pure {
         PoolLib.getAssignableLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(-3));
     }
 
     // verify we can pass max values w/o overflowing
-    function testGetAssignableLiqInRangeOverflowCheckXLiqGreaterThanYLiq() public {
+    function testGetAssignableLiqInRangeOverflowCheckXLiqGreaterThanYLiq() public pure {
         PoolLib.getAssignableLiq(-10, 10, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(3));
     }
 
     // verify we can pass max values w/o overflowing
-    function testGetAssignableLiqInRangeOverflowCheckXLiqEqualsYLiq() public {
+    function testGetAssignableLiqInRangeOverflowCheckXLiqEqualsYLiq() public pure {
         // note: difficult to hit xLiq == yLiq with larger values for x and y
         // hover logic in the other two cases covers logic in this case sufficiently
         PoolLib.getAssignableLiq(-10, 10, 1e21, 1e21, TickMath.getSqrtPriceAtTick(0));
@@ -542,7 +542,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     // Equivalent Liq
 
     // TODO: double check conversion
-    function testGetEquivalentLiqBelowRangeConvertingY() public {
+    function testGetEquivalentLiqBelowRangeConvertingY() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
@@ -556,7 +556,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(equivLiqRoundingUp, 2346044413003865165005, "equivLiqRoundingUp");
     }
 
-    function testGetEquivalentLiqBelowRangeNoY() public {
+    function testGetEquivalentLiqBelowRangeNoY() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-3000);
@@ -609,7 +609,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // TODO: double check conversion
-    function testGetEquivalentLiqAboveRangeConvertingX() public {
+    function testGetEquivalentLiqAboveRangeConvertingX() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
@@ -623,7 +623,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(equivLiqRoundingUp, 2346044413003865165005, "equivLiqRoundingUp");
     }
 
-    function testGetEquivalentLiqAboveRangeNoX() public {
+    function testGetEquivalentLiqAboveRangeNoX() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(3000);
@@ -676,7 +676,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolLib.getEquivalentLiq(0, 1, type(uint128).max, type(uint128).max, TickMath.getSqrtPriceAtTick(2), true);
     }
 
-    function testGetEquivalentLiqInRangeNoConversion() public {
+    function testGetEquivalentLiqInRangeNoConversion() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
@@ -705,7 +705,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // TODO: double check conversion
-    function testGetEquivalentLiqInRangeConvertingX() public {
+    function testGetEquivalentLiqInRangeConvertingX() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(1000);
@@ -720,7 +720,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
     }
 
     // TODO: double check conversion
-    function testGetEquivalentLiqInRangeConvertingY() public {
+    function testGetEquivalentLiqInRangeConvertingY() public pure {
         int24 lowTick = -2000;
         int24 highTick = 2000;
         uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(-1000);
@@ -761,7 +761,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
     // Get Amounts
 
-    function testGetAmounts() public {
+    function testGetAmounts() public pure {
         // No liq
         (uint256 x, uint256 y) = PoolLib.getAmounts(0, 0, 0, 0, false);
         assertEq(x, 0, "x.noLiq");
