@@ -3,11 +3,14 @@ pragma solidity ^0.8.27;
 
 import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
+import { console } from "forge-std/console.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
+import { AdminLib } from "Commons/Util/Admin.sol";
+import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
@@ -51,9 +54,26 @@ contract TakerFacetTest is MultiSetupTest {
 
     function setUp() public {
         _newDiamond();
+
+        // Grant TAKER rights to this test contract using the TimedAdmin system
+        // Since this is a test, we'll submit rights and then time travel to accept them
+        adminFacet.submitRights(address(this), AmmplifyAdminRights.TAKER, true);
+
+        // Skip the time delay for testing (3 days as per AdminFacet.getDelay implementation)
+        vm.warp(block.timestamp + 3 days);
+
+        // Accept the rights
+        adminFacet.acceptRights();
+
+        // Verify the rights were granted
+        uint256 rights = adminFacet.adminRights(address(this));
+        console.log("Test contract rights after granting:", rights);
+        require(rights & AmmplifyAdminRights.TAKER != 0, "Failed to grant TAKER rights");
+
         (uint256 idx, address _pool, address _token0, address _token1) = setUpPool();
-        // Provide wider range of liquidity to support larger price movements
-        addPoolLiq(0, -1200, 1200, 100e18);
+        // Provide much more liquidity to support taker borrowing
+        // Add liquidity in a wider range with much larger amounts
+        addPoolLiq(0, -1200, 1200, 1000e18);
 
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
@@ -63,8 +83,8 @@ contract TakerFacetTest is MultiSetupTest {
         recipient = address(this);
         poolAddr = address(pool);
         ticks = [-600, 600];
-        liquidity = 1e18;
-        vaultIndices = [0, 1];
+        liquidity = 1e17; // Reduce taker liquidity to 0.1 ETH equivalent
+        vaultIndices = [0, 1]; // token0 uses vault index 0, token1 uses vault index 1
         sqrtPriceLimitsX96 = [MIN_SQRT_RATIO, MAX_SQRT_RATIO];
         freezeSqrtPriceX96 = 1.5e18;
 
@@ -73,8 +93,23 @@ contract TakerFacetTest is MultiSetupTest {
         // Fund this contract for testing
         _fundAccount(address(this));
 
-        // Create vaults for the pool tokens
+        // Create vaults for the pool tokens BEFORE creating any positions
         _createPoolVaults(poolAddr);
+
+        // Create maker positions to provide liquidity for takers to borrow
+        // This should be done as owner since makers don't require special rights
+        bytes memory rftData = "";
+        makerFacet.newMaker(
+            address(this),
+            _pool,
+            -600,
+            600,
+            10e18, // Provide 10 ETH worth of maker liquidity in the taker range
+            false, // non-compounding
+            MIN_SQRT_RATIO,
+            MAX_SQRT_RATIO,
+            rftData
+        );
     }
 
     // ============ Taker Position Creation Tests ============

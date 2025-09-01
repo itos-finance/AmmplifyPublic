@@ -87,9 +87,9 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
         MockERC4626 vault0 = new MockERC4626(ERC20(pInfo.token0), "Vault0", "V0");
         MockERC4626 vault1 = new MockERC4626(ERC20(pInfo.token1), "Vault1", "V1");
 
-        // Add vaults to the admin facet (index 0 for both tokens)
+        // Add vaults to the admin facet (index 0 for token0, index 1 for token1)
         adminFacet.addVault(pInfo.token0, 0, address(vault0), VaultType.E4626);
-        adminFacet.addVault(pInfo.token1, 0, address(vault1), VaultType.E4626);
+        adminFacet.addVault(pInfo.token1, 1, address(vault1), VaultType.E4626);
 
         // Add vaults to the vaults array for tracking
         vaults.push(vault0);
