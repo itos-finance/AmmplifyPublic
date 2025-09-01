@@ -12,12 +12,13 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfungiblePositionManager.sol";
+import { IERC721Receiver } from "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 /// @title UniV3Decomposer
 /// @notice  Converts an existing Uniswap-V3 position NFT into an Ammplify Maker
 ///          position in a single transaction.
-contract UniV3Decomposer is RFTPayer {
+contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     // Custom errors ------------------------------------------------------
     error OnlyMakerFacet(address caller);
     error NotPositionOwner(address expected, address sender);
@@ -27,6 +28,7 @@ contract UniV3Decomposer is RFTPayer {
     // Immutable configuration
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
+    uint128 public constant LIQUIDITY_OFFSET = 42; // Max node depth * 2 is the most we need to reduce the liquidty 
     address private transient caller;
 
     event Decomposed(
@@ -113,7 +115,7 @@ contract UniV3Decomposer is RFTPayer {
             poolAddr,
             tickLower,
             tickUpper,
-            liquidity,
+            liquidity - LIQUIDITY_OFFSET,
             isCompounding,
             minSqrtPriceX96,
             maxSqrtPriceX96,
@@ -143,5 +145,15 @@ contract UniV3Decomposer is RFTPayer {
             }
         }
         return "";
+    }
+
+    /// @inheritdoc IERC721Receiver
+    function onERC721Received(
+        address /* operator */,
+        address /* from */,
+        uint256 /* tokenId */,
+        bytes calldata /* data */
+    ) external pure override returns (bytes4) {
+        return this.onERC721Received.selector;
     }
 }
