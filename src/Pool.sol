@@ -74,8 +74,9 @@ library PoolLib {
     }
 
     /*
-    /// @dev Currently unused.
+    /// Currently unused
     /// This assumes the position in the pool still exists, and queries how much fees are owed.
+    /// @dev A non-modifying way to get fees owed.
     function getFees(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 x, uint128 y) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
         bytes32 myKey = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
@@ -89,7 +90,8 @@ library PoolLib {
             x += FullMath.mulX128(liq, feeGrowthInside0NowX128 - feeGrowthInside0LastX128, false);
             y += FullMath.mulX128(liq, feeGrowthInside1NowX128 - feeGrowthInside1LastX128, false);
         }
-    } */
+    }
+    */
 
     /**
      * @notice Wrapper around pool collect function.
@@ -101,8 +103,13 @@ library PoolLib {
     function collect(
         address pool,
         int24 tickLower,
-        int24 tickUpper
+        int24 tickUpper,
+        bool burnFirst
     ) internal returns (uint256 amount0, uint256 amount1) {
+        if (burnFirst) {
+            // First do an empty burn to trigger a fee calc.
+            IUniswapV3Pool(pool).burn(tickLower, tickUpper, 0);
+        }
         return IUniswapV3Pool(pool).collect(address(this), tickLower, tickUpper, type(uint128).max, type(uint128).max);
     }
 
