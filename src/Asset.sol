@@ -59,7 +59,7 @@ library AssetLib {
         // address 0x0 is a valid recipient for maker assets.
 
         AssetStore storage store = Store.assets();
-        assetId = store.nextAssetId++;
+        assetId = ++store.nextAssetId;
         asset = store.assets[assetId];
         asset.owner = recipient;
         asset.poolAddr = pInfo.poolAddr;
@@ -83,13 +83,10 @@ library AssetLib {
         uint8 xVaultIndex,
         uint8 yVaultIndex
     ) internal returns (Asset storage asset, uint256 assetId) {
-        require(
-            recipient != address(0x0),
-            NoRecipient()
-        );
+        require(recipient != address(0x0), NoRecipient());
 
         AssetStore storage store = Store.assets();
-        assetId = store.nextAssetId++;
+        assetId = ++store.nextAssetId;
         asset = store.assets[assetId];
         asset.owner = recipient;
         asset.poolAddr = pInfo.poolAddr;
@@ -108,6 +105,7 @@ library AssetLib {
     function getAsset(uint256 assetId) internal view returns (Asset storage asset) {
         AssetStore storage store = Store.assets();
         asset = store.assets[assetId];
+        require(asset.owner != address(0x0), AssetNotFound(assetId));
     }
 
     /// Remove an asset.
