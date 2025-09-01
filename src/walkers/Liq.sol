@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { console2 as console } from "forge-std/console2.sol";
-
 import { Key } from "../tree/Key.sol";
 import { Node } from "./Node.sol";
 import { Data } from "./Data.sol";
@@ -120,11 +118,6 @@ library LiqWalker {
     function up(Key key, bool visit, Data memory data) internal {
         Node storage node = data.node(key);
 
-        // (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-        // console.log("calling into");
-        // console.log(low);
-        // console.log(high);
-
         LiqIter memory iter;
         {
             (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
@@ -137,9 +130,6 @@ library LiqWalker {
         // Do the modifications.
         if (visit) {
             modify(iter, node, data, data.liq.liq);
-            // console.log("modified");
-            // console.log(low);
-            // console.log(high);
         } else {
             // If propogating, we can't be at a leaf.
             (Key lk, Key rk) = key.children();
@@ -182,9 +172,12 @@ library LiqWalker {
     /// So this is a crucial step to always call when walking over any node.
     /// @dev We update the taker fees here
     function compound(LiqIter memory iter, Node storage node, Data memory data) internal {
-        // Collect fees here BUT these may not be your actual fees to compound because it could be BORROWED liq.
-        // Therefore, we have to just rely on inside fee rates.
-        PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick);
+        // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
+        // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
+        // having more fees than that.
+        if (node.liq.mLiq > 0) {
+            PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick, true);
+        }
         // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
@@ -277,12 +270,9 @@ library LiqWalker {
                 // When subtracting liquidity, since we've already considered the equiv liq in adding,
                 // we can just remove the share-proportion of liq and fees (not equiv).
                 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-                // console.log("sliqs", sliq, targetSliq);
-                // console.log("liqs", currentLiq, compoundingLiq);
                 uint128 sliqDiff = sliq - targetSliq;
                 uint256 shareRatioX256 = FullMath.mulDivX256(sliqDiff, node.liq.shares, false);
                 uint128 liq = uint128(FullMath.mulX256(compoundingLiq, shareRatioX256, false));
-                // console.log("share", shareRatioX256, liq);
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
                 node.liq.subtreeMLiq -= iter.width * liq;
@@ -323,27 +313,18 @@ library LiqWalker {
             }
         } else if (data.liq.liqType == LiqType.TAKER) {
             if (sliq < targetLiq) {
-                console.log("adding taker");
                 uint128 liqDiff = targetLiq - sliq;
                 node.liq.tLiq += liqDiff;
                 node.liq.subtreeTLiq += iter.width * liqDiff;
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
-                // console.log("adding taker bisect 0");
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
                 node.liq.subtreeBorrowedX += xBorrow;
                 node.liq.subtreeBorrowedY += yBorrow;
                 // But the actual balances they get are based on the current price.
-                // console.log("adding taker bisect 1");
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, false);
-                // console.log("adding taker bisect 2");
-                // console.log(xBalance);
-                // console.log(data.xBalance);
-                // console.log(yBalance);
-                // console.log(data.yBalance);
                 data.xBalance -= int256(xBalance);
                 data.yBalance -= int256(yBalance);
-                // console.log("adding taker bisect 2");
             } else if (sliq > targetLiq) {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.tLiq -= liqDiff;
@@ -360,22 +341,13 @@ library LiqWalker {
             }
         }
         node.liq.dirty = node.liq.dirty || dirty; // Mark the node as dirty after modification.
-        console.log("end", aNode.sliq, targetSliq);
         aNode.sliq = targetSliq;
-        console.log("no problem?");
     }
 
     /// Ensure the liquidity at this node is solvent.
     /// @dev Call this after modifying liquidity.
     function solveLiq(LiqIter memory iter, Node storage node, Data memory data) internal {
         int256 netLiq = node.liq.net();
-
-        (int24 low, int24 high) = iter.key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-        console.log("solving", netLiq);
-        console.log(low);
-        console.log(high);
-        console.log(node.liq.mLiq, node.liq.borrowed);
-        console.log(node.liq.tLiq, node.liq.lent);
 
         if (data.isRoot(iter.key)) {
             require(netLiq >= 0, InsufficientBorrowLiquidity(netLiq));
@@ -406,9 +378,6 @@ library LiqWalker {
             node.liq.dirty = true;
             sibling.liq.borrowed -= repayable;
             sibling.liq.dirty = true;
-            console.log("final");
-            console.log(node.liq.mLiq, node.liq.borrowed);
-            console.log(node.liq.tLiq, node.liq.lent);
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
             Node storage sibling = data.node(iter.key.sibling());
@@ -424,15 +393,13 @@ library LiqWalker {
             node.liq.dirty = true;
             sibling.liq.borrowed += borrow;
             sibling.liq.dirty = true;
-            console.log("final");
-            console.log(node.liq.mLiq, node.liq.borrowed);
-            console.log(node.liq.tLiq, node.liq.lent);
         }
     }
 
     /* Helpers' Helpers */
 
     /// Collect non-liquidating maker fees or pay taker fees.
+    /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {
@@ -441,13 +408,11 @@ library LiqWalker {
             aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
         } else if (data.liq.liqType == LiqType.TAKER) {
-            // console.log("paying taker fees");
             // Now we pay the taker fees.
             data.xBalance += int256(FullMath.mulX128(liq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true));
             data.yBalance += int256(FullMath.mulX128(liq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true));
             aNode.fee0CheckX128 = node.fees.takerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.takerYFeesPerLiqX128;
-            // console.log("taker fees paid");
         }
     }
 
