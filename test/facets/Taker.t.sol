@@ -1031,6 +1031,7 @@ contract TakerFacetTest is MultiSetupTest {
             freezeSqrtPriceX96,
             rftData
         );
+        // Add these views to ensure they don't revert.
         viewFacet.queryAssetBalances(assetId0);
 
         // Now we have another taker take the rest of the avilable liquidity.
@@ -1183,6 +1184,54 @@ contract TakerFacetTest is MultiSetupTest {
             recipient,
             poolAddr,
             ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+    }
+
+    function testOverlappingInsufficientLiquidity() public {
+        bytes memory rftData = "";
+
+        // Collateralize before creating taker position
+        _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        int24 middleTick = ticks[0] + (ticks[1] - ticks[0]) / 2;
+
+        // Create a taker position
+        int24[2] memory lowTicks = [ticks[0], middleTick];
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            lowTicks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        int24[2] memory highTicks = [middleTick - 60, ticks[1]];
+        vm.expectRevert();
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            highTicks,
             liquidity,
             vaultIndices,
             sqrtPriceLimitsX96,

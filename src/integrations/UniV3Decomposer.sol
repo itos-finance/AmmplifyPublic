@@ -30,7 +30,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
     address private transient caller;
-    uint256 public constant LIQUIDITY_OFFSET = 42;
+    uint128 public constant LIQUIDITY_OFFSET = 42;
 
     event Decomposed(
         uint256 indexed newAssetId,
@@ -56,20 +56,20 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         // Get sqrt prices at the tick boundaries
         uint160 sqrtPriceLower = TickMath.getSqrtRatioAtTick(tickLower);
         uint160 sqrtPriceUpper = TickMath.getSqrtRatioAtTick(tickUpper);
-        
+
         // Calculate Q96 * 42 / (sqrtPrice(high) - sqrtPrice(low))
         // Q96 is 2^96
         uint256 q96 = 1 << 96;
         uint256 numerator = q96 * LIQUIDITY_OFFSET;
         uint256 denominator = uint256(sqrtPriceUpper) - uint256(sqrtPriceLower);
-        
+
         // Ensure we don't divide by zero
         if (denominator == 0) {
             return LIQUIDITY_OFFSET; // fallback to the original constant
         }
-        
+
         liquidityOffset = uint128(numerator / denominator);
-        
+
         // Ensure minimum offset of 1 to avoid edge cases
         if (liquidityOffset == 0) {
             liquidityOffset = LIQUIDITY_OFFSET;
@@ -141,7 +141,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
 
         // Calculate dynamic liquidity offset based on tick range
         uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper);
-        
+
         newAssetId = MAKER.newMaker(
             msg.sender,
             poolAddr,
