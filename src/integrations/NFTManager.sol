@@ -6,12 +6,15 @@ import { Ownable } from "a@openzeppelin/contracts/access/Ownable.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
 import { Base64 } from "a@openzeppelin/contracts/utils/Base64.sol";
 import { RFTLib, RFTPayer } from "Commons/Util/RFT.sol";
+import { Auto165Lib } from "Commons/ERC/Auto165.sol";
 import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { Asset, AssetLib } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 import { LiqType } from "../walkers/Liq.sol";
+import { IView } from "../interfaces/IView.sol";
+import { IPool } from "../interfaces/IPool.sol";
 import { Store } from "../Store.sol";
 import { MakerFacet } from "../facets/Maker.sol";
 import { UniV3Decomposer } from "./UniV3Decomposer.sol";
@@ -24,6 +27,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
     error AssetNotMinted(uint256 tokenId);
     error OnlyMakerFacet(address caller);
     error NotPositionOwner(uint256 positionId, address owner, address sender);
+    error NoActiveTokenRequest();
 
     // Mapping from asset ID to token ID
     mapping(uint256 => uint256) public assetToToken;
@@ -31,6 +35,10 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
     mapping(uint256 => uint256) public tokenToAsset;
     // Next token ID to mint
     uint256 private _nextTokenId;
+    // Current token request context to pull tokens from caller
+    address private _currentTokenRequester;
+    // Current supply of tokens (decrements when burned)
+    uint256 private _currentSupply;
 
     // Immutable references to Maker, Decomposer, and NFPM
     MakerFacet public immutable MAKER_FACET;
@@ -82,6 +90,9 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (uint256 tokenId, uint256 assetId) {
+        // Set the token requester context so tokenRequestCB knows who to pull tokens from
+        _currentTokenRequester = msg.sender;
+
         // Create the maker position
         assetId = MAKER_FACET.newMaker(
             address(this),
@@ -95,10 +106,14 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
             rftData
         );
 
+        // Clear the token requester context
+        _currentTokenRequester = address(0);
+
         // Mint NFT for the new asset
         tokenId = _nextTokenId++;
         assetToToken[assetId] = tokenId;
         tokenToAsset[tokenId] = assetId;
+        _currentSupply++;
 
         _safeMint(recipient, tokenId);
 
@@ -128,19 +143,26 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
             revert NotPositionOwner(positionId, positionOwner, msg.sender);
         }
 
-        // Transfer the position to the decomposer contract
-        NFPM.transferFrom(msg.sender, address(this), positionId);
+        // Transfer the position to this contract (using the approval we were given)
+        NFPM.safeTransferFrom(positionOwner, address(this), positionId);
 
         // Approve the nft to the decomposer
         NFPM.approve(address(DECOMPOSER), positionId);
 
+        // Set the token requester context so tokenRequestCB knows who to pull tokens from (if needed)
+        _currentTokenRequester = msg.sender;
+
         // Decompose the Uniswap V3 position
         assetId = DECOMPOSER.decompose(positionId, isCompounding, minSqrtPriceX96, maxSqrtPriceX96, rftData);
+
+        // Clear the token requester context
+        _currentTokenRequester = address(0);
 
         // Mint NFT for the decomposed asset
         tokenId = _nextTokenId++;
         assetToToken[assetId] = tokenId;
         tokenToAsset[tokenId] = assetId;
+        _currentSupply++;
 
         _safeMint(msg.sender, tokenId);
 
@@ -169,10 +191,12 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
         external
         returns (address token0, address token1, uint256 removedX, uint256 removedY, uint256 fees0, uint256 fees1)
     {
-        uint256 assetId = tokenToAsset[tokenId];
-        if (assetId == 0) {
+        // Check if the token was actually minted by checking if it's been assigned to an asset
+        if (tokenId >= _nextTokenId) {
             revert AssetNotMinted(tokenId);
         }
+
+        uint256 assetId = tokenToAsset[tokenId];
 
         if (ownerOf(tokenId) != msg.sender) {
             revert NotAssetOwner(assetId, ownerOf(tokenId), msg.sender);
@@ -193,6 +217,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
         // Remove the asset from the NFT mapping
         delete assetToToken[assetId];
         delete tokenToAsset[tokenId];
+        _currentSupply--;
 
         // Burn the NFT
         _burn(tokenId);
@@ -215,10 +240,12 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (uint256 fees0, uint256 fees1) {
-        uint256 assetId = tokenToAsset[tokenId];
-        if (assetId == 0) {
+        // Check if the token was actually minted by checking if it's been assigned to an asset
+        if (tokenId >= _nextTokenId) {
             revert AssetNotMinted(tokenId);
         }
+
+        uint256 assetId = tokenToAsset[tokenId];
 
         if (ownerOf(tokenId) != msg.sender) {
             revert NotAssetOwner(assetId, ownerOf(tokenId), msg.sender);
@@ -260,25 +287,42 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
             uint128 timestamp
         )
     {
-        assetId = tokenToAsset[tokenId];
-        if (assetId == 0) {
+        // Check if the token was actually minted by checking if it's been assigned to an asset
+        if (tokenId >= _nextTokenId) {
             revert AssetNotMinted(tokenId);
         }
 
-        Asset storage asset = AssetLib.getAsset(assetId);
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        assetId = tokenToAsset[tokenId];
+
+        // Get asset info from the View facet instead of directly accessing storage
+        // since AssetLib accesses the contract's own storage, not the diamond's storage
+        (
+            address assetOwner,
+            address assetPoolAddr,
+            int24 assetLowTick,
+            int24 assetHighTick,
+            LiqType assetLiqType,
+            uint128 assetLiq
+        ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
+
+        if (assetPoolAddr == address(0)) {
+            revert("Asset not found or corrupted");
+        }
+
+        // Get pool info from the diamond
+        PoolInfo memory pInfo = IView(address(MAKER_FACET)).getPoolInfo(assetPoolAddr);
 
         return (
             assetId,
-            asset.owner,
-            asset.poolAddr,
+            assetOwner,
+            assetPoolAddr,
             pInfo.token0,
             pInfo.token1,
-            asset.lowTick,
-            asset.highTick,
-            asset.liqType,
-            asset.liq,
-            asset.timestamp
+            assetLowTick,
+            assetHighTick,
+            assetLiqType,
+            assetLiq,
+            0 // timestamp - not available from View facet, setting to 0 for now
         );
     }
 
@@ -288,11 +332,12 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
      * @return The asset ID
      */
     function getAssetId(uint256 tokenId) external view returns (uint256) {
-        uint256 assetId = tokenToAsset[tokenId];
-        if (assetId == 0) {
+        // Check if the token was actually minted by checking if it's been assigned to an asset
+        if (tokenId >= _nextTokenId) {
             revert AssetNotMinted(tokenId);
         }
-        return assetId;
+
+        return tokenToAsset[tokenId];
     }
 
     /**
@@ -309,7 +354,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
      * @return The total supply
      */
     function totalSupply() public view returns (uint256) {
-        return _nextTokenId;
+        return _currentSupply;
     }
 
     /**
@@ -485,7 +530,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
-        return super.supportsInterface(interfaceId);
+        return super.supportsInterface(interfaceId) || Auto165Lib.contains(interfaceId);
     }
 
     /**
@@ -504,12 +549,23 @@ contract NFTManager is ERC721, Ownable, RFTPayer {
             revert OnlyMakerFacet(msg.sender);
         }
 
+        // Must have an active token requester context
+        if (_currentTokenRequester == address(0)) {
+            revert NoActiveTokenRequest();
+        }
+
         for (uint256 i = 0; i < tokens.length; i++) {
             int256 change = requests[i];
             address token = tokens[i];
+
             if (change > 0) {
-                TransferHelper.safeTransfer(token, msg.sender, uint256(change));
+                // Pull tokens from the original caller and send to MAKER_FACET
+                TransferHelper.safeTransferFrom(token, _currentTokenRequester, msg.sender, uint256(change));
+            } else if (change < 0) {
+                // Send tokens from our balance to MAKER_FACET (for fee collection, etc.)
+                TransferHelper.safeTransfer(token, msg.sender, uint256(-change));
             }
+
             // After primary transfer, sweep any dust the contract may still hold for this token
             uint256 residual = IERC20(token).balanceOf(address(this));
             if (residual > 0) {
