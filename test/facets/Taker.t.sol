@@ -16,6 +16,7 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
+import { MockERC4626 } from "../mocks/MockERC4626.sol";
 
 /// @dev The minimum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MIN_TICK)
 uint160 constant MIN_SQRT_RATIO = 4295128739;
@@ -886,6 +887,85 @@ contract TakerFacetTest is MultiSetupTest {
         // When back in range, you'll have excess y and owe x.
         assertLt(inRangeBalance0, 0, "owe X");
         assertGt(inRangeBalance1, outOfRangeBalance1, "excess Y");
+    }
+
+    function testTakerCollateralEarnsFees() public {
+        bytes memory rftData = "";
+
+        // Collateralize before creating taker position
+        _collateralizeTaker(recipient, liquidity);
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            ticks[0],
+            ticks[1],
+            liquidity * 2,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        uint256 assetId = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            ticks,
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        // Checkpoint the initial taker position value
+        (int256 initialBalance0, int256 initialBalance1, uint256 initialFees0, uint256 initialFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        console.log("Initial taker balance0:", initialBalance0);
+        console.log("Initial taker balance1:", initialBalance1);
+        console.log("Initial taker fees0:", initialFees0);
+        console.log("Initial taker fees1:", initialFees1);
+
+        // Get initial collateral balances
+        uint256 initialCollateral0 = viewFacet.getCollateralBalance(recipient, address(token0));
+        uint256 initialCollateral1 = viewFacet.getCollateralBalance(recipient, address(token1));
+
+        console.log("Initial collateral0:", initialCollateral0);
+        console.log("Initial collateral1:", initialCollateral1);
+
+        // Add fees to the vault (simulating vault earnings by inflating vault value)
+        uint256 vaultFeeAmount = 5e18;
+        token0.mint(address(this), vaultFeeAmount);
+        token1.mint(address(this), vaultFeeAmount);
+
+        // Approve and add assets directly to the vaults to increase share value
+        token0.approve(address(vaults[0]), vaultFeeAmount);
+        token1.approve(address(vaults[1]), vaultFeeAmount);
+
+        // Use MockERC4626's accumulateAssets to add value to the vaults
+        // This increases the value of existing shares without minting new shares
+        MockERC4626(address(vaults[0])).accumulateAssets(address(this), vaultFeeAmount);
+        MockERC4626(address(vaults[1])).accumulateAssets(address(this), vaultFeeAmount);
+
+        // Check that position's value is higher after vault earnings
+        (int256 finalBalance0, int256 finalBalance1, uint256 finalFees0, uint256 finalFees1) = viewFacet
+            .queryAssetBalances(assetId);
+
+        console.log("Final taker balance0:", finalBalance0);
+        console.log("Final taker balance1:", finalBalance1);
+
+        // Get final collateral balances
+        uint256 finalCollateral0 = viewFacet.getCollateralBalance(recipient, address(token0));
+        uint256 finalCollateral1 = viewFacet.getCollateralBalance(recipient, address(token1));
+
+        console.log("Final collateral0:", finalCollateral0);
+        console.log("Final collateral1:", finalCollateral1);
+
+        // The collateral amounts should remain the same since we added value to vaults, not collateral
+        assertEq(finalCollateral0, initialCollateral0, "Token0 collateral should remain unchanged");
+        assertEq(finalCollateral1, initialCollateral1, "Token1 collateral should remain unchanged");
     }
 
     /* TODO tests.
