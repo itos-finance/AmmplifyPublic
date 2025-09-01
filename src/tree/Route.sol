@@ -29,11 +29,13 @@ using RouteImpl for Route global;
 
 library RouteImpl {
     error OutOfBounds(uint24 rootWidth, uint24 left, uint24 right);
+    error InvertedRange(uint24 left, uint24 right);
 
     /* Factory functions */
 
     /// Create a route from the left and right index, with both being inclusive.
     function make(uint24 _rootWidth, uint24 _left, uint24 _right) internal pure returns (Route memory) {
+        if (_right < _left) revert InvertedRange(_left, _right);
         Key leftKey = _makeLeft(_rootWidth, _left);
         Key rightKey = _makeRight(_rootWidth, _right);
         Key lcaKey = _makeLCA(_rootWidth, _left, _right);
