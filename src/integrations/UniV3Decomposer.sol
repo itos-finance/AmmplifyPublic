@@ -13,6 +13,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfungiblePositionManager.sol";
 import { IERC721Receiver } from "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
+import { TickMath } from "v3-core/libraries/TickMath.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 /// @title UniV3Decomposer
@@ -28,8 +29,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     // Immutable configuration
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
-    uint128 public constant LIQUIDITY_OFFSET = 42; // Max node depth * 2 is the most we need to reduce the liquidty 
     address private transient caller;
+    uint256 public constant LIQUIDITY_OFFSET = 42;
 
     event Decomposed(
         uint256 indexed newAssetId,
@@ -45,6 +46,34 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     constructor(address _nfpm, address _maker) {
         NFPM = INonfungiblePositionManager(_nfpm);
         MAKER = MakerFacet(_maker);
+    }
+
+    /// @notice Calculates the liquidity offset based on tick range
+    /// @param tickLower The lower tick of the position
+    /// @param tickUpper The upper tick of the position
+    /// @return liquidityOffset The calculated liquidity offset
+    function calculateLiquidityOffset(int24 tickLower, int24 tickUpper) internal pure returns (uint128 liquidityOffset) {
+        // Get sqrt prices at the tick boundaries
+        uint160 sqrtPriceLower = TickMath.getSqrtRatioAtTick(tickLower);
+        uint160 sqrtPriceUpper = TickMath.getSqrtRatioAtTick(tickUpper);
+        
+        // Calculate Q96 * 42 / (sqrtPrice(high) - sqrtPrice(low))
+        // Q96 is 2^96
+        uint256 q96 = 1 << 96;
+        uint256 numerator = q96 * LIQUIDITY_OFFSET;
+        uint256 denominator = uint256(sqrtPriceUpper) - uint256(sqrtPriceLower);
+        
+        // Ensure we don't divide by zero
+        if (denominator == 0) {
+            return LIQUIDITY_OFFSET; // fallback to the original constant
+        }
+        
+        liquidityOffset = uint128(numerator / denominator);
+        
+        // Ensure minimum offset of 1 to avoid edge cases
+        if (liquidityOffset == 0) {
+            liquidityOffset = LIQUIDITY_OFFSET;
+        }
     }
 
     /// @notice Prevents reentrancy by locking the contract during the call.
@@ -110,12 +139,15 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         address poolAddr = IUniswapV3Factory(factory).getPool(token0, token1, fee);
         if (poolAddr == address(0)) revert PoolNotDeployed();
 
+        // Calculate dynamic liquidity offset based on tick range
+        uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper);
+        
         newAssetId = MAKER.newMaker(
             msg.sender,
             poolAddr,
             tickLower,
             tickUpper,
-            liquidity - LIQUIDITY_OFFSET,
+            liquidity - liquidityOffset,
             isCompounding,
             minSqrtPriceX96,
             maxSqrtPriceX96,

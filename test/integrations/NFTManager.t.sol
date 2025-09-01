@@ -198,7 +198,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(poolAddr, address(pools[0]));
         assertEq(lowTick, LOW_TICK);
         assertEq(highTick, HIGH_TICK);
-        assertApproxEqAbs(liq, liquidity, 100);
+        assertApproxEqAbs(liq, liquidity, 1000); // the offset is based on 42 / (sqrt(high) - sqrt(low))
     }
 
     // ============ burnAsset Tests ============
