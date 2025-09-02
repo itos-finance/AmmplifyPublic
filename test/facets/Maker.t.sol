@@ -8,6 +8,9 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
+import { MakerFacet } from "../../src/facets/Maker.sol";
+import { AssetLib } from "../../src/Asset.sol";
+import { RouteImpl } from "../../src/tree/Route.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
@@ -110,8 +113,9 @@ contract MakerFacetTest is MultiSetupTest {
     function testNewMakerInvalidTicks() public {
         bytes memory rftData = "";
 
-        // Test with invalid tick order
-        vm.expectRevert();
+        // Test with invalid tick order - should throw InvertedRange error
+        // The error will contain the computed tick values from the route
+        vm.expectRevert(); // Using generic expectRevert since the exact parameters depend on internal calculations
         makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -128,8 +132,8 @@ contract MakerFacetTest is MultiSetupTest {
     function testNewMakerInvalidLiquidity() public {
         bytes memory rftData = "";
 
-        // Test with zero liquidity
-        vm.expectRevert();
+        // Test with zero liquidity - should throw DeMinimusMaker error
+        vm.expectRevert(abi.encodeWithSelector(MakerFacet.DeMinimusMaker.selector, uint128(0)));
         makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -146,8 +150,8 @@ contract MakerFacetTest is MultiSetupTest {
     function testNewMakerPriceBounds() public {
         bytes memory rftData = "";
 
-        // Test with invalid price bounds
-        vm.expectRevert();
+        // Test with invalid price bounds - min > max should cause internal validation to fail
+        vm.expectRevert(); // Using generic expectRevert since the exact error depends on internal price validation
         makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -198,8 +202,8 @@ contract MakerFacetTest is MultiSetupTest {
         assertGe(int256(removedX), netBalance0);
         assertGe(int256(removedY), netBalance1);
 
-        // Verify asset was removed
-        vm.expectRevert();
+        // Verify asset was removed - should throw AssetNotFound error
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.AssetNotFound.selector, assetId));
         viewFacet.getAssetInfo(assetId);
     }
 
@@ -218,11 +222,11 @@ contract MakerFacetTest is MultiSetupTest {
             rftData
         );
 
-        // Try to remove as non-owner
+        // Try to remove as non-owner - should throw NotMakerOwner error
         address nonOwner = address(0x456);
         vm.prank(nonOwner);
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(MakerFacet.NotMakerOwner.selector, recipient, nonOwner));
         makerFacet.removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
     }
 
@@ -232,10 +236,13 @@ contract MakerFacetTest is MultiSetupTest {
         // For now, we'll test the revert case by trying to remove a non-existent asset
 
         bytes memory rftData = "";
-        vm.expectRevert();
+        uint256 nonExistentAssetId = 999;
+
+        // Should throw AssetNotFound error for non-existent asset
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.AssetNotFound.selector, nonExistentAssetId));
         makerFacet.removeMaker(
             recipient,
-            999, // non-existent asset
+            nonExistentAssetId,
             uint128(minSqrtPriceX96),
             uint128(maxSqrtPriceX96),
             rftData
@@ -294,24 +301,21 @@ contract MakerFacetTest is MultiSetupTest {
             rftData
         );
 
-        // Try to collect fees as non-owner
+        // Try to collect fees as non-owner - should throw NotMakerOwner error
         address nonOwner = address(0x456);
         vm.prank(nonOwner);
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(MakerFacet.NotMakerOwner.selector, recipient, nonOwner));
         makerFacet.collectFees(recipient, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
     }
 
     function testCollectFeesNotMakerAsset() public {
         bytes memory rftData = "";
-        vm.expectRevert();
-        makerFacet.collectFees(
-            recipient,
-            999, // non-existent asset
-            minSqrtPriceX96,
-            maxSqrtPriceX96,
-            rftData
-        );
+        uint256 nonExistentAssetId = 999;
+
+        // Should throw AssetNotFound error for non-existent asset
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.AssetNotFound.selector, nonExistentAssetId));
+        makerFacet.collectFees(recipient, nonExistentAssetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
     }
 
     // ============ Price Movement and Value Query Tests ============

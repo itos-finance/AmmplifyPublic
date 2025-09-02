@@ -11,9 +11,10 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
-import { LiqType } from "../../src/walkers/Liq.sol";
+import { LiqType, LiqWalker } from "../../src/walkers/Liq.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
+import { RouteImpl } from "../../src/tree/Route.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
@@ -153,8 +154,10 @@ contract TakerFacetTest is MultiSetupTest {
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
 
-        // Test with invalid tick order
-        vm.expectRevert();
+        // Test with invalid tick order - this will fail in Route validation
+        // The error will be thrown with the computed tick values, not the input values
+        // Based on the error message: InvertedRange(8202, 8181)
+        vm.expectRevert(abi.encodeWithSelector(RouteImpl.InvertedRange.selector, uint24(8202), uint24(8181)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -173,8 +176,8 @@ contract TakerFacetTest is MultiSetupTest {
         // Collateralize before creating taker position (even for invalid test)
         _collateralizeTaker(recipient, 1); // Use minimal amount for zero liquidity test
 
-        // Test with zero liquidity
-        vm.expectRevert();
+        // Test with zero liquidity - should fail with DeMinimusTaker error
+        vm.expectRevert(abi.encodeWithSignature("DeMinimusTaker(uint128)", 0));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -194,8 +197,8 @@ contract TakerFacetTest is MultiSetupTest {
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
 
-        // Test with invalid vault indices
-        vm.expectRevert();
+        // Test with invalid vault indices - will fail in VaultLib operations
+        vm.expectRevert(); // VaultNotFound or similar vault error
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -220,7 +223,8 @@ contract TakerFacetTest is MultiSetupTest {
         takerFacet.collateralize(recipient, address(token1), token1Amount, rftData);
 
         // Attempt to create taker without token0 collateral should fail
-        vm.expectRevert();
+        // This will fail in RFTLib.settle when trying to transfer tokens
+        vm.expectRevert(); // ERC20 transfer error or arithmetic underflow
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -243,7 +247,8 @@ contract TakerFacetTest is MultiSetupTest {
         takerFacet.collateralize(recipient, address(token0), token0Amount, rftData);
 
         // Attempt to create taker without token1 collateral should fail
-        vm.expectRevert();
+        // This will fail in RFTLib.settle when trying to transfer tokens
+        vm.expectRevert(); // ERC20 transfer error or arithmetic underflow
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -260,7 +265,8 @@ contract TakerFacetTest is MultiSetupTest {
         bytes memory rftData = "";
 
         // Attempt to create taker without any collateral should fail
-        vm.expectRevert();
+        // This will fail in RFTLib.settle when trying to transfer tokens
+        vm.expectRevert(); // ERC20 transfer error or arithmetic underflow
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -287,7 +293,8 @@ contract TakerFacetTest is MultiSetupTest {
         takerFacet.collateralize(recipient, address(token1), smallAmount, rftData);
 
         // Attempt to create taker with insufficient collateral should fail
-        vm.expectRevert();
+        // This will fail in RFTLib.settle when trying to transfer tokens
+        vm.expectRevert(); // ERC20 transfer error or arithmetic underflow
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -395,7 +402,7 @@ contract TakerFacetTest is MultiSetupTest {
         assertGt(removedY, 0);
 
         // Verify asset was removed
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("AssetNotFound(uint256)", assetId));
         viewFacet.getAssetInfo(assetId);
     }
 
@@ -434,7 +441,7 @@ contract TakerFacetTest is MultiSetupTest {
         address nonOwner = address(0x456);
         vm.prank(nonOwner);
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("NotTakerOwner(address,address)", recipient, nonOwner));
         takerFacet.removeTaker(assetId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
     }
 
@@ -454,7 +461,7 @@ contract TakerFacetTest is MultiSetupTest {
         );
 
         // Try to remove maker asset via removeTaker
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("NotTaker(uint256)", assetId));
         takerFacet.removeTaker(assetId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
     }
 
@@ -1049,8 +1056,8 @@ contract TakerFacetTest is MultiSetupTest {
 
         console.log("fully borrowed out");
 
-        // A third will fail.
-        vm.expectRevert();
+        // A third will fail due to insufficient liquidity.
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, int256(-1e18)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -1079,7 +1086,7 @@ contract TakerFacetTest is MultiSetupTest {
         );
         viewFacet.queryAssetBalances(assetId2);
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, int256(-1e18)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -1123,7 +1130,7 @@ contract TakerFacetTest is MultiSetupTest {
 
         console.log("And reverting next");
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, int256(-1e18)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -1152,7 +1159,7 @@ contract TakerFacetTest is MultiSetupTest {
             rftData
         );
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, int256(-1e18)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
@@ -1227,7 +1234,7 @@ contract TakerFacetTest is MultiSetupTest {
         );
 
         int24[2] memory highTicks = [middleTick - 60, ticks[1]];
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, int256(-1e18)));
         takerFacet.newTaker(
             recipient,
             poolAddr,
