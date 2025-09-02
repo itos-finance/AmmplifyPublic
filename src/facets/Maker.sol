@@ -11,23 +11,12 @@ import { PoolLib } from "../Pool.sol";
 import { PoolWalker } from "../walkers/Pool.sol";
 import { RFTLib } from "Commons/Util/RFT.sol";
 import { FeeLib } from "../Fee.sol";
+import { IMaker } from "../interfaces/IMaker.sol";
 
-contract MakerFacet is ReentrancyGuardTransient {
+contract MakerFacet is ReentrancyGuardTransient, IMaker {
     uint128 public constant MIN_MAKER_LIQUIDITY = 1e6;
 
-    error NotMakerOwner(address owner, address sender);
-    /// Thrown when the asset being view or removed is not a maker asset.
-    error NotMaker(uint256 assetId);
-    error DeMinimusMaker(uint128 liq);
-
-    /// @notice Creates a new maker position.
-    /// @param poolAddr The address of the pool.
-    /// @param lowTick The lower tick of the liquidity range.
-    /// @param highTick The upper tick of the liquidity range.
-    /// @param liq The amount of liquidity to provide.
-    /// @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this.
-    /// @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this.
-    /// @param rftData Data passed during RFT to the payer.
+    /// @inheritdoc IMaker
     function newMaker(
         address recipient,
         address poolAddr,
@@ -39,7 +28,7 @@ contract MakerFacet is ReentrancyGuardTransient {
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
-        if (liq < MIN_MAKER_LIQUIDITY) revert DeMinimusMaker(liq);
+        require(liq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(liq));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
@@ -62,11 +51,57 @@ contract MakerFacet is ReentrancyGuardTransient {
         return assetId;
     }
 
+    /// @inheritdoc IMaker
+    function adjustMaker(
+        address recipient,
+        uint256 assetId,
+        uint128 targetLiq,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
+        bytes calldata rftData
+    ) external nonReentrant returns (address token0, address token1, int256 delta0, int256 delta1) {
+        Asset storage asset = AssetLib.getAsset(assetId);
+        require(targetLiq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(targetLiq)); // They should use remove if they want to remove.
+        require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
+        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, targetLiq);
+        WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
+        address[] memory tokens = pInfo.tokens();
+        int256[] memory balances = new int256[](2);
+        if (data.xBalance == 0 && data.yBalance == 0) {
+            revert DeMinimusMaker(targetLiq);
+        } else if (data.xBalance > 0 || (data.xBalance == 0 && data.yBalance > 0)) {
+            // Both should go up together.
+            require(data.yBalance >= 0);
+            balances[0] = data.xBalance;
+            balances[1] = data.yBalance;
+            RFTLib.settle(msg.sender, tokens, balances, rftData);
+            PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
+        } else {
+            require(data.yBalance < 0);
+            PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
+            uint256 removedX = uint256(-data.xBalance);
+            uint256 removedY = uint256(-data.yBalance);
+            (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY);
+            balances[0] = -int256(removedX);
+            balances[1] = -int256(removedY);
+            RFTLib.settle(msg.sender, tokens, balances, rftData);
+        }
+        // We have to apply jit afterwards in case someone is trying to use adjust to get around that.
+        AssetLib.updateTimestamp(asset);
+        token0 = tokens[0];
+        token1 = tokens[1];
+        delta0 = balances[0];
+        delta1 = balances[1];
+    }
+
+    /// @inheritdoc IMaker
     function removeMaker(
         address recipient,
         uint256 assetId,
-        uint128 minSqrtPriceX96,
-        uint128 maxSqrtPriceX96,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (address token0, address token1, uint256 removedX, uint256 removedY) {
         Asset storage asset = AssetLib.getAsset(assetId);
@@ -92,6 +127,7 @@ contract MakerFacet is ReentrancyGuardTransient {
     }
 
     // Collecting fees from a position reverts back to the original liquidity profile.
+    /// @inheritdoc IMaker
     function collectFees(
         address recipient,
         uint256 assetId,
@@ -106,10 +142,9 @@ contract MakerFacet is ReentrancyGuardTransient {
         // We collect simply by targeting the original liq balance.
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
+        PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         // Update timestamp because for compounding liq, the liq has changed.
-        // Plus if you're removing liquidity, you automatically collect on remove so no need to call this first.
         AssetLib.updateTimestamp(asset);
-        // The compounds collect all the fees from the underlying positions.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;

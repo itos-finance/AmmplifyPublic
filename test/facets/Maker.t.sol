@@ -485,4 +485,54 @@ contract MakerFacetTest is MultiSetupTest {
         assertGt(actualRemoved0, 0, "Should receive some token0 on close after large movement");
         assertGt(actualRemoved1, 0, "Should receive some token1 on close after large movement");
     }
+
+    function testMakerAdjust() public {
+        bytes memory rftData = "";
+
+        // Create a maker position
+        uint256 assetId = makerFacet.newMaker(
+            address(this),
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+        (int256 balance0, int256 balance1, , ) = viewFacet.queryAssetBalances(assetId);
+
+        // Adjust the maker position up
+        (, , int256 delta0, int256 delta1) = makerFacet.adjustMaker(
+            address(this),
+            assetId,
+            liquidity * 2,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+        (int256 adjustedBalance0, int256 adjustedBalance1, , ) = viewFacet.queryAssetBalances(assetId);
+
+        // Verify the adjusted values
+        assertApproxEqAbs(adjustedBalance0, balance0 + delta0, 1, "Adjusted balance0 should match");
+        assertApproxEqAbs(adjustedBalance1, balance1 + delta1, 1, "Adjusted balance1 should match");
+        assertApproxEqAbs(balance0, delta0, 2, "we doubled 0");
+        assertApproxEqAbs(balance1, delta1, 2, "we doubled 1");
+
+        // Halve the liquidity back
+        (, , delta0, delta1) = makerFacet.adjustMaker(
+            address(this),
+            assetId,
+            liquidity,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+        assertApproxEqAbs(delta0, -balance0, 2, "Should have negative delta0");
+        assertApproxEqAbs(delta1, -balance1, 2, "Should have negative delta1");
+        (adjustedBalance0, adjustedBalance1, , ) = viewFacet.queryAssetBalances(assetId);
+        assertApproxEqAbs(balance0, adjustedBalance0, 1, "Back to the original balance0");
+        assertApproxEqAbs(balance1, adjustedBalance1, 1, "Back to the original balance1");
+    }
 }
