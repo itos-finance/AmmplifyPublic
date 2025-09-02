@@ -5,6 +5,7 @@ interface IMaker {
     // Errors
     error NotMakerOwner(address owner, address sender);
     error NotMaker(uint256 assetId);
+    error DeMinimusMaker(uint128 liq);
 
     /// @notice Creates a new maker position.
     /// @param recipient The recipient of the maker position.
@@ -37,8 +38,8 @@ interface IMaker {
     function removeMaker(
         address recipient,
         uint256 assetId,
-        uint128 minSqrtPriceX96,
-        uint128 maxSqrtPriceX96,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (address token0, address token1, uint256 removedX, uint256 removedY);
 
@@ -55,4 +56,20 @@ interface IMaker {
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (uint256 fees0, uint256 fees1);
+
+    /// Either add or remove liq to reach a target liquidity value.
+    /// @dev Note that this also collects fees.
+    /// @param recipient Who receives tokens when removing liq. Does not get used when adding liq.
+    /// @return token0 The lower address token of the pool.
+    /// @return token1 The upper address token of the pool.
+    /// @return delta0 The change in token0's balance from the perspective of the pool. Positive means the sender paid.
+    /// @return delta1 The change in token1's balance from the perspective of the pool. Positive means the sender paid.
+    function adjustMaker(
+        address recipient,
+        uint256 assetId,
+        uint128 targetLiq,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
+        bytes calldata rftData
+    ) external returns (address token0, address token1, int256 delta0, int256 delta1);
 }

@@ -87,10 +87,11 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](3);
+            bytes4[] memory selectors = new bytes4[](4);
             selectors[0] = MakerFacet.newMaker.selector;
-            selectors[1] = MakerFacet.removeMaker.selector; // selectors[2] = MakerFacet.viewMaker.selector;
+            selectors[1] = MakerFacet.removeMaker.selector;
             selectors[2] = MakerFacet.collectFees.selector;
+            selectors[3] = MakerFacet.adjustMaker.selector;
 
             cuts[3] = IDiamond.FacetCut({
                 facetAddress: address(new MakerFacet()),
