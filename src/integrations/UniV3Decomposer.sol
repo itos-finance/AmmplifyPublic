@@ -82,7 +82,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         require(caller == address(0), ReentrancyAttempt());
         caller = msg.sender;
         _;
-        caller = msg.sender;
+        caller = address(0);
     }
 
     function decompose(
