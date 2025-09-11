@@ -15,6 +15,9 @@ import { PoolWalker } from "../walkers/Pool.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { LiqType } from "../walkers/Liq.sol";
 
+// Mistake. Intended so we can move all takers over at once, but instead we
+// deposited with assetId. Which we can do if we want to further split the bookkeeping
+// but without that, we just can't transfer.
 uint256 constant TAKER_VAULT_ID = 80085;
 
 contract TakerFacet is ReentrancyGuardTransient {
