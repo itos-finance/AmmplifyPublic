@@ -15,7 +15,7 @@ library PoolWalker {
     function settle(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
         uint24 low = pInfo.treeTick(lowTick);
         uint24 high = pInfo.treeTick(highTick);
-        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
+        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high - 1);
         route.walk(down, up, phase, WalkerLib.toRaw(data));
     }
 
