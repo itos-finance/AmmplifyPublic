@@ -9,6 +9,7 @@ import { MultiSetupTest } from "../MultiSetup.u.sol";
 import { PoolInfo } from "../../src/Pool.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
 import { MakerFacet } from "../../src/facets/Maker.sol";
+import { IMaker } from "../../src/interfaces/IMaker.sol";
 import { AssetLib } from "../../src/Asset.sol";
 import { RouteImpl } from "../../src/tree/Route.sol";
 
@@ -133,7 +134,7 @@ contract MakerFacetTest is MultiSetupTest {
         bytes memory rftData = "";
 
         // Test with zero liquidity - should throw DeMinimusMaker error
-        vm.expectRevert(abi.encodeWithSelector(MakerFacet.DeMinimusMaker.selector, uint128(0)));
+        vm.expectRevert(abi.encodeWithSelector(IMaker.DeMinimusMaker.selector, uint128(0)));
         makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -226,7 +227,7 @@ contract MakerFacetTest is MultiSetupTest {
         address nonOwner = address(0x456);
         vm.prank(nonOwner);
 
-        vm.expectRevert(abi.encodeWithSelector(MakerFacet.NotMakerOwner.selector, recipient, nonOwner));
+        vm.expectRevert(abi.encodeWithSelector(IMaker.NotMakerOwner.selector, recipient, nonOwner));
         makerFacet.removeMaker(recipient, assetId, uint128(minSqrtPriceX96), uint128(maxSqrtPriceX96), rftData);
     }
 
@@ -305,7 +306,7 @@ contract MakerFacetTest is MultiSetupTest {
         address nonOwner = address(0x456);
         vm.prank(nonOwner);
 
-        vm.expectRevert(abi.encodeWithSelector(MakerFacet.NotMakerOwner.selector, recipient, nonOwner));
+        vm.expectRevert(abi.encodeWithSelector(IMaker.NotMakerOwner.selector, recipient, nonOwner));
         makerFacet.collectFees(recipient, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
     }
 
