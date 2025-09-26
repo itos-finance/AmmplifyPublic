@@ -32,6 +32,14 @@ contract ViewFacet {
         return (asset.owner, asset.poolAddr, asset.lowTick, asset.highTick, asset.liqType, asset.liq);
     }
 
+    function getAssets(address owner) external view returns (uint256[] memory assetIds) {
+        uint256[] storage _assetIds = Store.assets().ownerAssets[owner];
+        assetIds = new uint256[](_assetIds.length);
+        for (uint256 i = 0; i < _assetIds.length; i++) {
+            assetIds[i] = _assetIds[i];
+        }
+    }
+
     /// Get information about nodes in the pool.
     /// @dev You probably need to query the poolInfo first to get the treeWidth to compute valid keys first.
     function getNodes(address poolAddr, Key[] calldata keys) external view returns (Node[] memory node) {
