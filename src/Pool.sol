@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
+import { IUniswapV3PoolDerivedState } from "v3-core/interfaces/pool/IUniswapV3PoolDerivedState.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
@@ -95,6 +96,19 @@ library PoolLib {
 
     function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
         (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+    }
+
+    /// Get a slower moving price metric for the given pool.
+    /// @dev This is only used for taker borrow cost calculation so they're slowing moving and less susceptible to manipulation.
+    function getTwapSqrtPriceX96(address pool) internal view returns (uint160 twapSqrtPriceX96) {
+        uint32 interval = FeeLib.getTwapInterval(pool);
+        IUniswapV3PoolDerivedState poolContract = IUniswapV3PoolDerivedState(pool);
+        // Get the TWAP.
+        (int56[] memory tickCumulatives, ) = poolContract.observe(new uint32[](2){0, interval});
+        int56 tickCumulativeDelta = tickCumulatives[1] - tickCumulatives[0];
+        // We don't mind rounding the twapTick to 0 (price to 1).
+        int24 twapTick = int24(tickCumulativeDelta / interval);
+        twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
     }
 
     /*

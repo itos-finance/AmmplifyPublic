@@ -69,6 +69,16 @@ contract AdminFacet is TimedAdminFacet {
         emit CompoundThresholdSet(pool, threshold);
     }
 
+    function setTwapInterval(address pool, uint32 interval) external {
+        AdminLib.validateOwner();
+        Store.fees().twapIntervals[pool] = interval;
+    }
+
+    function setDefaultTwapInterval(uint32 interval) external {
+        AdminLib.validateOwner();
+        Store.fees().defaultTwapInterval = interval;
+    }
+
     function setJITPenalties(uint64 lifetime, uint64 penaltyX64) external {
         AdminLib.validateOwner();
         Store.fees().jitLifetime = lifetime;
@@ -84,13 +94,15 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold
+            uint128 compoundThreshold,
+            uint32 twapInterval
         )
     {
         FeeStore storage store = Store.fees();
         feeCurve = store.feeCurves[pool];
         splitCurve = store.splitCurves[pool];
         compoundThreshold = store.compoundThresholds[pool];
+        twapInterval = store.twapIntervals[pool];
     }
 
     function getDefaultFeeConfig()
@@ -100,6 +112,7 @@ contract AdminFacet is TimedAdminFacet {
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
             uint128 compoundThreshold,
+            uint32 twapInterval,
             uint64 jitLifetime,
             uint64 jitPenaltyX64
         )
@@ -108,6 +121,7 @@ contract AdminFacet is TimedAdminFacet {
         feeCurve = store.defaultFeeCurve;
         splitCurve = store.defaultSplitCurve;
         compoundThreshold = store.defaultCompoundThreshold;
+        twapInterval = store.defaultTwapInterval;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;
     }

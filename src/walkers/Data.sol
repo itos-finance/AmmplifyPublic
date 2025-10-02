@@ -20,6 +20,7 @@ struct Data {
     bytes32 assetStore;
     uint160 sqrtPriceX96;
     int24 currentTick;
+    uint160 twapSqrtPriceX96; // A more robust measure of price. Before allowing takers we should add observations to the pool.
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
@@ -62,6 +63,7 @@ library DataImpl {
             assetSlot := asset.slot
         }
         uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
+        uint160 twapSqrtPriceX96 = PoolLib.getTwapSqrtPriceX96(pInfo.poolAddr);
         require(
             currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
             PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
@@ -74,6 +76,7 @@ library DataImpl {
                 assetStore: assetSlot,
                 sqrtPriceX96: currentSqrtPriceX96,
                 currentTick: pInfo.currentTick,
+                twapSqrtPriceX96: twapSqrtPriceX96,
                 timestamp: treeTimestamp,
                 liq: LiqDataLib.make(asset, pInfo, liq),
                 fees: FeeDataLib.make(pInfo),
@@ -100,13 +103,10 @@ library DataImpl {
         }
         (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
 
-        int24 gmTick = lowTick + (highTick - lowTick) / 2; // The tick of the geometric mean.
-
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
-        uint160 gmSqrtPriceX96 = TickMath.getSqrtPriceAtTick(gmTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-        xBorrows = SqrtPriceMath.getAmount0Delta(gmSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
-        yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, gmSqrtPriceX96, liq, roundUp);
+        xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
     }
 
     function computeBalances(
