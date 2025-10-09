@@ -29,9 +29,15 @@ struct LiqNode {
     // This is updated after all changes to mliq are completed.
     uint256 subtreeMLiq;
     uint256 subtreeTLiq;
-    uint256 subtreeBorrowedX; // Taker required for fee calculation.
+    // Taker required for fee calculation.
+    uint256 borrowedX;
+    uint256 borrowedY;
+    uint256 subtreeBorrowedX;
     uint256 subtreeBorrowedY;
-    // Swap fee earnings checkpointing
+    uint128 xTLiq; // The amount of taker liq borrowing as x.
+    // Dirty bit for liquidity modifications.
+    bool dirty;
+    // Swap fee earnings checkpointing - Also used by takers to measure swap fees owed.
     uint256 feeGrowthInside0X128;
     uint256 feeGrowthInside1X128;
     // Liq Redistribution
@@ -39,8 +45,6 @@ struct LiqNode {
     uint128 lent;
     int128 preBorrow;
     int128 preLend;
-    // Dirty flags for liquidity modifications.
-    uint8 dirty;
 }
 
 using LiqNodeImpl for LiqNode global;
@@ -114,13 +118,16 @@ struct LiqData {
     // Fees collected from the underlying pool's swaps, saved across all operations.
     uint128 xFeesCollected;
     uint128 yFeesCollected;
+    // For taker only
+    bool asX; // To save the subtree borrow balance as x or y.
 }
 
 library LiqDataLib {
     function make(
         Asset storage asset,
         PoolInfo memory pInfo,
-        uint128 targetLiq
+        uint128 targetLiq,
+        uint160 currentSqrtPriceX96
     ) internal view returns (LiqData memory) {
         FeeStore storage feeStore = Store.fees();
 
@@ -138,7 +145,8 @@ library LiqDataLib {
                 rightMLiqPrefix: 0,
                 rightTLiqPrefix: 0,
                 xFeesCollected: feeStore.standingX[pInfo.poolAddr],
-                yFeesCollected: feeStore.standingY[pInfo.poolAddr]
+                yFeesCollected: feeStore.standingY[pInfo.poolAddr],
+                asX: (asset.freezeSqrtPriceX96 >= currentSqrtPriceX96) // only used if taker.
             });
     }
 }
@@ -177,15 +185,20 @@ library LiqWalker {
         }
 
         // Update subtree liqs.
+        // We assume we're basically always compounding so we always have to update subtrees.
         if (iter.width > 1) {
             (Key lk, Key rk) = key.children();
             Node storage lNode = data.node(lk);
             Node storage rNode = data.node(rk);
             node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
             node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
+            node.liq.subtreeBorrowedX = lNode.liq.subtreeBorrowedX + rNode.liq.subtreeBorrowedX + node.liq.borrowedX;
+            node.liq.subtreeBorrowedY = lNode.liq.subtreeBorrowedY + rNode.liq.subtreeBorrowedY + node.liq.borrowedY;
         } else {
             node.liq.subtreeMLiq = node.liq.mLiq;
             node.liq.subtreeTLiq = node.liq.tLiq;
+            node.liq.subtreeBorrowedX = node.liq.borrowedX;
+            node.liq.subtreeBorrowedY = node.liq.borrowedY;
         }
 
         // Make sure our liquidity is solvent at each node. This must happened regardless of visit.
@@ -246,11 +259,10 @@ library LiqWalker {
         );
         uint256 feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
         uint256 feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
+        // This raw fee growth is what's owed by Takers.
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
-        // Any takers here need to be charged.
-        node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
-        node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
+
         // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
         data.liq.xFeesCollected = FeeWalker.add128Fees(
             data.liq.xFeesCollected,
@@ -318,7 +330,7 @@ library LiqWalker {
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
-        collectFees(aNode, node, data);
+        collectFees(iter.key, aNode, node, data, targetLiq);
 
         // Then we do the liquidity modification.
         uint128 sliq = aNode.sliq; // Our current liquidity balance.
@@ -412,11 +424,14 @@ library LiqWalker {
             if (sliq < targetLiq) {
                 uint128 liqDiff = targetLiq - sliq;
                 node.liq.tLiq += liqDiff;
+                if (data.takeAsX) {
+                    node.liq.xTLiq += liqDiff;
+                }
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
-                node.liq.subtreeBorrowedX += xBorrow;
-                node.liq.subtreeBorrowedY += yBorrow;
+                node.liq.borrowedX += xBorrow;
+                node.liq.borrowedY += yBorrow;
                 // But the actual balances they get are based on the current price.
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xBalance);
@@ -424,9 +439,12 @@ library LiqWalker {
             } else if (sliq > targetLiq) {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.tLiq -= liqDiff;
+                if (data.takeAsX) {
+                    node.liq.xTLiq -= liqDiff;
+                }
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
-                node.liq.subtreeBorrowedX -= xBorrow;
-                node.liq.subtreeBorrowedY -= yBorrow;
+                node.liq.borrowedX -= xBorrow;
+                node.liq.borrowedY -= yBorrow;
                 // Takers need to return the assets to the pool according to the current proportion.
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xBalance);
@@ -522,6 +540,8 @@ library LiqWalker {
 
     /// Collect non-liquidating maker fees or pay taker fees.
     /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
+    /// @param targetLiq The new liquidity we'll be modifying to. This is only relevant for Takers as our checkpoint
+    /// is a function of the positions liquidity.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {
@@ -547,11 +567,17 @@ library LiqWalker {
             aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
         } else if (data.liq.liqType == LiqType.TAKER) {
-            // Now we pay the taker fees.
-            data.xFees += FullMath.mulX128(liq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
-            data.yFees += FullMath.mulX128(liq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
-            aNode.fee0CheckX128 = node.fees.takerXFeesPerLiqX128;
-            aNode.fee1CheckX128 = node.fees.takerYFeesPerLiqX128;
+            uint256 takerXFeesPerLiqX128 = node.liq.feeGrowthInside0X128 + node.fees.takerXFeesPerLiqX128;
+            uint256 takerYFeesPerLiqX128 = node.liq.feeGrowthInside1X128 + node.fees.takerYFeesPerLiqX128;
+            if (data.takeAsX) {
+                takerXFeesPerLiqX128 += node.fees.xTakerFeesPerLiqX128;
+            } else {
+                takerYFeesPerLiqX128 += node.fees.yTakerFeesPerLiqX128;
+            }
+            data.xFees += FullMath.mulX128(liq, takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
+            data.yFees += FullMath.mulX128(liq, takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
+            aNode.fee0CheckX128 = takerXFeesPerLiqX128;
+            aNode.fee1CheckX128 = takerYFeesPerLiqX128;
         }
     }
 

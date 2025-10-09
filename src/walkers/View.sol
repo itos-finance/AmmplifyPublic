@@ -22,6 +22,7 @@ struct ViewData {
     bytes32 assetStore;
     uint160 sqrtPriceX96;
     int24 currentTick;
+    bool takeAsX; // cache it outside the asset for gas savings.
     uint128 timestamp; // The last time the pool was modified.
     FeeData fees;
     LiqData liq;
@@ -67,6 +68,7 @@ library ViewDataImpl {
                 assetStore: assetSlot,
                 sqrtPriceX96: currentSqrtPriceX96,
                 currentTick: pInfo.currentTick,
+                takeAsX: asset.takeAsX,
                 timestamp: pool.timestamp,
                 liq: LiqDataLib.make(asset, pInfo, 0),
                 fees: FeeDataLib.make(pInfo),
@@ -100,15 +102,14 @@ library ViewDataImpl {
         if (liq == 0) {
             return (0, 0);
         }
-        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
-
-        int24 gmTick = lowTick + (highTick - lowTick) / 2; // The tick of the geometric mean.
-
-        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
-        uint160 gmSqrtPriceX96 = TickMath.getSqrtPriceAtTick(gmTick);
-        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-        xBorrows = SqrtPriceMath.getAmount0Delta(gmSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
-        yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, gmSqrtPriceX96, liq, roundUp);
+        (xBorrows, yBorrows) = DataImpl._computeBorrow(
+            self.fees.rootWidth,
+            self.fees.tickSpacing,
+            self.takeAsX,
+            key,
+            liq,
+            roundUp
+        );
     }
 
     function computeBalances(
@@ -181,8 +182,11 @@ library ViewWalker {
 
             // Now claim the unclaimed/unpaid fees.
             if (data.liq.liqType == LiqType.TAKER) {
-                data.earningsX += FullMath.mulDivRoundingUp(unpaidX, aNode.sliq, node.liq.subtreeTLiq);
-                data.earningsY += FullMath.mulDivRoundingUp(unpaidY, aNode.sliq, node.liq.subtreeTLiq);
+                if (data.takeAsX) {
+                    data.earningsX += FullMath.mulDivRoundingUp(unpaidX, aNode.sliq, node.liq.subtreeTLiq);
+                } else {
+                    data.earningsY += FullMath.mulDivRoundingUp(unpaidY, aNode.sliq, node.liq.subtreeTLiq);
+                }
             } else {
                 data.earningsX += FullMath.mulDiv(unclaimedX, aNode.sliq, node.liq.subtreeMLiq);
                 data.earningsY += FullMath.mulDiv(unclaimedY, aNode.sliq, node.liq.subtreeMLiq);

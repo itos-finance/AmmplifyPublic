@@ -21,6 +21,7 @@ struct Data {
     uint160 sqrtPriceX96;
     int24 currentTick;
     uint160 twapSqrtPriceX96; // A more robust measure of price.
+    bool takeAsX; // cache it outside the asset for gas savings.
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
@@ -64,6 +65,7 @@ library DataImpl {
         }
         uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
         uint160 twapSqrtPriceX96 = PoolLib.getTwapSqrtPriceX96(pInfo.poolAddr);
+
         require(
             currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
             PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
@@ -77,8 +79,9 @@ library DataImpl {
                 sqrtPriceX96: currentSqrtPriceX96,
                 currentTick: pInfo.currentTick,
                 twapSqrtPriceX96: twapSqrtPriceX96,
+                takeAsX: asset.takeAsX,
                 timestamp: treeTimestamp,
-                liq: LiqDataLib.make(asset, pInfo, liq),
+                liq: LiqDataLib.make(asset, pInfo, liq, currentSqrtPriceX96),
                 fees: FeeDataLib.make(pInfo),
                 // Outputs
                 xBalance: 0,
@@ -92,7 +95,7 @@ library DataImpl {
             });
     }
 
-    function computeBorrows(
+    function computeBorrow(
         Data memory self,
         Key key,
         uint128 liq,
@@ -101,12 +104,29 @@ library DataImpl {
         if (liq == 0) {
             return (0, 0);
         }
-        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
 
+        return _computeBorrow(self.fees.rootWidth, self.fees.tickSpacing, self.takeAsX, key, liq, roundUp);
+    }
+
+    /// Data agnostic helper to compute the borrow amounts.
+    function _computeBorrow(
+        uint24 rootWidth,
+        int24 tickSpacing,
+        bool takeAsX,
+        Key key,
+        uint128 liq,
+        bool roundUp
+    ) internal pure returns (uint256 xBorrows, uint256 yBorrows) {
+        (int24 lowTick, int24 highTick) = key.ticks(rootWidth, tickSpacing);
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-        xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
-        yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        if (takeAsX) {
+            xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+            yBorrows = 0;
+        } else {
+            xBorrows = 0;
+            yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        }
     }
 
     function computeBalances(
