@@ -124,7 +124,8 @@ library LiqDataLib {
     function make(
         Asset storage asset,
         PoolInfo memory pInfo,
-        uint128 targetLiq
+        uint128 targetLiq,
+        uint160 currentSqrtPriceX96
     ) internal view returns (LiqData memory) {
         FeeStore storage feeStore = Store.fees();
 
@@ -326,7 +327,7 @@ library LiqWalker {
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
-        collectFees(aNode, node, data);
+        collectFees(iter.key, aNode, node, data, targetLiq);
 
         // Then we do the liquidity modification.
         uint128 sliq = aNode.sliq; // Our current liquidity balance.
@@ -536,6 +537,8 @@ library LiqWalker {
 
     /// Collect non-liquidating maker fees or pay taker fees.
     /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
+    /// @param targetLiq The new liquidity we'll be modifying to. This is only relevant for Takers as our checkpoint
+    /// is a function of the positions liquidity.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {

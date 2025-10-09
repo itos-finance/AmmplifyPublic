@@ -81,7 +81,7 @@ library DataImpl {
                 twapSqrtPriceX96: twapSqrtPriceX96,
                 takeAsX: asset.takeAsX,
                 timestamp: treeTimestamp,
-                liq: LiqDataLib.make(asset, pInfo, liq),
+                liq: LiqDataLib.make(asset, pInfo, liq, currentSqrtPriceX96),
                 fees: FeeDataLib.make(pInfo),
                 // Outputs
                 xBalance: 0,
