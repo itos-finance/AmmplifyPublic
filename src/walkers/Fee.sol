@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
+import { UnsafeMath } from "Commons/Math/UnsafeMath.sol";
 import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
@@ -154,7 +155,7 @@ library FeeWalker {
                     node.fees.unpaidTakerXFees = 0;
                 } else {
                     // We round down to avoid underpaying dust
-                    node.fees.unpaidTakerXFees -= (myUnpaidX128 >> 128);
+                    node.fees.unpaidTakerXFees -= uint128(myUnpaidX128 >> 128);
                 }
                 myUnpaidX128 = FullMath.mulDivRoundingUp(
                     uint256(node.fees.unpaidTakerYFees) << 128,
@@ -168,7 +169,7 @@ library FeeWalker {
                 if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
                     node.fees.unpaidTakerYFees = 0;
                 } else {
-                    node.fees.unpaidTakerYFees -= (myUnpaidX128 >> 128);
+                    node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
                 }
             }
             // Makers
@@ -292,23 +293,23 @@ library FeeWalker {
 
             // We propogate up our fees.
             if (key.isLeft()) {
-                data.fees.leftColMakerXRateX128 = colMakerXRateX128;
-                data.fees.leftColMakerYRateX128 = colMakerYRateX128;
-                data.fees.leftColTakerXRateX128 = colTakerXRateX128;
-                data.fees.leftColTakerYRateX128 = colTakerYRateX128;
-                data.fees.rightColMakerXRateX128 = 0;
-                data.fees.rightColMakerYRateX128 = 0;
-                data.fees.rightColTakerXRateX128 = 0;
-                data.fees.rightColTakerYRateX128 = 0;
+                data.fees.leftColMakerXEarningsPerLiqX128 = colMakerXRateX128;
+                data.fees.leftColMakerYEarningsPerLiqX128 = colMakerYRateX128;
+                data.fees.leftColTakerXEarningsPerLiqX128 = colTakerXRateX128;
+                data.fees.leftColTakerYEarningsPerLiqX128 = colTakerYRateX128;
+                data.fees.rightColMakerXEarningsPerLiqX128 = 0;
+                data.fees.rightColMakerYEarningsPerLiqX128 = 0;
+                data.fees.rightColTakerXEarningsPerLiqX128 = 0;
+                data.fees.rightColTakerYEarningsPerLiqX128 = 0;
             } else {
-                data.fees.rightColMakerXRateX128 = colMakerXRateX128;
-                data.fees.rightColMakerYRateX128 = colMakerYRateX128;
-                data.fees.rightColTakerXRateX128 = colTakerXRateX128;
-                data.fees.rightColTakerYRateX128 = colTakerYRateX128;
-                data.fees.leftColMakerXRateX128 = 0;
-                data.fees.leftColMakerYRateX128 = 0;
-                data.fees.leftColTakerXRateX128 = 0;
-                data.fees.leftColTakerYRateX128 = 0;
+                data.fees.rightColMakerXEarningsPerLiqX128 = colMakerXRateX128;
+                data.fees.rightColMakerYEarningsPerLiqX128 = colMakerYRateX128;
+                data.fees.rightColTakerXEarningsPerLiqX128 = colTakerXRateX128;
+                data.fees.rightColTakerYEarningsPerLiqX128 = colTakerYRateX128;
+                data.fees.leftColMakerXEarningsPerLiqX128 = 0;
+                data.fees.leftColMakerYEarningsPerLiqX128 = 0;
+                data.fees.leftColTakerXEarningsPerLiqX128 = 0;
+                data.fees.leftColTakerYEarningsPerLiqX128 = 0;
             }
 
             // We remove the prefix now, before we potentially visit the sibling.
@@ -424,7 +425,7 @@ library FeeWalker {
         // Then we calculate the payment made by the takers at and above the current node to set the taker rates.
         // And we calculate the payment made by the takers below the current node to set the unpaids.
         // And we use the total balances to set the maker rates and unclaimeds.
-        uint256 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
+        uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
         (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
         uint256 colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
         uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);

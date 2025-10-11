@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
+import { UnsafeMath } from "Commons/Math/UnsafeMath.sol";
 import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
@@ -215,13 +216,13 @@ library ViewWalker {
             uint24 width = key.width();
             // Takers
             if (node.liq.subtreeTLiq != 0) {
-                if (node.borrowedX == node.liq.subtreeBorrowedX) {
+                if (node.liq.borrowedX == node.liq.subtreeBorrowedX) {
                     // If we're fully borrowed, we take all the unpaid.
                     unpaidX = 0;
                 } else {
                     unpaidX -= FullMath.mulDiv(unpaidX, node.liq.borrowedX, node.liq.subtreeBorrowedX);
                 }
-                if (node.borrowedY == node.liq.subtreeBorrowedY) {
+                if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
                     unpaidY = 0;
                 } else {
                     unpaidY -= FullMath.mulDiv(unpaidY, node.liq.borrowedY, node.liq.subtreeBorrowedY);
@@ -408,7 +409,7 @@ library ViewWalker {
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
         uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
-        uint256 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
+        uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
         (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
         uint256 colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
         uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);

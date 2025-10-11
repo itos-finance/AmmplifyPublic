@@ -118,16 +118,13 @@ struct LiqData {
     // Fees collected from the underlying pool's swaps, saved across all operations.
     uint128 xFeesCollected;
     uint128 yFeesCollected;
-    // For taker only
-    bool asX; // To save the subtree borrow balance as x or y.
 }
 
 library LiqDataLib {
     function make(
         Asset storage asset,
         PoolInfo memory pInfo,
-        uint128 targetLiq,
-        uint160 currentSqrtPriceX96
+        uint128 targetLiq
     ) internal view returns (LiqData memory) {
         FeeStore storage feeStore = Store.fees();
 
@@ -145,8 +142,7 @@ library LiqDataLib {
                 rightMLiqPrefix: 0,
                 rightTLiqPrefix: 0,
                 xFeesCollected: feeStore.standingX[pInfo.poolAddr],
-                yFeesCollected: feeStore.standingY[pInfo.poolAddr],
-                asX: (asset.freezeSqrtPriceX96 >= currentSqrtPriceX96) // only used if taker.
+                yFeesCollected: feeStore.standingY[pInfo.poolAddr]
             });
     }
 }
@@ -330,7 +326,7 @@ library LiqWalker {
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
-        collectFees(iter.key, aNode, node, data, targetLiq);
+        collectFees(aNode, node, data);
 
         // Then we do the liquidity modification.
         uint128 sliq = aNode.sliq; // Our current liquidity balance.
@@ -429,7 +425,7 @@ library LiqWalker {
                 }
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
-                (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
+                (uint256 xBorrow, uint256 yBorrow) = data.computeBorrow(iter.key, liqDiff, true);
                 node.liq.borrowedX += xBorrow;
                 node.liq.borrowedY += yBorrow;
                 // But the actual balances they get are based on the current price.
@@ -442,7 +438,7 @@ library LiqWalker {
                 if (data.takeAsX) {
                     node.liq.xTLiq -= liqDiff;
                 }
-                (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
+                (uint256 xBorrow, uint256 yBorrow) = data.computeBorrow(iter.key, liqDiff, true);
                 node.liq.borrowedX -= xBorrow;
                 node.liq.borrowedY -= yBorrow;
                 // Takers need to return the assets to the pool according to the current proportion.
@@ -540,8 +536,6 @@ library LiqWalker {
 
     /// Collect non-liquidating maker fees or pay taker fees.
     /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
-    /// @param targetLiq The new liquidity we'll be modifying to. This is only relevant for Takers as our checkpoint
-    /// is a function of the positions liquidity.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {
