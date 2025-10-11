@@ -93,25 +93,6 @@ library ViewDataImpl {
             });
     }
 
-    function computeBorrows(
-        ViewData memory self,
-        Key key,
-        uint128 liq,
-        bool roundUp
-    ) internal pure returns (uint256 xBorrows, uint256 yBorrows) {
-        if (liq == 0) {
-            return (0, 0);
-        }
-        (xBorrows, yBorrows) = DataImpl._computeBorrow(
-            self.fees.rootWidth,
-            self.fees.tickSpacing,
-            self.takeAsX,
-            key,
-            liq,
-            roundUp
-        );
-    }
-
     function computeBalances(
         ViewData memory self,
         Key key,
@@ -149,8 +130,8 @@ library ViewDataImpl {
 library ViewWalker {
     using SmoothRateCurveLib for SmoothRateCurveConfig;
 
-    // On the way down, we collect earnings for the existing fees earned and the existing unclaimed balances.
-    // Then on visit nodes we pay any true fee rates. Then we add the liquidity balances.
+    // On the way down, we collect our portion of the earnings for any unclaimed/unpaids at visits.
+    // But instead of waiting for the up to earn the true fee rates, we can also do tha ton the down.
     function down(Key key, bool visit, ViewData memory data) internal view {
         // On the way down, we accumulate the prefixes and claim fees.
         Node storage node = data.node(key);
@@ -183,9 +164,27 @@ library ViewWalker {
             // Now claim the unclaimed/unpaid fees.
             if (data.liq.liqType == LiqType.TAKER) {
                 if (data.takeAsX) {
-                    data.earningsX += FullMath.mulDivRoundingUp(unpaidX, aNode.sliq, node.liq.subtreeTLiq);
+                    uint256 nodeUnpaidX128 = FullMath.mulDivRoundingUp(
+                        unpaidX << 128,
+                        node.liq.borrowedX,
+                        node.liq.subtreeBorrowedX
+                    );
+                    data.earningsX += FullMath.mulX128(
+                        UnsafeMath.divRoundingUp(nodeUnpaidX128, node.liq.xTLiq),
+                        aNode.sliq,
+                        true
+                    );
                 } else {
-                    data.earningsY += FullMath.mulDivRoundingUp(unpaidY, aNode.sliq, node.liq.subtreeTLiq);
+                    uint256 nodeUnpaidX128 = FullMath.mulDivRoundingUp(
+                        unpaidY << 128,
+                        node.liq.borrowedY,
+                        node.liq.subtreeBorrowedY
+                    );
+                    data.earningsY += FullMath.mulX128(
+                        UnsafeMath.divRoundingUp(nodeUnpaidX128, node.liq.tLiq - node.liq.xTLiq),
+                        aNode.sliq,
+                        true
+                    );
                 }
             } else {
                 data.earningsX += FullMath.mulDiv(unclaimedX, aNode.sliq, node.liq.subtreeMLiq);
@@ -193,7 +192,7 @@ library ViewWalker {
             }
 
             // Now charge the true fee rate which will always be the case with visits.
-            // Note that the prefix has not been added because we visit the visit sibling before the prop
+            // Note that the prefix has not been added because we visit sibling before the prop
             // sibling on the way down.
             chargeTrueFeeRate(key, node, aNode, data);
 
@@ -215,16 +214,23 @@ library ViewWalker {
             // If we're not visiting, we just have to propogate down the unclaims/unpaids to the visit nodes.
             uint24 width = key.width();
             // Takers
-            uint256 nodeLiq;
             if (node.liq.subtreeTLiq != 0) {
-                nodeLiq = node.liq.tLiq * width;
-                unpaidX -= FullMath.mulDiv(unpaidX, nodeLiq, node.liq.subtreeTLiq);
-                unpaidY -= FullMath.mulDiv(unpaidY, nodeLiq, node.liq.subtreeTLiq);
+                if (node.borrowedX == node.liq.subtreeBorrowedX) {
+                    // If we're fully borrowed, we take all the unpaid.
+                    unpaidX = 0;
+                } else {
+                    unpaidX -= FullMath.mulDiv(unpaidX, node.liq.borrowedX, node.liq.subtreeBorrowedX);
+                }
+                if (node.borrowedY == node.liq.subtreeBorrowedY) {
+                    unpaidY = 0;
+                } else {
+                    unpaidY -= FullMath.mulDiv(unpaidY, node.liq.borrowedY, node.liq.subtreeBorrowedY);
+                }
             }
 
             // Makers
             if (node.liq.subtreeMLiq != 0) {
-                nodeLiq = node.liq.mLiq * width;
+                uint256 nodeLiq = node.liq.mLiq * width;
                 unclaimedX -= FullMath.mulDivRoundingUp(unclaimedX, nodeLiq, node.liq.subtreeMLiq);
                 unclaimedY -= FullMath.mulDivRoundingUp(unclaimedY, nodeLiq, node.liq.subtreeMLiq);
             }
@@ -370,22 +376,21 @@ library ViewWalker {
                 false
             );
         } else {
-            data.earningsX += FullMath.mulX128(
-                aNode.sliq,
-                fee0DiffX128 + node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128,
-                true
-            );
-            data.earningsY += FullMath.mulX128(
-                aNode.sliq,
-                fee1DiffX128 + node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128,
-                true
-            );
+            if (data.takeAsX) {
+                fee0DiffX128 += node.fees.xTakerFeesPerLiqX128;
+            } else {
+                fee1DiffX128 += node.fees.yTakerFeesPerLiqX128;
+            }
+            fee0DiffX128 += node.fees.takerXFeesPerLiqX128;
+            fee1DiffX128 += node.fees.takerYFeesPerLiqX128;
+            data.earningsX += FullMath.mulX128(aNode.sliq, fee0DiffX128 - aNode.fee0CheckX128, true);
+            data.earningsY += FullMath.mulX128(aNode.sliq, fee1DiffX128 - aNode.fee1CheckX128, true);
         }
     }
 
-    /// @notice Called on visited nodes to charge them their subtree exact fees.
+    /// @notice Called on visited nodes to charge them their exact fees.
     /// Because this is for viewing, we don't need to worry about the subtree unclaim/unpaids and just
-    /// charge the rates. We DO NOT add the earnings to data here.
+    /// charge the rates and add it to our data earnings.
     /// @dev This assumes the prefix does not include the current node's liquidity.
     function chargeTrueFeeRate(
         Key key,
@@ -403,28 +408,26 @@ library ViewWalker {
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
         uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
-        (uint256 totalXBorrows, uint256 totalYBorrows) = data.computeBorrows(key, data.liq.tLiqPrefix, true);
-        totalXBorrows += node.liq.subtreeBorrowedX;
-        totalYBorrows += node.liq.subtreeBorrowedY;
-        uint256 colXPaid = FullMath.mulX64(totalXBorrows, takerRateX64, true);
-        uint256 colYPaid = FullMath.mulX64(totalYBorrows, takerRateX64, true);
-
-        // Determine our column rates.
-        // We round down but add one to ensure that taker rates are never 0 if visited.
-        // This is important for indicating no fees vs. uncalculated fees.
-        // We don't need this for view but we do this to match the modifying version.
-        uint256 colTakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalTLiq) + 1;
-        uint256 colTakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalTLiq) + 1;
-        uint256 colMakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalMLiq);
-        uint256 colMakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalMLiq);
-
+        uint256 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
+        (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
+        uint256 colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
+        uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
         if (data.liq.liqType == LiqType.TAKER) {
-            data.earningsX += FullMath.mulX128(aNode.sliq, colTakerXRateX128, true);
-            data.earningsY += FullMath.mulX128(aNode.sliq, colTakerYRateX128, true);
-        } else {
-            // Compounding liq would earn the same amount here.
-            data.earningsX += FullMath.mulX128(aNode.sliq, colMakerXRateX128, false);
-            data.earningsY += FullMath.mulX128(aNode.sliq, colMakerYRateX128, false);
+            data.earningsX += FullMath.mulDivRoundingUp(colXPaid, aNode.sliq, aboveTLiq);
+            data.earningsY += FullMath.mulDivRoundingUp(colYPaid, aNode.sliq, aboveTLiq);
+            // If we're a taker we can stop here.
+            return;
         }
+        // If we're paying makers, we need the full column payment.
+        uint256 childrenXPaid = FullMath.mulX64(node.liq.subtreeBorrowedX - node.liq.borrowedX, takerRateX64, true);
+        uint256 childrenYPaid = FullMath.mulX64(node.liq.subtreeBorrowedY - node.liq.borrowedY, takerRateX64, true);
+        colXPaid += childrenXPaid;
+        colYPaid += childrenYPaid;
+
+        uint128 liq = (data.liq.liqType == LiqType.MAKER)
+            ? uint128(FullMath.mulDiv(node.liq.mLiq - node.liq.ncLiq, aNode.sliq, node.liq.shares))
+            : aNode.sliq;
+        data.earningsX += FullMath.mulDiv(colXPaid, liq, totalMLiq);
+        data.earningsY += FullMath.mulDiv(colYPaid, liq, totalMLiq);
     }
 }

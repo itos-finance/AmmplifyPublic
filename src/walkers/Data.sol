@@ -105,22 +105,10 @@ library DataImpl {
             return (0, 0);
         }
 
-        return _computeBorrow(self.fees.rootWidth, self.fees.tickSpacing, self.takeAsX, key, liq, roundUp);
-    }
-
-    /// Data agnostic helper to compute the borrow amounts.
-    function _computeBorrow(
-        uint24 rootWidth,
-        int24 tickSpacing,
-        bool takeAsX,
-        Key key,
-        uint128 liq,
-        bool roundUp
-    ) internal pure returns (uint256 xBorrows, uint256 yBorrows) {
-        (int24 lowTick, int24 highTick) = key.ticks(rootWidth, tickSpacing);
+        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-        if (takeAsX) {
+        if (self.takeAsX) {
             xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
             yBorrows = 0;
         } else {

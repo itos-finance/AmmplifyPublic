@@ -450,8 +450,8 @@ library FeeWalker {
         // Implicit is that maker liq below and maker liq above should earn the same amount which is not true
         // but is a resonable approximation that is true in the limit of a totally efficient market.
         uint256 aboveMLiqRatioX256 = FullMath.mulDivX256(aboveMLiq * width, totalMLiq, false);
-        uint256 aboveXEarned = FullMath.mulX256(totalXPaid, aboveMLiqRatioX256, false);
-        uint256 aboveYEarned = FullMath.mulX256(totalYPaid, aboveMLiqRatioX256, false);
+        uint256 aboveXEarned = FullMath.mulX256(colXPaid, aboveMLiqRatioX256, false);
+        uint256 aboveYEarned = FullMath.mulX256(colYPaid, aboveMLiqRatioX256, false);
         if (aboveMLiq != 0) {
             colMakerXRateX128 = FullMath.mulDiv(aboveXEarned, 1 << 128, aboveMLiq);
             colMakerYRateX128 = FullMath.mulDiv(aboveYEarned, 1 << 128, aboveMLiq);
