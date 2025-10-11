@@ -115,17 +115,19 @@ struct LiqData {
     uint128 leftTLiqPrefix;
     uint128 rightMLiqPrefix; // The final prefix after the right walk down.
     uint128 rightTLiqPrefix;
+<<<<<<< HEAD
     // Fees collected from the underlying pool's swaps, saved across all operations.
     uint128 xFeesCollected;
     uint128 yFeesCollected;
+=======
+>>>>>>> a6b4a8c (src building, need to update test)
 }
 
 library LiqDataLib {
     function make(
         Asset storage asset,
         PoolInfo memory pInfo,
-        uint128 targetLiq,
-        uint160 currentSqrtPriceX96
+        uint128 targetLiq
     ) internal view returns (LiqData memory) {
         FeeStore storage feeStore = Store.fees();
 
@@ -141,9 +143,13 @@ library LiqDataLib {
                 leftMLiqPrefix: 0,
                 leftTLiqPrefix: 0,
                 rightMLiqPrefix: 0,
+<<<<<<< HEAD
                 rightTLiqPrefix: 0,
                 xFeesCollected: feeStore.standingX[pInfo.poolAddr],
                 yFeesCollected: feeStore.standingY[pInfo.poolAddr]
+=======
+                rightTLiqPrefix: 0
+>>>>>>> a6b4a8c (src building, need to update test)
             });
     }
 }
@@ -327,7 +333,7 @@ library LiqWalker {
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
-        collectFees(iter.key, aNode, node, data, targetLiq);
+        collectFees(aNode, node, data);
 
         // Then we do the liquidity modification.
         uint128 sliq = aNode.sliq; // Our current liquidity balance.
@@ -537,8 +543,6 @@ library LiqWalker {
 
     /// Collect non-liquidating maker fees or pay taker fees.
     /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
-    /// @param targetLiq The new liquidity we'll be modifying to. This is only relevant for Takers as our checkpoint
-    /// is a function of the positions liquidity.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {
