@@ -76,7 +76,6 @@ contract TakerFacet is ReentrancyGuardTransient {
             ticks[0],
             ticks[1],
             liq,
-            freezeSqrtPriceX96,
             vaultIndices[0],
             vaultIndices[1]
         );

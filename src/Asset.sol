@@ -90,7 +90,6 @@ library AssetLib {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        uint160 freezeSqrtPriceX96,
         uint8 xVaultIndex,
         uint8 yVaultIndex
     ) internal returns (Asset storage asset, uint256 assetId) {

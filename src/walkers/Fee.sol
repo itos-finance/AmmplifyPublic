@@ -154,7 +154,6 @@ library FeeWalker {
             // Takers
             if (node.liq.tLiq > 0) {
                 // Unlike makers, we divy via borrowed balances.
-<<<<<<< HEAD
                 console.log("subtree borrowed x:", node.liq.subtreeBorrowedX, node.liq.borrowedX);
                 if (node.liq.borrowedX > 0) {
                     uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
@@ -186,34 +185,6 @@ library FeeWalker {
                     } else {
                         node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
                     }
-=======
-                uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
-                    uint256(node.fees.unpaidTakerXFees) << 128,
-                    node.liq.borrowedX,
-                    node.liq.subtreeBorrowedX
-                );
-                node.fees.xTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(myUnpaidX128, node.liq.xTLiq);
-                if (node.liq.borrowedX == node.liq.subtreeBorrowedX) {
-                    // If we're the entire subtree, we can just zero it out.
-                    node.fees.unpaidTakerXFees = 0;
-                } else {
-                    // We round down to avoid underpaying dust
-                    node.fees.unpaidTakerXFees -= uint128(myUnpaidX128 >> 128);
-                }
-                myUnpaidX128 = FullMath.mulDivRoundingUp(
-                    uint256(node.fees.unpaidTakerYFees) << 128,
-                    node.liq.borrowedY,
-                    node.liq.subtreeBorrowedY
-                );
-                node.fees.yTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(
-                    myUnpaidX128,
-                    node.liq.tLiq - node.liq.xTLiq
-                );
-                if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
-                    node.fees.unpaidTakerYFees = 0;
-                } else {
-                    node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
->>>>>>> a6b4a8c (src building, need to update test)
                 }
             }
             // Makers
@@ -463,7 +434,6 @@ library FeeWalker {
             takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
         }
 
-<<<<<<< HEAD
         uint256 colXPaid;
         uint256 colYPaid;
         {
@@ -483,25 +453,6 @@ library FeeWalker {
                 colRatesX128[2] = 1;
                 colRatesX128[3] = 1;
             }
-=======
-        uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
-        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint64((totalTLiq << 64) / totalMLiq));
-        // Then we calculate the payment made by the takers at and above the current node to set the taker rates.
-        // And we calculate the payment made by the takers below the current node to set the unpaids.
-        // And we use the total balances to set the maker rates and unclaimeds.
-        uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
-        (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
-        uint256 colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
-        uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
-        // We round down column taker rates but add one to ensure that taker rates are never 0 if visited.
-        // This is important for indicating no fees vs. uncalculated fees.
-        if (aboveTLiq != 0) {
-            colTakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, aboveTLiq) + 1;
-            colTakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, aboveTLiq) + 1;
-        } else {
-            colTakerXRateX128 = 1;
-            colTakerYRateX128 = 1;
->>>>>>> a6b4a8c (src building, need to update test)
         }
 
         // Now we compute the unpaids for subtree borrows.
