@@ -17,7 +17,6 @@ struct Asset {
     int24 highTick;
     LiqType liqType;
     /* For Takers */
-    uint160 freezeSqrtPriceX96;
     bool takeAsX; // If the asset is a taker, are we borrowing as x or y?
     uint8 xVaultIndex;
     uint8 yVaultIndex;
@@ -91,7 +90,6 @@ library AssetLib {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        uint160 freezeSqrtPriceX96,
         uint8 xVaultIndex,
         uint8 yVaultIndex
     ) internal returns (Asset storage asset, uint256 assetId) {
@@ -108,7 +106,6 @@ library AssetLib {
         asset.liq = liq;
         asset.xVaultIndex = xVaultIndex;
         asset.yVaultIndex = yVaultIndex;
-        asset.freezeSqrtPriceX96 = freezeSqrtPriceX96;
         // Takers borrow in x if its mean price is greater than the current price.
         asset.takeAsX = lowTick + highTick > 2 * pInfo.currentTick;
         updateTimestamp(asset);
