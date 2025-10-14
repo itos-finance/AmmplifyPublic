@@ -153,6 +153,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         NFPM.approve(address(DECOMPOSER), positionId);
 
         // Set the token requester context so tokenRequestCB knows who to pull tokens from (if needed)
+        // and who to send residuals to.
         _currentTokenRequester = msg.sender;
 
         // Decompose the Uniswap V3 position
@@ -553,7 +554,17 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         int256[] calldata requests,
         bytes calldata /* data */
     ) external override returns (bytes memory cbData) {
-        // Only allow calls from MAKER_FACET
+        if (msg.sender == address(DECOMPOSER)) {
+            // We received some decompose residuals. Can forward to caller.
+            for (uint256 i = 0; i < tokens.length; ++i) {
+                if (requests[i] < 0) {
+                    TransferHelper.safeTransfer(tokens[i], _currentTokenRequester, uint256(-requests[i]));
+                }
+            }
+            return "";
+        }
+
+        // Otherwise, only allow calls from MAKER_FACET
         if (msg.sender != address(MAKER_FACET)) {
             revert OnlyMakerFacet(msg.sender);
         }

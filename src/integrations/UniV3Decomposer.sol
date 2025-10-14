@@ -5,7 +5,7 @@ pragma solidity ^0.8.28;
 // Imports must precede all other declarations to satisfy linters.
 // ─────────────────────────────────────────────────────────────────────────────
 import { MakerFacet } from "../facets/Maker.sol";
-import { RFTPayer } from "../../lib/Commons/src/Util/RFT.sol";
+import { RFTPayer, RFTLib } from "../../lib/Commons/src/Util/RFT.sol";
 import { IRFTPayer } from "../../lib/Commons/src/Util/RFT.sol";
 import { TransferHelper } from "../../lib/Commons/src/Util/TransferHelper.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -164,6 +164,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         bytes calldata /* data */
     ) external override returns (bytes memory) {
         if (msg.sender != address(MAKER)) revert OnlyMakerFacet(msg.sender);
+        bool hasRes = false;
+        int256[] memory residuals = new int256[](tokens.length);
         for (uint256 i = 0; i < tokens.length; ++i) {
             int256 change = deltas[i];
             address token = tokens[i];
@@ -172,10 +174,14 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
             }
             // After primary transfer, sweep any dust the contract may still hold for this token
             uint256 residual = IERC20(token).balanceOf(address(this));
-            if (residual > 0) {
-                TransferHelper.safeTransfer(token, caller, residual);
+            hasRes = hasRes || residual > 0;
+            if (residual > uint256(type(int256).max)) {
+                residuals[i] = -type(int256).max;
+            } else {
+                residuals[i] = -int256(residual);
             }
         }
+        if (hasRes) RFTLib.settle(caller, tokens, residuals, "");
         return "";
     }
 
