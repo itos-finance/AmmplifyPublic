@@ -13,6 +13,7 @@ contract AssetTest is Test {
         assertEq(Store.assets().nextAssetId, 0, "AssetStore.nextAssetId.default");
 
         address owner = makeAddr("cOwner");
+        AssetLib.addPermission(owner, msg.sender);
 
         // create maker not compounding
         PoolInfo memory pInfoNC;
@@ -76,27 +77,11 @@ contract AssetTest is Test {
         assertEq(ownerAssets[1], assetIdC, "ownerAssets[1].C");
     }
 
-    /// forge-config: default.allow_internal_expect_revert = true
-    function testRevertNewMakerMaxAssets() public {
-        address owner = makeAddr("owner");
-
-        PoolInfo memory pInfo;
-        pInfo.poolAddr = makeAddr("pool");
-
-        for (uint256 i = 0; i < AssetLib.MAX_ASSETS_PER_OWNER; i++) {
-            AssetLib.newMaker(owner, pInfo, -2000, -2000, 1e20, false);
-        }
-
-        vm.expectRevert(
-            abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER)
-        );
-        AssetLib.newMaker(owner, pInfo, -2000, -2000, 1e20, false);
-    }
-
     function testNewTaker() public {
         assertEq(Store.assets().nextAssetId, 0, "AssetStore.nextAssetId.default");
 
         address owner = makeAddr("owner");
+        AssetLib.addPermission(owner, msg.sender);
 
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
@@ -148,25 +133,9 @@ contract AssetTest is Test {
         AssetLib.newTaker(address(0x0), pInfo, -2000, -2000, 1e20, 0, 1);
     }
 
-    /// forge-config: default.allow_internal_expect_revert = true
-    function testRevertNewTakerMaxAssets() public {
-        address owner = makeAddr("owner");
-
-        PoolInfo memory pInfo;
-        pInfo.poolAddr = makeAddr("pool");
-
-        for (uint256 i = 0; i < AssetLib.MAX_ASSETS_PER_OWNER; i++) {
-            AssetLib.newTaker(owner, pInfo, -2000, -2000, 1e20, 0, 1);
-        }
-
-        vm.expectRevert(
-            abi.encodeWithSelector(AssetLib.ExcessiveAssetsPerOwner.selector, AssetLib.MAX_ASSETS_PER_OWNER)
-        );
-        AssetLib.newTaker(owner, pInfo, -2000, -2000, 1e20, 0, 1);
-    }
-
     function testGetAsset() public {
         address owner = makeAddr("owner");
+        AssetLib.addPermission(owner, msg.sender);
 
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
@@ -200,6 +169,7 @@ contract AssetTest is Test {
 
     function testRemoveAsset() public {
         address owner = makeAddr("owner");
+        AssetLib.addPermission(owner, msg.sender);
 
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
@@ -250,5 +220,43 @@ contract AssetTest is Test {
         vm.warp(200);
         AssetLib.updateTimestamp(asset);
         assertEq(asset.timestamp, 200, "asset.timestamp.updated2");
+    }
+
+    /// forge-config: default.allow_internal_expect_revert = true
+    function testPermissions() public {
+        address owner = makeAddr("owner");
+
+        PoolInfo memory pInfo;
+        pInfo.poolAddr = makeAddr("pool");
+
+        // maker
+        assertFalse(AssetLib.viewPermission(owner, msg.sender));
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+
+        // Add permission.
+        AssetLib.addPermission(owner, msg.sender);
+        assertTrue(AssetLib.viewPermission(owner, msg.sender));
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+
+        // Remove permission
+        AssetLib.removePermission(owner, msg.sender);
+        assertFalse(AssetLib.viewPermission(owner, msg.sender));
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+
+        // Add permissioned opener.
+        AssetLib.addPermissionedOpener(msg.sender);
+        assertTrue(AssetLib.viewPermission(owner, msg.sender));
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+
+        // Remove permissioned opener.
+        AssetLib.removePermissionedOpener(msg.sender);
+        assertFalse(AssetLib.viewPermission(owner, msg.sender));
+        vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+
+        // But we can always open for ourselves.
+        AssetLib.newMaker(msg.sender, pInfo, -2000, 2000, 1e20, false);
     }
 }

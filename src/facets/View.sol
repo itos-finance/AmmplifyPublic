@@ -99,4 +99,9 @@ contract ViewFacet {
             fees1 = data.earningsY;
         }
     }
+
+    /// Does this opener have permission to open positions for owner?
+    function queryPermission(address owner, address opener) external view returns (bool) {
+        return AssetLib.viewPermission(owner, opener);
+    }
 }

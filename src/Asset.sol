@@ -8,6 +8,8 @@ import { Store } from "./Store.sol";
 
 struct Asset {
     address owner;
+    // This is not consistent as it may change whenever an asset for the owner is removed.
+    uint96 assetIdx;
     /* pool info */
     address poolAddr;
     /* Position summary */
@@ -35,17 +37,18 @@ struct AssetNode {
 struct AssetStore {
     mapping(address owner => uint256[] assetIds) ownerAssets;
     mapping(uint256 assetId => Asset) assets;
+    mapping(address owner => mapping(address opener => bool)) permissions;
+    mapping(address opener => bool) permissionedOpeners;
     uint256 nextAssetId;
 }
 
 library AssetLib {
-    // We limit the number of assets per owner to prevent someone from blocking removes by overloading gas
-    // costs by donating positions to other users.
-    uint8 public constant MAX_ASSETS_PER_OWNER = 16;
+    uint256 public constant MAX_ASSETS_PER_OWNER = type(uint96).max;
 
     error NoRecipient();
     error ExcessiveAssetsPerOwner(uint256 count);
     error AssetNotFound(uint256 assetId);
+    error NotPermissioned(address owner, address attemptedOpener);
 
     /// Create a new maker asset.
     function newMaker(
@@ -112,26 +115,51 @@ library AssetLib {
     function removeAsset(uint256 assetId) internal {
         AssetStore storage store = Store.assets();
         Asset storage asset = store.assets[assetId];
+        require(asset.poolAddr != address(0), AssetNotFound(assetId));
         address owner = asset.owner;
+        uint96 idx = asset.assetIdx;
         // The asset nodes will have been removed by the walker.
         delete store.assets[assetId];
         uint256[] storage ownerAssets = store.ownerAssets[owner];
-        bool found = false;
-        for (uint8 i = 0; i < ownerAssets.length; i++) {
-            if (ownerAssets[i] == assetId) {
-                ownerAssets[i] = ownerAssets[ownerAssets.length - 1];
-                ownerAssets.pop();
-                found = true;
-                break;
-            }
-        }
-        require(found, AssetNotFound(assetId));
+        require(ownerAssets[idx] == assetId, AssetNotFound(assetId));
+        // Swap the last element with removed index.
+        ownerAssets[idx] = ownerAssets[ownerAssets.length - 1];
+        store.assets[ownerAssets[idx]].assetIdx = idx;
+        ownerAssets.pop();
     }
 
     /// Update the timestamp of when the asset was last modified.
     /// @dev This is for calculating JIT penalties.
     function updateTimestamp(Asset storage asset) internal {
         asset.timestamp = uint128(block.timestamp);
+    }
+
+    /* Permissions */
+
+    function addPermission(address owner, address opener) internal {
+        AssetStore storage store = Store.assets();
+        store.permissions[owner][opener] = true;
+    }
+
+    function removePermission(address owner, address opener) internal {
+        AssetStore storage store = Store.assets();
+        delete store.permissions[owner][opener];
+    }
+
+    function addPermissionedOpener(address opener) internal {
+        Store.assets().permissionedOpeners[opener] = true;
+    }
+
+    function removePermissionedOpener(address opener) internal {
+        delete Store.assets().permissionedOpeners[opener];
+    }
+
+    function viewPermission(address owner, address opener) internal view returns (bool) {
+        AssetStore storage store = Store.assets();
+        return (owner == address(0) ||
+            (owner == opener) ||
+            (store.permissionedOpeners[opener]) ||
+            store.permissions[owner][opener]);
     }
 
     /* Helpers */
@@ -141,6 +169,9 @@ library AssetLib {
             store.ownerAssets[owner].length < MAX_ASSETS_PER_OWNER,
             ExcessiveAssetsPerOwner(store.ownerAssets[owner].length)
         );
+        address opener = msg.sender;
+        require(viewPermission(owner, opener), NotPermissioned(owner, opener));
+        store.assets[assetId].assetIdx = uint96(store.ownerAssets[owner].length);
         store.ownerAssets[owner].push(assetId);
     }
 }

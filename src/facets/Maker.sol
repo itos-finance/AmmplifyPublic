@@ -154,6 +154,16 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         fees1 = uint256(-data.yBalance);
     }
 
+    /// Allow this address to open positions and give you ownership.
+    function addPermission(address opener) external {
+        AssetLib.addPermission(msg.sender, opener);
+    }
+
+    /// Remove this address from opening positions and giving you ownership.
+    function removePermission(address opener) external {
+        AssetLib.removePermission(msg.sender, opener);
+    }
+
     // TODO: Add function to compound a node. But to get the prefix accurately we have to walk down to that node.
     // Does taker fees need to update first to save on fees cuz mliq is going up?
     // Non-compounding liq is safe.

@@ -54,4 +54,7 @@ interface IView {
     function queryAssetBalances(
         uint256 assetId
     ) external view returns (int256 netBalance0, int256 netBalance1, uint256 fees0, uint256 fees1);
+
+    /// Query if the opener address has permission to open positions that the owner owns.
+    function queryPermission(address owner, address opener) external view returns (bool);
 }
