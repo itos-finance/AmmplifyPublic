@@ -15,6 +15,10 @@ import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfu
 import { IERC721Receiver } from "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 
+import { BitMath } from "../tree/BitMath.sol";
+import { TreeTickLib } from "../tree/Tick.sol";
+import { RouteImpl, Route } from "../tree/Route.sol";
+
 // ─────────────────────────────────────────────────────────────────────────────
 /// @title UniV3Decomposer
 /// @notice  Converts an existing Uniswap-V3 position NFT into an Ammplify Maker
@@ -30,7 +34,6 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
     address private transient caller;
-    uint128 public constant LIQUIDITY_OFFSET = 42;
 
     event Decomposed(
         uint256 indexed newAssetId,
@@ -51,29 +54,22 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     /// @notice Calculates the liquidity offset based on tick range
     /// @param tickLower The lower tick of the position
     /// @param tickUpper The upper tick of the position
+    /// @param tickSpacing The pool's tickSpacing
     /// @return liquidityOffset The calculated liquidity offset
-    function calculateLiquidityOffset(int24 tickLower, int24 tickUpper) internal pure returns (uint128 liquidityOffset) {
-        // Get sqrt prices at the tick boundaries
-        uint160 sqrtPriceLower = TickMath.getSqrtRatioAtTick(tickLower);
-        uint160 sqrtPriceUpper = TickMath.getSqrtRatioAtTick(tickUpper);
+    function calculateLiquidityOffset(int24 tickLower, int24 tickUpper, int24 tickSpacing) internal pure returns (uint128 liquidityOffset) {
+        uint24 rootWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
+        uint8 depth = BitMath.msbBit(rootWidth);
 
-        // Calculate Q96 * 42 / (sqrtPrice(high) - sqrtPrice(low))
-        // Q96 is 2^96
-        uint256 q96 = 1 << 96;
-        uint256 numerator = q96 * LIQUIDITY_OFFSET;
-        uint256 denominator = uint256(sqrtPriceUpper) - uint256(sqrtPriceLower);
-
-        // Ensure we don't divide by zero
-        if (denominator == 0) {
-            return LIQUIDITY_OFFSET; // fallback to the original constant
+        if (tickLower == tickUpper) {
+            // Single node.
+            return 2 + depth;
         }
 
-        liquidityOffset = uint128(numerator / denominator);
-
-        // Ensure minimum offset of 1 to avoid edge cases
-        if (liquidityOffset == 0) {
-            liquidityOffset = LIQUIDITY_OFFSET;
-        }
+        uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
+        uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing);
+        Route memory route = RouteImpl.make(rootWidth, treeLow, treeHigh);
+        uint8 lcaDepth = BitMath.msbBit(route.lca.width());
+        return depth + lcaDepth - BitMath.msbBit(route.left.width()) - BitMath.msbBit(route.right.width()) + 1;
     }
 
     /// @notice Prevents reentrancy by locking the contract during the call.
@@ -140,7 +136,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         if (poolAddr == address(0)) revert PoolNotDeployed();
 
         // Calculate dynamic liquidity offset based on tick range
-        uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper);
+        int24 tickSpacing = IUniswapV3PoolImmutables(pool).tickSpacing();
+        uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper, tickSpacing);
 
         newAssetId = MAKER.newMaker(
             msg.sender,
