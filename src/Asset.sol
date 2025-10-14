@@ -50,6 +50,11 @@ library AssetLib {
     error AssetNotFound(uint256 assetId);
     error NotPermissioned(address owner, address attemptedOpener);
 
+    event PermissionAdded(address owner, address opener);
+    event PermissionRemoved(address owner, address opener);
+    event PermissionedOpenerAdded(address opener);
+    event PermissionedOpenerRemoved(address opener);
+
     /// Create a new maker asset.
     function newMaker(
         address recipient,
@@ -139,19 +144,23 @@ library AssetLib {
     function addPermission(address owner, address opener) internal {
         AssetStore storage store = Store.assets();
         store.permissions[owner][opener] = true;
+        emit PermissionAdded(owner, opener);
     }
 
     function removePermission(address owner, address opener) internal {
         AssetStore storage store = Store.assets();
         delete store.permissions[owner][opener];
+        emit PermissionRemoved(owner, opener);
     }
 
     function addPermissionedOpener(address opener) internal {
         Store.assets().permissionedOpeners[opener] = true;
+        emit PermissionedOpenerAdded(opener);
     }
 
     function removePermissionedOpener(address opener) internal {
         delete Store.assets().permissionedOpeners[opener];
+        emit PermissionedOpenerRemoved(opener);
     }
 
     function viewPermission(address owner, address opener) internal view returns (bool) {
