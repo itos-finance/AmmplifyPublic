@@ -205,10 +205,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             revert NotAssetOwner(assetId, ownerOf(tokenId), msg.sender);
         }
 
-        // First collect fees from the position
-        (fees0, fees1) = MAKER_FACET.collectFees(msg.sender, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
-
-        // Then remove the maker position
+        // No need to collect fees. We can just remove immediately.
         (token0, token1, removedX, removedY) = MAKER_FACET.removeMaker(
             msg.sender,
             assetId,
