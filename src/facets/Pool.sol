@@ -17,7 +17,7 @@ contract PoolFacet is IUniswapV3MintCallback {
         address activeMint = PoolLib.poolGuard();
         require(msg.sender == activeMint, UnauthorizedMint(activeMint, msg.sender));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(activeMint);
-        TransferHelper.safeTransfer(pInfo.token0, activeMint, amount0Owed);
-        TransferHelper.safeTransfer(pInfo.token1, activeMint, amount1Owed);
+        if (amount0Owed > 0) TransferHelper.safeTransfer(pInfo.token0, activeMint, amount0Owed);
+        if (amount1Owed > 0) TransferHelper.safeTransfer(pInfo.token1, activeMint, amount1Owed);
     }
 }
