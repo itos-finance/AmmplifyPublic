@@ -78,7 +78,6 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[18] = AdminFacet.addVault.selector;
             adminSelectors[19] = AdminFacet.removeVault.selector;
             adminSelectors[20] = AdminFacet.swapVault.selector;
-            adminSelectors[21] = AdminFacet.transferVaultBalance.selector;
             cuts[2] = FacetCut({
                 facetAddress: address(new AdminFacet()),
                 action: FacetCutAction.Add,

@@ -6,7 +6,6 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { VaultLib, VaultType } from "../vaults/Vault.sol";
 import { Store } from "../Store.sol";
-import { TAKER_VAULT_ID } from "./Taker.sol";
 import { FeeStore } from "../Fee.sol";
 
 library AmmplifyAdminRights {
@@ -126,11 +125,6 @@ contract AdminFacet is TimedAdminFacet {
     function swapVault(address token, uint8 vaultId) external returns (address oldVault, address newVault) {
         AdminLib.validateOwner();
         (oldVault, newVault) = VaultLib.hotSwap(token, vaultId);
-    }
-
-    function transferVaultBalance(address fromVault, address toVault, uint256 amount) external {
-        AdminLib.validateOwner();
-        VaultLib.transfer(fromVault, toVault, TAKER_VAULT_ID, amount);
     }
 
     // Internal overrides
