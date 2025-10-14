@@ -10,6 +10,7 @@ import { Asset, AssetLib } from "../Asset.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { ViewData, ViewDataImpl } from "../walkers/View.sol";
 import { ViewWalkerLib } from "../walkers/Lib.sol";
+import { FeeLib } from "../Fee.sol";
 
 /// Query the values of internal data structures.
 contract ViewFacet {
@@ -93,10 +94,11 @@ contract ViewFacet {
             fees0 = data.earningsX;
             fees1 = data.earningsY;
         } else {
-            netBalance0 = int256(data.liqBalanceX);
-            netBalance1 = int256(data.liqBalanceY);
-            fees0 = data.earningsX;
-            fees1 = data.earningsY;
+            (uint256 liqX, uint256 liqY) = FeeLib.viewJITPenalties(asset, data.liqBalanceX, data.liqBalanceY);
+            netBalance0 = int256(liqX);
+            netBalance1 = int256(liqY);
+            // Technically this under-reports because someone could collect fees first.
+            (fees0, fees1) = FeeLib.viewJITPenalties(asset, data.earningsX, data.earningsY);
         }
     }
 }
