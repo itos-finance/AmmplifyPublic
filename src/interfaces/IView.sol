@@ -24,12 +24,21 @@ interface IView {
     /// @return highTick The upper tick of the asset.
     /// @return liqType The liquidity type of the asset.
     /// @return liq The liquidity amount of the asset.
+    /// @return timestamp The timestamp of when the asset's liquidity was last modified.
     function getAssetInfo(
         uint256 assetId
     )
         external
         view
-        returns (address owner, address poolAddr, int24 lowTick, int24 highTick, LiqType liqType, uint128 liq);
+        returns (
+            address owner,
+            address poolAddr,
+            int24 lowTick,
+            int24 highTick,
+            LiqType liqType,
+            uint128 liq,
+            uint128 timestamp
+        );
 
     /// @notice Get information about nodes in the pool.
     /// @dev You probably need to query the poolInfo first to get the treeWidth to compute valid keys
