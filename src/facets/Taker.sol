@@ -71,6 +71,8 @@ contract TakerFacet is ReentrancyGuardTransient {
         if (liq < MIN_TAKER_LIQUIDITY) revert DeMinimusTaker(liq);
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        // When creating new positions, we make sure to validate the pool isn't malicious.
+        pInfo.validate();
         (Asset storage asset, uint256 assetId) = AssetLib.newTaker(
             recipient,
             pInfo,

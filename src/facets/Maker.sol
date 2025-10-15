@@ -30,6 +30,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
     ) external nonReentrant returns (uint256 _assetId) {
         require(liq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(liq));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        // When creating new positions, we make sure to validate the pool isn't malicious.
+        pInfo.validate();
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
             pInfo,

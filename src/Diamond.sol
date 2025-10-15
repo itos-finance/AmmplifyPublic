@@ -20,14 +20,15 @@ import { PoolFacet } from "./facets/Pool.sol";
 import { ViewFacet } from "./facets/View.sol";
 
 import { FeeLib } from "./Fee.sol";
+import { PoolValidation } from "./Pool.sol";
 
 error FunctionNotFound(bytes4 _functionSelector);
 
 contract SimplexDiamond is IDiamond {
-    constructor() {
+    constructor(address uniV3factory) {
         AdminLib.initOwner(msg.sender);
         FeeLib.init();
-
+        PoolValidation.initFactory(uniV3factory);
         FacetCut[] memory cuts = new FacetCut[](7);
 
         {
