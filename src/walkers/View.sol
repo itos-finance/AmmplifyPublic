@@ -377,7 +377,7 @@ library ViewWalker {
             return;
         }
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
-        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint64((totalTLiq << 64) / totalMLiq));
+        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
         (uint256 totalXBorrows, uint256 totalYBorrows) = data.computeBorrows(key, data.liq.tLiqPrefix, true);
         totalXBorrows += node.liq.subtreeBorrowedX;
