@@ -257,7 +257,7 @@ library ViewWalker {
                 leftEarned = FullMath.mulX256(unclaimedX, leftRatioX256, false);
             }
             data.leftChildUnpaidX = leftPaid;
-            data.rightChildUnpaidY = unpaidX - leftPaid;
+            data.rightChildUnpaidX = unpaidX - leftPaid;
             data.leftChildUnclaimedX = leftEarned;
             data.rightChildUnclaimedX = unclaimedX - leftEarned;
 
