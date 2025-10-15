@@ -92,6 +92,34 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(data.yBalance, 0, "9");
     }
 
+    function testModifyAddRemove() public {
+        // Generic data setup.
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
+
+        Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
+        (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
+            key: key,
+            visit: true,
+            width: 1,
+            lowTick: low,
+            highTick: high
+        });
+        // We start with nothing.
+        Node storage n = data.node(key);
+        n.liq.mLiq = 0;
+        n.liq.shares = 0;
+        AssetNode storage aNode = data.assetNode(key);
+        aNode.sliq = 0;
+        // Add to 100e8.
+        LiqWalker.modify(iter, n, data, 100e8);
+        console.log("added");
+        // Remove it all
+        LiqWalker.modify(iter, n, data, 0);
+    }
+
     function testModifyMakerSubtract() public {
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
