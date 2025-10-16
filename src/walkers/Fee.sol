@@ -34,6 +34,9 @@ struct FeeNode {
 struct FeeData {
     uint24 rootWidth; // The width of the root node.
     int24 tickSpacing; // The tick spacing for the pool.
+    // Pool fee info.
+    uint256 feeGrowthGlobal0X128;
+    uint256 feeGrowthGlobal1X128;
     // Fee curve info.
     SmoothRateCurveConfig rateConfig; // The rate curve for calculating the true taker fee rate.
     SmoothRateCurveConfig splitConfig; // For splitting fees across subtrees when approximating unclaimed fees.
@@ -59,10 +62,13 @@ struct FeeData {
 
 library FeeDataLib {
     function make(PoolInfo memory pInfo) internal view returns (FeeData memory data) {
+        (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
         return
             FeeData({
                 rootWidth: pInfo.treeWidth,
                 tickSpacing: pInfo.tickSpacing,
+                feeGrowthGlobal0X128: feeGrowthGlobal0X128,
+                feeGrowthGlobal1X128: feeGrowthGlobal1X128,
                 rateConfig: FeeLib.getRateCurve(pInfo.poolAddr),
                 splitConfig: FeeLib.getSplitCurve(pInfo.poolAddr),
                 // Unused till propogation.

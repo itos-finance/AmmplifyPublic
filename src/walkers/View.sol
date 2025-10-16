@@ -21,6 +21,7 @@ struct ViewData {
     bytes32 poolStore;
     bytes32 assetStore;
     uint160 sqrtPriceX96;
+    int24 currentTick;
     uint128 timestamp; // The last time the pool was modified.
     FeeData fees;
     LiqData liq;
@@ -57,7 +58,7 @@ library ViewDataImpl {
         assembly {
             assetSlot := asset.slot
         }
-        uint160 currentSqrtPriceX96 = PoolLib.getSqrtPriceX96(pInfo.poolAddr);
+        uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
 
         return
             ViewData({
@@ -65,6 +66,7 @@ library ViewDataImpl {
                 poolStore: poolSlot,
                 assetStore: assetSlot,
                 sqrtPriceX96: currentSqrtPriceX96,
+                currentTick: pInfo.currentTick,
                 timestamp: pool.timestamp,
                 liq: LiqDataLib.make(asset, pInfo, 0),
                 fees: FeeDataLib.make(pInfo),
@@ -324,6 +326,9 @@ library ViewWalker {
     ) internal view {
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
+            data.currentTick,
+            data.fees.feeGrowthGlobal0X128,
+            data.fees.feeGrowthGlobal1X128,
             low,
             high
         );

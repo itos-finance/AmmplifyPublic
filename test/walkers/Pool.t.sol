@@ -40,18 +40,20 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
         node.liq.mLiq = 100e8;
         PoolWalker.updateLiq(key, node, data);
         (liq, , , , ) = IUniswapV3Pool(pools[0]).positions(posKey);
-        assertEq(liq, 100e8);
+        // There should always be 1 extra liq so the ticks never clear.
+        assertEq(liq, 100e8 + 1);
 
         // Check that the pool's liquidity has been updated.
         node.liq.mLiq = 50e8;
         PoolWalker.updateLiq(key, node, data);
         (liq, , , , ) = IUniswapV3Pool(pools[0]).positions(posKey);
-        assertEq(liq, 50e8);
+        // Still just one extra liq.
+        assertEq(liq, 50e8 + 1);
 
         node.liq.borrowed = 200e8;
         PoolWalker.updateLiq(key, node, data);
         (liq, , , , ) = IUniswapV3Pool(pools[0]).positions(posKey);
-        assertEq(liq, 250e8);
+        assertEq(liq, 250e8 + 1);
     }
 
     function testSettleTickSpacing60() public {

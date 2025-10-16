@@ -47,10 +47,14 @@ library PoolWalker {
         // liquidity to this node, that amount in tokens won't be deposited and will be lost.
         uint128 liq = PoolLib.getLiq(data.poolAddr, lowTick, highTick);
 
-        int256 _targetLiq = node.liq.net();
+        int256 _targetLiq = node.liq.net(); // This is what the liq accounting wants.
         require(_targetLiq >= 0, InsolventLiquidityUpdate(key, _targetLiq));
-        // We know this fits.
-        uint128 targetLiq = uint128(uint256(_targetLiq));
+        // We know this cast fits.
+        uint128 targetLiq = uint128(uint256(_targetLiq)) + 1;
+        // We add 1 which will cause the first liq deposit into this node to pay a little dust.
+        // This is because we want the node to always hold 1 unit of liquidity that only the underlying
+        // uniswap pool is aware of. This way the ticks never clear their tick initializations even when
+        // all liq is borrowed out according to our own accounting.
 
         if (targetLiq > liq) {
             PoolLib.mint(data.poolAddr, lowTick, highTick, targetLiq - liq);

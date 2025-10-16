@@ -15,11 +15,15 @@ import { SafeCast } from "Commons/Math/Cast.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
+    // Immutables
     address poolAddr;
     address token0;
     address token1;
     int24 tickSpacing;
     uint24 treeWidth;
+    // Price info
+    uint160 sqrtPriceX96; // Current price of the pool
+    int24 currentTick; // Current tick of the pool
 }
 
 using PoolInfoImpl for PoolInfo global;
@@ -34,6 +38,18 @@ library PoolInfoImpl {
 
     function treeTick(PoolInfo memory self, int24 tick) internal pure returns (uint24) {
         return TreeTickLib.tickToTreeIndex(tick, self.treeWidth, self.tickSpacing);
+    }
+
+    function refreshPrice(PoolInfo memory self) internal view {
+        (self.sqrtPriceX96, self.currentTick, , , , , ) = IUniswapV3Pool(self.poolAddr).slot0();
+    }
+
+    function getFeeGrowthGlobals(
+        PoolInfo memory self
+    ) internal view returns (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) {
+        IUniswapV3Pool poolContract = IUniswapV3Pool(self.poolAddr);
+        feeGrowthGlobal0X128 = poolContract.feeGrowthGlobal0X128();
+        feeGrowthGlobal1X128 = poolContract.feeGrowthGlobal1X128();
     }
 }
 
@@ -64,13 +80,9 @@ library PoolLib {
         pInfo.tickSpacing = poolImmutables.tickSpacing();
         // We find the first power of two that is less than the number of tree indices to be the width.
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
-        return pInfo;
-    }
 
-    /// Get the current sqrt price of the pool.
-    function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        (sqrtPriceX96, , , , , , ) = poolContract.slot0();
+        PoolInfoImpl.refreshPrice(pInfo);
+        return pInfo;
     }
 
     /*
@@ -116,17 +128,41 @@ library PoolLib {
     /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
     function getInsideFees(
         address pool,
+        int24 currentTick,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128,
         int24 lowerTick,
         int24 upperTick
     ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
         IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        (, int24 currentTick, , , , , ) = poolContract.slot0();
-        (, , uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128, , , , ) = poolContract.ticks(
-            lowerTick
-        );
-        (, , uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128, , , , ) = poolContract.ticks(
-            upperTick
-        );
+        (
+            ,
+            ,
+            uint256 lowerFeeGrowthOutside0X128,
+            uint256 lowerFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+            bool lowerInit
+        ) = poolContract.ticks(lowerTick);
+        if (!lowerInit && currentTick >= lowerTick) {
+            lowerFeeGrowthOutside0X128 = feeGrowthGlobal0X128;
+            lowerFeeGrowthOutside1X128 = feeGrowthGlobal1X128;
+        }
+        (
+            ,
+            ,
+            uint256 upperFeeGrowthOutside0X128,
+            uint256 upperFeeGrowthOutside1X128,
+            ,
+            ,
+            ,
+            bool upperInit
+        ) = poolContract.ticks(upperTick);
+        if (!upperInit && currentTick >= upperTick) {
+            upperFeeGrowthOutside0X128 = feeGrowthGlobal0X128;
+            upperFeeGrowthOutside1X128 = feeGrowthGlobal1X128;
+        }
 
         unchecked {
             if (currentTick < lowerTick) {
@@ -136,8 +172,6 @@ library PoolLib {
                 feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
                 feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
             } else {
-                uint256 feeGrowthGlobal0X128 = poolContract.feeGrowthGlobal0X128();
-                uint256 feeGrowthGlobal1X128 = poolContract.feeGrowthGlobal1X128();
                 feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
                 feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
             }
