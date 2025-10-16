@@ -62,14 +62,14 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
 
         if (tickLower == tickUpper) {
             // Single node.
-            return 2 + depth;
+            return 3 + depth; // 2 for rounding, 1 for potentially being the first deposit.
         }
 
         uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
         uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing);
         Route memory route = RouteImpl.make(rootWidth, treeLow, treeHigh);
         uint8 lcaDepth = BitMath.msbBit(route.lca.width());
-        return depth + lcaDepth - BitMath.msbBit(route.left.width()) - BitMath.msbBit(route.right.width()) + 1;
+        return depth + lcaDepth - BitMath.msbBit(route.left.width()) - BitMath.msbBit(route.right.width()) + 3;
     }
 
     /// @notice Prevents reentrancy by locking the contract during the call.
