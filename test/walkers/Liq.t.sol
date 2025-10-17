@@ -48,6 +48,19 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         addPoolLiq(0, 160000, 160010, 5e8);
         LiqWalker.compound(iter, n, data);
         assertGt(n.liq.mLiq, 5e8, "mLiq");
+        assertLt(n.fees.xCFees, 100e18, "xFees");
+        // Cuz we're above the current price, we just need x to compound.
+        assertEq(n.fees.yCFees, 200e18, "yFees same");
+
+        // But if we were to overflow, the compound doesn't happen.
+        console.log("Overflow compound");
+        n.fees.xCFees = 1 << 127;
+        n.fees.yCFees = 1 << 127;
+        n.liq.mLiq = LiqNodeImpl.MAX_MLIQ - 1e8;
+        LiqWalker.compound(iter, n, data);
+        assertEq(n.liq.mLiq, LiqNodeImpl.MAX_MLIQ - 1e8, "mLiq same");
+        assertEq(n.fees.xCFees, 1 << 127, "xFees same");
+        assertEq(n.fees.yCFees, 1 << 127, "yFees same still");
     }
 
     function testModifyMakerAdd() public {
