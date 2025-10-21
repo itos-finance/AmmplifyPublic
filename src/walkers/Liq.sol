@@ -36,8 +36,8 @@ struct LiqNode {
     uint128 lent;
     int128 preBorrow;
     int128 preLend;
-    // Dirty bit for liquidity modifications.
-    bool dirty;
+    // Dirty flags for liquidity modifications.
+    uint8 dirty;
 }
 
 using LiqNodeImpl for LiqNode global;
@@ -45,6 +45,8 @@ using LiqNodeImpl for LiqNode global;
 library LiqNodeImpl {
     /// This is because we handle net liquidity as an int128.
     uint128 public constant MAX_MLIQ = (1 << 127) - 1;
+    uint8 public constant DIRTY_FLAG = 1;
+    uint8 public constant SIB_DIRTY_FLAG = 2;
 
     function compound(LiqNode storage self, uint128 compoundedLiq, uint24 width) internal returns (bool compounded) {
         if (compoundedLiq == 0) {
@@ -56,7 +58,7 @@ library LiqNodeImpl {
 
         self.mLiq += compoundedLiq;
         self.subtreeMLiq += width * compoundedLiq;
-        self.dirty = true;
+        dirty(self);
         return true;
     }
 
@@ -74,6 +76,23 @@ library LiqNodeImpl {
         // Every mliq earns the same rate here. We round down for everyone to avoid overcollection of dust.
         nonCX128 = (uint256(nominal) << 128) / self.mLiq;
         c = uint128(nominal - FullMath.mulX128(nonCX128, self.ncLiq, true)); // Round up to subtract down.
+    }
+
+    function dirty(LiqNode storage self) internal {
+        self.dirty |= DIRTY_FLAG;
+    }
+
+    function dirtyWithSib(LiqNode storage self) internal {
+        self.dirty |= SIB_DIRTY_FLAG | DIRTY_FLAG;
+    }
+
+    function isDirty(LiqNode storage self) internal view returns (bool dirty, bool sibDirty) {
+        dirty = (self.dirty & DIRTY_FLAG) != 0;
+        sibDirty = (self.dirty & SIB_DIRTY_FLAG) != 0;
+    }
+
+    function clean(LiqNode storage self) internal {
+        self.dirty = 0;
     }
 }
 
@@ -152,7 +171,7 @@ library LiqWalker {
         }
 
         // Make sure our liquidity is solvent at each node.
-        solveLiq(iter, node, data);
+        solveLiq(iter.key, node, data);
     }
 
     function phase(Phase walkPhase, Data memory data) internal pure {
@@ -367,13 +386,13 @@ library LiqWalker {
                 dirty = false;
             }
         }
-        node.liq.dirty = node.liq.dirty || dirty; // Mark the node as dirty after modification.
+        node.liq.dirty(); // Mark the node as dirty after modification.
         aNode.sliq = targetSliq;
     }
 
     /// Ensure the liquidity at this node is solvent.
     /// @dev Call this after modifying liquidity.
-    function solveLiq(LiqIter memory iter, Node storage node, Data memory data) internal {
+    function solveLiq(Key key, Node storage node, Data memory data) internal {
         // First settle our borrows and lends from siblings and children.
         if (node.liq.preBorrow > 0) {
             node.liq.borrowed += uint128(node.liq.preBorrow);
@@ -390,7 +409,8 @@ library LiqWalker {
 
         int128 netLiq = node.liq.net();
 
-        if (data.isRoot(iter.key)) {
+        if (data.isRoot(key)) {
+            // If we had any pre lends, we'd already be marked dirty.
             require(netLiq >= 0, InsufficientBorrowLiquidity(netLiq));
             return;
         }
@@ -400,7 +420,7 @@ library LiqWalker {
         } else if (netLiq > 0 && node.liq.borrowed > 0) {
             // Check if we can repay liquidity.
             uint128 repayable = min(uint128(netLiq), node.liq.borrowed);
-            Node storage sibling = data.node(iter.key.sibling());
+            Node storage sibling = data.node(key.sibling());
             int128 sibLiq = sibling.liq.net();
             if (sibLiq <= 0 || sibling.liq.borrowed == 0) {
                 // We cannot repay any borrowed liquidity.
@@ -412,29 +432,29 @@ library LiqWalker {
                 // Below the compound threshold it's too small to worth repaying.
                 return;
             }
-            Node storage parent = data.node(iter.key.parent());
+            Node storage parent = data.node(key.parent());
             int128 iRepayable = SafeCast.toInt128(repayable);
             parent.liq.preLend -= iRepayable;
-            parent.liq.dirty = true;
+            parent.liq.dirty();
             node.liq.borrowed -= uint128(iRepayable);
-            node.liq.dirty = true;
+            node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow -= iRepayable;
-            sibling.liq.dirty = true;
+            sibling.liq.dirty();
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
-            Node storage sibling = data.node(iter.key.sibling());
-            Node storage parent = data.node(iter.key.parent());
+            Node storage sibling = data.node(key.sibling());
+            Node storage parent = data.node(key.parent());
             int128 borrow = -netLiq;
             if (borrow < int128(data.liq.compoundThreshold)) {
                 // We borrow at least this amount.
                 borrow = int128(data.liq.compoundThreshold);
             }
             parent.liq.preLend += borrow;
-            parent.liq.dirty = true;
+            parent.liq.dirty();
             node.liq.borrowed += uint128(borrow);
-            node.liq.dirty = true;
+            node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow += borrow;
-            sibling.liq.dirty = true;
+            sibling.liq.dirty();
         }
     }
 
@@ -460,5 +480,20 @@ library LiqWalker {
 
     function min(uint128 a, uint128 b) internal pure returns (uint128) {
         return a < b ? a : b;
+    }
+}
+
+library LiqWalkerLite {
+    /// Used to solve liq for a sibling node during the POOL WALK. Not used by liq walking itself.
+    function solveSibLiq(Key key, Node storage node, Data memory data) internal {
+        // Settle our borrows and from siblings
+        if (node.liq.preBorrow > 0) {
+            node.liq.borrowed += uint128(node.liq.preBorrow);
+        } else if (node.liq.preBorrow < 0) {
+            node.liq.borrowed -= uint128(-node.liq.preBorrow);
+        }
+        // No lends should be unresolved because we always liq walk to parent.
+        require(node.liq.preBorrow == 0, UnwalkedParent());
+        // Net will always be positive. If not it'll fail when the pool walker updates liq.
     }
 }

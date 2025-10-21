@@ -3,12 +3,16 @@ pragma solidity ^0.8.27;
 
 import { Key } from "../tree/Key.sol";
 import { Data } from "./Data.sol";
-import { LiqNode } from "./Liq.sol";
+import { LiqNode, LiqType, LiqWalkerLite } from "./Liq.sol";
 import { Node } from "./Node.sol";
 import { Route, RouteImpl, Phase } from "../tree/Route.sol";
 import { PoolLib, PoolInfo } from "../Pool.sol";
 import { WalkerLib } from "./Lib.sol";
 
+/// Walk down and up the pool to settle balances with the underlying AMM.
+/// @dev When walking down, we settle all the liquidity decreases so we have balances to work with,
+/// and then on the walk up we add liquidity with the balances as necessary.
+/// @dev TODO: Do we need to track the actual balances changes for comparison or does our rounding suffice?
 library PoolWalker {
     error InsolventLiquidityUpdate(Key key, int256 targetLiq);
 
@@ -20,17 +24,57 @@ library PoolWalker {
     }
 
     function down(Key, bool, bytes memory) private {
-        // Do nothing
-    }
-
-    /// This walker modifies the node's position to its new liquidity value.
-    function up(Key key, bool, bytes memory raw) private {
-        // For every node we call on, we just check if its dirty and needs an update.
         Data memory data = WalkerLib.toData(raw);
         Node storage node = data.node(key);
-        if (node.liq.dirty) {
-            updateLiq(key, node, data);
-            node.liq.dirty = false;
+
+        // On the way down, we remove liquidity.
+        if (data.liq.liqType == LiqType.TAKER) {
+            // If we're taking, we settle liquidity on the way down because any liquidity we add due to borrowing
+            // comes from reducing liquidity in the parent which leaves us with sufficient tokens for the child.
+            (bool dirty, bool sibDirty) = node.liq.isDirty();
+            if (dirty) {
+                // We are the regularly walked nodes so we'll never need a solve here, we can just update.
+                updateLiq(key, node, data);
+                node.liq.clean();
+
+                // On the way down, we walk the visit node first and then their sibling, so a dirty sib bit
+                // will always indicate a dirty sibling and they're the only ones who might need a solve.
+                if (sibDirty) {
+                    Key sibKey = key.sibling();
+                    Node storage sib = data.node(sibKey);
+
+                    LiqWalkerLite.solveSibLiq(sibKey, sib, data);
+                    updateLiq(sibKey, sib, data);
+                    sib.liq.clean();
+                }
+            }
+        } else {
+            // When we're making, we don't add any liq on the way down. We just visit dirty siblings which would
+            // be repaying liq or compounding (which we already have the fees for).
+            (, bool sibDirty) = node.liq.isDirty();
+            if (sibDirty) {
+                Key sibKey = key.sibling();
+                Node storage sib = data.node(sibKey);
+                // There's no way they would have been visited yet so they'll definitely be dirty and need a solve.
+                LiqWalkerLite.solveSibLiq(sibKey, sib, data);
+                updateLiq(sibKey, sib, data);
+                sib.liq.clean();
+            }
+        }
+    }
+
+    /// Add maker liquidity on the way up.
+    function up(Key key, bool, bytes memory raw) private {
+        // For every node we call on, we just check if its dirty and needs an update.
+        // We've already updated the siblings.
+        Data memory data = WalkerLib.toData(raw);
+        if (data.liq.liqType != LiqType.TAKER) {
+            Node storage node = data.node(key);
+            (bool dirty, ) = node.liq.isDirty();
+            if (dirty) {
+                updateLiq(key, node, data);
+                node.liq.clean();
+            }
         }
     }
 
