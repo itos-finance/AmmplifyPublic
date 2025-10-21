@@ -426,6 +426,7 @@ library LiqWalker {
                 dirty = false;
             }
         }
+
         if (dirty) {
             node.liq.setDirty(); // Mark the node as dirty after modification.
         }
