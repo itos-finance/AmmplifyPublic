@@ -440,6 +440,10 @@ library LiqWalker {
             node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow -= iRepayable;
             sibling.liq.dirty();
+            // Every time we repay, we're removing one additional position and opening another.
+            // This could lose two units of dust so we make sure the user needs to add that as well.
+            data.xBalance += 2;
+            data.yBalance += 2;
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
             Node storage sibling = data.node(key.sibling());
@@ -455,6 +459,10 @@ library LiqWalker {
             node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow += borrow;
             sibling.liq.dirty();
+            // Every time we borrow, we're removing one additional position and opening another.
+            // This could lose two units of dust so we make sure the user needs to add that as well.
+            data.xBalance += 2;
+            data.yBalance += 2;
         }
     }
 
