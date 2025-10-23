@@ -20,6 +20,10 @@ struct FeeStore {
     uint64 jitPenaltyX64; // Fee paid by those who's positions are held too shortly.
     /* Collateral */
     mapping(address sender => mapping(address token => uint256)) collateral;
+    /* Standing fees */
+    // Similar to collateral but these are fees collected from a pull but not compounded.
+    mapping(address sender => uint256) standingX;
+    mapping(address sender => uint256) standingY;
 }
 
 /// Makers earn fees in two ways, from the swap fees of the underlying pool

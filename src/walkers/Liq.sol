@@ -109,6 +109,9 @@ struct LiqData {
     uint128 leftTLiqPrefix;
     uint128 rightMLiqPrefix; // The final prefix after the right walk down.
     uint128 rightTLiqPrefix;
+    // Fees actually collected while walking up, specifically for compounding.
+    uint256 xFeesCollected;
+    uint256 yFeesCollected;
 }
 
 library LiqDataLib {
@@ -117,6 +120,9 @@ library LiqDataLib {
         PoolInfo memory pInfo,
         uint128 targetLiq
     ) internal view returns (LiqData memory) {
+
+        FeeStore storage = Store.fees().
+
         return
             LiqData({
                 liqType: asset.liqType,
@@ -129,7 +135,9 @@ library LiqDataLib {
                 leftMLiqPrefix: 0,
                 leftTLiqPrefix: 0,
                 rightMLiqPrefix: 0,
-                rightTLiqPrefix: 0
+                rightTLiqPrefix: 0,
+                xFeesCollected: 0,
+                yFeesCollected: 0
             });
     }
 }
@@ -194,6 +202,19 @@ library LiqWalker {
         } else if (walkPhase == Phase.LEFT_UP) {
             data.liq.mLiqPrefix = data.liq.rightMLiqPrefix;
             data.liq.tLiqPrefix = data.liq.rightTLiqPrefix;
+            // Move the fees to the
+            data.liq.lcaXFeesCollected = data.liq.xFeesCollected;
+            data.liq.lcaYFeesCollected = data.liq.yFeesCollected;
+            data.liq.xFeesCollected = 0;
+            data.liq.yFeesCollected = 0;
+        } else if (walkPhase == Phase.RIGHT_UP) {
+            // Recall that this is called regardless of whether the right side is walked up.
+            data.liq.xFeesCollected += data.liq.lcaXFeesCollected;
+            data.liq.yFeesCollected += data.liq.lcaYFeesCollected;
+        } else if (walkPhase == Phase.POST_UP) {
+            // There can never be excess collected fees past the root.
+            // TODO: Switch to warning in production.
+            require(data.liq.xFeesCollected == 0 && data.liq.yFeesCollected == 0, "Excess collected fees");
         }
     }
 
@@ -206,8 +227,11 @@ library LiqWalker {
         // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
         // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
         // having more fees than that.
+        uint256 xCollected;
+        uint256 yCollected;
         if (node.liq.net() > 0) {
-            PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick, true);
+            // But we do track the actual fee balances given so that we know how much we can actually compound.
+            (xCollected, yCollected) = PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick, true);
         }
         // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
@@ -225,6 +249,9 @@ library LiqWalker {
         // Any takers here need to be charged.
         node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
         node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
+        // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
+        xCollected += FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false);
+        yCollected += FullMath.mulX128(node.liq.tLiq, feeDiffInside1X128, false);
 
         // If we have no maker liq in this node, then there is nothing to compound.
         if (node.liq.mLiq == 0) return;
@@ -501,6 +528,7 @@ library LiqWalkerLite {
             node.liq.borrowed -= uint128(-node.liq.preBorrow);
         }
         // No lends should be unresolved because we always liq walk to parent.
+        // TODO: Switch to warning in production.
         require(node.liq.preBorrow == 0, UnwalkedParent());
         // Net will always be positive. If not it'll fail when the pool walker updates liq.
     }
