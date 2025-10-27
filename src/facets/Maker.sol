@@ -171,12 +171,12 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
 
     // Collect fees from and compound a specific range of nodes.
     /// @inheritdoc IMaker
-    function compound(int24 lowTick, int24 highTick) external nonReentrant {
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+    function compound(address poolAddr, int24 lowTick, int24 highTick) external nonReentrant {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        Asset storage asset = AssetLib.nullAsset();
         // When compounding, the liq and asset parameters are unused.
-        Asset storage asset = Store.assets().assets[0]; // The zeroeth assetId is not used.
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
-        CompoundWalkerLib.modify(pInfo, lowTick, highTick, data);
+        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
+        CompoundWalkerLib.compound(pInfo, lowTick, highTick, data);
         PoolWalker.settle(pInfo, lowTick, highTick, data);
     }
 }

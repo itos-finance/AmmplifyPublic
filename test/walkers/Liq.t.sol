@@ -32,13 +32,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Test specific
         Key key = KeyImpl.make(16000, 1);
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: 160000,
-            highTick: 160010
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: 160000, highTick: 160010 });
 
         // Test without swap fee earnings first.
         Node storage n = data.node(key);
@@ -80,13 +74,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         n.liq.mLiq = 200e8;
@@ -150,13 +138,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         AssetNode storage aNode = data.assetNode(key);
@@ -178,6 +160,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertLt(data.xBalance, 0, "3");
         assertEq(data.yBalance, 0, "4"); // Since we're above the range.
         assertEq(n.fees.xCFees, 350, "5");
+        assertEq(n.liq.subtreeMLiq, 1000e8, "6"); // Unchanged since we update in up, not modify.
     }
 
     function testModifyNCMakerAdd() public {
@@ -190,13 +173,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         AssetNode storage aNode = data.assetNode(key);
@@ -212,7 +189,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.liq.shares, 100e8, "1");
         assertEq(n.liq.ncLiq, 130e8, "2");
         assertEq(n.liq.mLiq, 230e8, "3");
-        assertEq(n.liq.subtreeMLiq, 1030e8, "4");
+        assertEq(n.liq.subtreeMLiq, 1000e8, "4"); // Unchanged since we update in up, not modify.
         assertGt(data.xBalance, 0, "5");
         assertEq(data.yBalance, 0, "6");
     }
@@ -227,13 +204,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         AssetNode storage aNode = data.assetNode(key);
@@ -249,7 +220,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.liq.shares, 100e8, "1");
         assertEq(n.liq.ncLiq, 75e8, "2");
         assertEq(n.liq.mLiq, 175e8, "3");
-        assertEq(n.liq.subtreeMLiq, 975e8, "4");
+        assertEq(n.liq.subtreeMLiq, 1000e8, "4"); // Unchanged since we update in up, not modify.
         assertLt(data.xBalance, 0, "5");
         assertEq(data.yBalance, 0, "6");
     }
@@ -264,13 +235,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         AssetNode storage aNode = data.assetNode(key);
@@ -280,7 +245,6 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 90e8, "0");
         assertEq(n.liq.tLiq, 240e8, "1");
-        assertEq(n.liq.subtreeTLiq, 40e8, "2");
         assertGt(n.liq.subtreeBorrowedX, 0, "3");
         assertGt(n.liq.subtreeBorrowedY, 0, "4");
         assertLt(data.xBalance, 0, "5");
@@ -297,13 +261,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         console.log("ticks", uint24(low), uint24(high));
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         AssetNode storage aNode = data.assetNode(key);
@@ -317,7 +275,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 0, "0");
         assertEq(n.liq.tLiq, 150e8, "1");
-        assertEq(n.liq.subtreeTLiq, 950e8, "2");
+        assertEq(n.liq.subtreeTLiq, 1000e8, "2"); // Unchanged since we update in up, not modify.
         assertLt(n.liq.subtreeBorrowedX, 500e24, "3");
         assertLt(n.liq.subtreeBorrowedY, 500e24, "4");
         assertGt(data.xBalance, 0, "5");
@@ -334,13 +292,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         // Test specific
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
         Node storage n = data.node(key);
         // Nothing changes if there is no borrow
@@ -393,7 +345,6 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
             key: key,
-            visit: true,
             width: data.fees.rootWidth / 2,
             lowTick: low,
             highTick: high
@@ -417,13 +368,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         // However if the root nets negatively then it errors.
         Key parentKey = key.parent();
         (low, high) = parentKey.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-        iter = LiqWalker.LiqIter({
-            key: parentKey,
-            visit: true,
-            width: data.fees.rootWidth,
-            lowTick: low,
-            highTick: high
-        });
+        iter = LiqWalker.LiqIter({ key: parentKey, width: data.fees.rootWidth, lowTick: low, highTick: high });
         Node storage parent = data.node(parentKey);
         assertEq(parent.liq.net(), 0, "7");
         assertEq(parent.liq.preLend, 1e12, "8");

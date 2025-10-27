@@ -111,7 +111,7 @@ contract AdminFacet is TimedAdminFacet {
     /// Send fees from the caller to a specific pool.
     /// @dev Primarily used by owner to re-add standing fees if necessary.
     /// But technically anyone can call this.
-    function sendStandingFees(address poolAddr, uint256 x, uint256 y) external {
+    function sendStandingFees(address poolAddr, uint128 x, uint128 y) external {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         FeeStore storage feeStore = Store.fees();
         // Errors if insufficient.

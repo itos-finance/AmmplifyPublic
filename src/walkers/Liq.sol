@@ -51,7 +51,7 @@ library LiqNodeImpl {
     uint8 public constant DIRTY_FLAG = 1;
     uint8 public constant SIB_DIRTY_FLAG = 2;
 
-    function compound(LiqNode storage self, uint128 compoundedLiq, uint24 width) internal returns (bool compounded) {
+    function compound(LiqNode storage self, uint128 compoundedLiq) internal returns (bool compounded) {
         if (compoundedLiq == 0) {
             return false;
         }
@@ -294,7 +294,7 @@ library LiqWalker {
             return;
         }
 
-        if (node.liq.compound(assignableLiq, iter.width)) {
+        if (node.liq.compound(assignableLiq)) {
             // If we can't compound (cuz of overflow), we don't update the fees.
             uint128 usedX = availableCompoundX - leftoverX;
             uint128 usedY = availableCompoundY - leftoverY;

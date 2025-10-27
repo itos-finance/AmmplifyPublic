@@ -83,5 +83,5 @@ interface IMaker {
     /// but without any liquidity modifications (though potential solves may occur).
     /// @dev Use this when there is insufficient standing fees due to a deep borrow or simply
     /// because you want a node compounded.
-    function compound(int24 lowTick, int24 highTick) external;
+    function compound(address poolAddr, int24 lowTick, int24 highTick) external;
 }
