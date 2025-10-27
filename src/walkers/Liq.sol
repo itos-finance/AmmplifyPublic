@@ -367,6 +367,10 @@ library LiqWalker {
                 }
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
+<<<<<<< HEAD
+=======
+                uint256 xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
+>>>>>>> ba63f0a (Add a compound method and a standing fee injection method)
                 node.fees.xCFees -= uint128(xClaim);
                 data.xFees += xClaim;
                 node.fees.yCFees -= uint128(yClaim);
