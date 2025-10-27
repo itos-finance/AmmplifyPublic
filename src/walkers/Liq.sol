@@ -51,7 +51,11 @@ library LiqNodeImpl {
     uint8 public constant DIRTY_FLAG = 1;
     uint8 public constant SIB_DIRTY_FLAG = 2;
 
+<<<<<<< HEAD
     function compound(LiqNode storage self, uint128 compoundedLiq) internal returns (bool compounded) {
+=======
+    function compound(LiqNode storage self, uint128 compoundedLiq) internal {
+>>>>>>> 5f5e077 (working but untested compound walker lib added)
         if (compoundedLiq == 0) {
             return false;
         }
@@ -293,6 +297,7 @@ library LiqWalker {
             // Not worth compounding right now.
             return;
         }
+
         if (node.liq.compound(assignableLiq)) {
             // If we can't compound (cuz of overflow), we don't update the fees.
             uint128 usedX = availableCompoundX - leftoverX;
@@ -367,10 +372,6 @@ library LiqWalker {
                 }
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
-<<<<<<< HEAD
-=======
-                uint256 xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
->>>>>>> ba63f0a (Add a compound method and a standing fee injection method)
                 node.fees.xCFees -= uint128(xClaim);
                 data.xFees += xClaim;
                 node.fees.yCFees -= uint128(yClaim);
