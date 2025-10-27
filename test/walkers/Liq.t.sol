@@ -47,7 +47,15 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.mLiq = 5e8;
         addPoolLiq(0, 160000, 160010, 5e8);
         LiqWalker.compound(iter, n, data);
-        assertGt(n.liq.mLiq, 5e8, "mLiq");
+
+        // We can't compound yet because there are no standing fees.
+        assertEq(n.liq.mLiq, 5e8, "mLiq");
+        // But once we add them in.
+        data.liq.xFeesCollected = 100e18;
+        data.liq.yFeesCollected = 200e18;
+        LiqWalker.compound(iter, n, data);
+        assertGt(n.liq.mLiq, 5e8, "mLiq2");
+
         assertLt(n.fees.xCFees, 100e18, "xFees");
         // Cuz we're above the current price, we just need x to compound.
         assertEq(n.fees.yCFees, 200e18, "yFees same");
@@ -87,7 +95,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         aNode.sliq = 50e8;
         // The sliq should be worth 100e8 so no change happens.
         LiqWalker.modify(iter, n, data, 100e8);
-        assertFalse(n.liq.dirty);
+        assertEq(n.liq.dirty, 0, "d0");
         assertEq(aNode.sliq, 50e8, "0");
         assertEq(n.liq.shares, 100e8, "1");
         assertEq(n.liq.mLiq, 200e8, "2");
@@ -96,7 +104,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
 
         // But now with a higher target we'll add liq.
         LiqWalker.modify(iter, n, data, 200e8);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1, "d1");
         assertEq(aNode.sliq, 100e8, "5");
         assertEq(n.liq.shares, 150e8, "6");
         assertEq(n.liq.mLiq, 300e8, "7");
@@ -161,7 +169,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         aNode.sliq = 100e8;
         // The asset owns half the liq here and we want 2/5th of their position left.
         LiqWalker.modify(iter, n, data, ((100e8 + equivLiq) * 2) / 10);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1);
         assertApproxEqAbs(aNode.sliq, 40e8, 1, "0");
         assertLt(aNode.sliq, 40e8, "00");
         assertApproxEqAbs(n.liq.shares, 140e8, 1, "1");
@@ -199,7 +207,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.shares = 100e8;
         aNode.sliq = 50e8;
         LiqWalker.modify(iter, n, data, 80e8);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 80e8, "0");
         assertEq(n.liq.shares, 100e8, "1");
         assertEq(n.liq.ncLiq, 130e8, "2");
@@ -236,7 +244,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.shares = 100e8;
         aNode.sliq = 50e8;
         LiqWalker.modify(iter, n, data, 25e8);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 25e8, "0");
         assertEq(n.liq.shares, 100e8, "1");
         assertEq(n.liq.ncLiq, 75e8, "2");
@@ -269,7 +277,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.tLiq = 200e8;
         aNode.sliq = 50e8;
         LiqWalker.modify(iter, n, data, 90e8);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 90e8, "0");
         assertEq(n.liq.tLiq, 240e8, "1");
         assertEq(n.liq.subtreeTLiq, 40e8, "2");
@@ -306,7 +314,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.subtreeBorrowedY = 500e24;
         console.log("modifying to zero");
         LiqWalker.modify(iter, n, data, 0);
-        assertTrue(n.liq.dirty);
+        assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 0, "0");
         assertEq(n.liq.tLiq, 150e8, "1");
         assertEq(n.liq.subtreeTLiq, 950e8, "2");
@@ -339,8 +347,8 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.mLiq = 100e8;
         n.liq.tLiq = 90e8;
         n.liq.lent = 10e8;
-        LiqWalker.solveLiq(iter, n, data);
-        assertFalse(n.liq.dirty, "0");
+        LiqWalker.solveLiq(iter.key, n, data);
+        assertEq(n.liq.dirty, 0, "0");
         // Nothing changes if the sibling can't repay
         n.liq.borrowed = 20e8;
         n.liq.tLiq = 100e8;
@@ -348,28 +356,28 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         sib.liq.mLiq = 50;
         sib.liq.tLiq = 70;
         sib.liq.borrowed = 20;
-        LiqWalker.solveLiq(iter, n, data);
-        assertFalse(n.liq.dirty, "1");
-        assertFalse(sib.liq.dirty, "2");
+        LiqWalker.solveLiq(iter.key, n, data);
+        assertEq(n.liq.dirty, 0, "1");
+        assertEq(sib.liq.dirty, 0, "2");
         // Repays to the parent what it can.
         Node storage parent = data.node(key.parent());
         parent.liq.lent = 100e8;
         sib.liq.tLiq = 0;
-        LiqWalker.solveLiq(iter, n, data);
+        LiqWalker.solveLiq(iter.key, n, data);
         // But below the compound threshold.
-        assertFalse(n.liq.dirty, "3");
+        assertEq(n.liq.dirty, 0, "3");
         data.liq.compoundThreshold = 10;
-        LiqWalker.solveLiq(iter, n, data);
-        assertTrue(n.liq.dirty, "4");
-        assertTrue(sib.liq.dirty, "5");
-        assertTrue(parent.liq.dirty, "6");
+        LiqWalker.solveLiq(iter.key, n, data);
+        assertEq(n.liq.dirty, 3, "4");
+        assertEq(sib.liq.dirty, 1, "5");
+        assertEq(parent.liq.dirty, 1, "6");
         assertEq(parent.liq.preLend, -20, "7");
         assertEq(sib.liq.preBorrow, -20, "8");
         assertEq(sib.liq.net(), 70, "8"); // Won't change until solved.
         assertEq(n.liq.net(), 10e8 - 20, "9");
-        LiqWalker.solveLiq(iter, sib, data);
+        LiqWalker.solveLiq(iter.key, sib, data);
         assertEq(sib.liq.net(), 50, "10");
-        LiqWalker.solveLiq(iter, parent, data); // Finalizes the repayment
+        LiqWalker.solveLiq(iter.key, parent, data); // Finalizes the repayment
         assertEq(parent.liq.lent, 100e8 - 20, "11");
     }
 
@@ -396,14 +404,14 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         // And that the sibling gets liquidity even when it doesn't need it.
         n.liq.lent = 10e8;
         data.liq.compoundThreshold = 1e12;
-        LiqWalker.solveLiq(iter, n, data);
+        LiqWalker.solveLiq(iter.key, n, data);
         Node storage sib = data.node(key.sibling());
         assertEq(n.liq.borrowed, 1e12, "0");
         assertEq(sib.liq.preBorrow, 1e12, "1");
         assertEq(sib.liq.net(), 0, "2"); // Stays 0 until solved.
-        assertTrue(n.liq.dirty, "3");
-        assertTrue(sib.liq.dirty, "4");
-        LiqWalker.solveLiq(iter, sib, data);
+        assertEq(n.liq.dirty, 3, "3");
+        assertEq(sib.liq.dirty, 1, "4");
+        LiqWalker.solveLiq(iter.key, sib, data);
         assertEq(sib.liq.borrowed, 1e12, "5");
         assertEq(sib.liq.net(), 1e12, "6"); // Stays 0 until solved.
         // However if the root nets negatively then it errors.
@@ -419,8 +427,8 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         Node storage parent = data.node(parentKey);
         assertEq(parent.liq.net(), 0, "7");
         assertEq(parent.liq.preLend, 1e12, "8");
-        assertTrue(parent.liq.dirty, "9");
+        assertEq(parent.liq.dirty, 1, "9");
         vm.expectRevert(abi.encodeWithSelector(LiqWalker.InsufficientBorrowLiquidity.selector, -1e12));
-        LiqWalker.solveLiq(iter, parent, data);
+        LiqWalker.solveLiq(iter.key, parent, data);
     }
 }

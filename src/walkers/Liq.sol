@@ -9,7 +9,9 @@ import { FullMath } from "../FullMath.sol";
 import { Asset, AssetNode } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 import { FeeLib } from "../Fee.sol";
+import { FeeStore } from "../Fee.sol";
 import { FeeWalker } from "./Fee.sol";
+import { Store } from "../Store.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
 enum LiqType {
@@ -58,7 +60,7 @@ library LiqNodeImpl {
 
         self.mLiq += compoundedLiq;
         self.subtreeMLiq += width * compoundedLiq;
-        dirty(self);
+        setDirty(self);
         return true;
     }
 
@@ -78,11 +80,11 @@ library LiqNodeImpl {
         c = uint128(nominal - FullMath.mulX128(nonCX128, self.ncLiq, true)); // Round up to subtract down.
     }
 
-    function dirty(LiqNode storage self) internal {
+    function setDirty(LiqNode storage self) internal {
         self.dirty |= DIRTY_FLAG;
     }
 
-    function dirtyWithSib(LiqNode storage self) internal {
+    function setDirtyWithSib(LiqNode storage self) internal {
         self.dirty |= SIB_DIRTY_FLAG | DIRTY_FLAG;
     }
 
@@ -109,9 +111,9 @@ struct LiqData {
     uint128 leftTLiqPrefix;
     uint128 rightMLiqPrefix; // The final prefix after the right walk down.
     uint128 rightTLiqPrefix;
-    // Fees actually collected while walking up, specifically for compounding.
-    uint256 xFeesCollected;
-    uint256 yFeesCollected;
+    // Fees collected from the underlying pool's swaps, saved across all operations.
+    uint128 xFeesCollected;
+    uint128 yFeesCollected;
 }
 
 library LiqDataLib {
@@ -120,8 +122,7 @@ library LiqDataLib {
         PoolInfo memory pInfo,
         uint128 targetLiq
     ) internal view returns (LiqData memory) {
-
-        FeeStore storage = Store.fees().
+        FeeStore storage feeStore = Store.fees();
 
         return
             LiqData({
@@ -136,14 +137,15 @@ library LiqDataLib {
                 leftTLiqPrefix: 0,
                 rightMLiqPrefix: 0,
                 rightTLiqPrefix: 0,
-                xFeesCollected: 0,
-                yFeesCollected: 0
+                xFeesCollected: feeStore.standingX[pInfo.poolAddr],
+                yFeesCollected: feeStore.standingY[pInfo.poolAddr]
             });
     }
 }
 
 library LiqWalker {
     error InsufficientBorrowLiquidity(int256 netLiq);
+    error InsufficientStandingFees(uint256 required, uint128 available, bool isX);
 
     /// Data useful when visiting/propogating to a node.
     struct LiqIter {
@@ -202,19 +204,6 @@ library LiqWalker {
         } else if (walkPhase == Phase.LEFT_UP) {
             data.liq.mLiqPrefix = data.liq.rightMLiqPrefix;
             data.liq.tLiqPrefix = data.liq.rightTLiqPrefix;
-            // Move the fees to the
-            data.liq.lcaXFeesCollected = data.liq.xFeesCollected;
-            data.liq.lcaYFeesCollected = data.liq.yFeesCollected;
-            data.liq.xFeesCollected = 0;
-            data.liq.yFeesCollected = 0;
-        } else if (walkPhase == Phase.RIGHT_UP) {
-            // Recall that this is called regardless of whether the right side is walked up.
-            data.liq.xFeesCollected += data.liq.lcaXFeesCollected;
-            data.liq.yFeesCollected += data.liq.lcaYFeesCollected;
-        } else if (walkPhase == Phase.POST_UP) {
-            // There can never be excess collected fees past the root.
-            // TODO: Switch to warning in production.
-            require(data.liq.xFeesCollected == 0 && data.liq.yFeesCollected == 0, "Excess collected fees");
         }
     }
 
@@ -227,11 +216,16 @@ library LiqWalker {
         // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
         // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
         // having more fees than that.
-        uint256 xCollected;
-        uint256 yCollected;
         if (node.liq.net() > 0) {
             // But we do track the actual fee balances given so that we know how much we can actually compound.
-            (xCollected, yCollected) = PoolLib.collect(data.poolAddr, iter.lowTick, iter.highTick, true);
+            (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
+                data.poolAddr,
+                iter.lowTick,
+                iter.highTick,
+                true
+            );
+            data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
+            data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
         }
         // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
@@ -250,8 +244,18 @@ library LiqWalker {
         node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
         node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
         // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
-        xCollected += FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false);
-        yCollected += FullMath.mulX128(node.liq.tLiq, feeDiffInside1X128, false);
+        data.liq.xFeesCollected += FeeWalker.add128Fees(
+            data.liq.xFeesCollected,
+            FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false),
+            data,
+            true
+        );
+        data.liq.yFeesCollected += FeeWalker.add128Fees(
+            data.liq.yFeesCollected,
+            FullMath.mulX128(node.liq.tLiq, feeDiffInside1X128, false),
+            data,
+            false
+        );
 
         // If we have no maker liq in this node, then there is nothing to compound.
         if (node.liq.mLiq == 0) return;
@@ -270,21 +274,33 @@ library LiqWalker {
         node.fees.makerYFeesPerLiqX128 += nonCX128;
         node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
 
+        // See how much we can actually compound.
+        uint128 availableCompoundX = data.liq.xFeesCollected < node.fees.xCFees
+            ? data.liq.xFeesCollected
+            : node.fees.xCFees;
+        uint128 availableCompoundY = data.liq.yFeesCollected < node.fees.yCFees
+            ? data.liq.yFeesCollected
+            : node.fees.yCFees;
         (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
             iter.lowTick,
             iter.highTick,
-            node.fees.xCFees,
-            node.fees.yCFees,
+            availableCompoundX,
+            availableCompoundY,
             data.sqrtPriceX96
         );
         if (assignableLiq < data.liq.compoundThreshold) {
             // Not worth compounding right now.
             return;
         }
+
         if (node.liq.compound(assignableLiq, iter.width)) {
             // If we can't compound (cuz of overflow), we don't update the fees.
-            node.fees.xCFees = leftoverX;
-            node.fees.yCFees = leftoverY;
+            uint128 usedX = availableCompoundX - leftoverX;
+            uint128 usedY = availableCompoundY - leftoverY;
+            data.liq.xFeesCollected -= usedX;
+            data.liq.yFeesCollected -= usedY;
+            node.fees.xCFees -= usedX;
+            node.fees.yCFees -= usedY;
         }
     }
 
@@ -413,7 +429,9 @@ library LiqWalker {
                 dirty = false;
             }
         }
-        node.liq.dirty(); // Mark the node as dirty after modification.
+        if (dirty) {
+            node.liq.setDirty(); // Mark the node as dirty after modification.
+        }
         aNode.sliq = targetSliq;
     }
 
@@ -462,11 +480,11 @@ library LiqWalker {
             Node storage parent = data.node(key.parent());
             int128 iRepayable = SafeCast.toInt128(repayable);
             parent.liq.preLend -= iRepayable;
-            parent.liq.dirty();
+            parent.liq.setDirty();
             node.liq.borrowed -= uint128(iRepayable);
-            node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
+            node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow -= iRepayable;
-            sibling.liq.dirty();
+            sibling.liq.setDirty();
             // Every time we repay, we're removing one additional position and opening another.
             // This could lose two units of dust so we make sure the user needs to add that as well.
             data.xBalance += 2;
@@ -481,11 +499,11 @@ library LiqWalker {
                 borrow = int128(data.liq.compoundThreshold);
             }
             parent.liq.preLend += borrow;
-            parent.liq.dirty();
+            parent.liq.setDirty();
             node.liq.borrowed += uint128(borrow);
-            node.liq.dirtyWithSib(); // Tells the pool walker to visit our sibling.
+            node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow += borrow;
-            sibling.liq.dirty();
+            sibling.liq.setDirty();
             // Every time we borrow, we're removing one additional position and opening another.
             // This could lose two units of dust so we make sure the user needs to add that as well.
             data.xBalance += 2;
@@ -500,8 +518,25 @@ library LiqWalker {
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;
         if (data.liq.liqType == LiqType.MAKER_NC) {
-            data.xBalance -= int256(FullMath.mulX128(liq, node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128, false));
-            data.yBalance -= int256(FullMath.mulX128(liq, node.fees.makerYFeesPerLiqX128 - aNode.fee1CheckX128, false));
+            uint256 earnedX = FullMath.mulX128(liq, node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128, false);
+            uint256 earnedY = FullMath.mulX128(liq, node.fees.makerYFeesPerLiqX128 - aNode.fee1CheckX128, false);
+            // We should rarely be in a case where the fees are insufficient, but if they are make sure to compound
+            // nodes first to collect child fees or to request admin re-addition of previously escaped standing fees.
+            // For immediacy, remove a smaller portion first with the adjust method.
+            if (earnedX > data.liq.xFeesCollected) {
+                revert InsufficientStandingFees(earnedX, uint128(data.liq.xFeesCollected), true);
+            }
+            if (earnedY > data.liq.yFeesCollected) {
+                revert InsufficientStandingFees(earnedY, uint128(data.liq.yFeesCollected), false);
+            }
+            // Give them the fees.
+            data.xBalance -= int256(earnedX);
+            data.yBalance -= int256(earnedY);
+            // When we remove non-compounding maker liq, we also need to reduce our standing fees
+            // since they're being "spent". This is just like when compounding takes fees away to add as liq.
+            data.liq.xFeesCollected -= uint128(earnedX);
+            data.liq.yFeesCollected -= uint128(earnedY);
+            // And now we update to the new fee checkpoint so we don't double collect.
             aNode.fee0CheckX128 = node.fees.makerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
         } else if (data.liq.liqType == LiqType.TAKER) {
@@ -519,17 +554,20 @@ library LiqWalker {
 }
 
 library LiqWalkerLite {
+    error WarningUnwalkedParent();
+
     /// Used to solve liq for a sibling node during the POOL WALK. Not used by liq walking itself.
-    function solveSibLiq(Key key, Node storage node, Data memory data) internal {
+    function solveSibLiq(Node storage node) internal {
         // Settle our borrows and from siblings
         if (node.liq.preBorrow > 0) {
             node.liq.borrowed += uint128(node.liq.preBorrow);
         } else if (node.liq.preBorrow < 0) {
             node.liq.borrowed -= uint128(-node.liq.preBorrow);
         }
+        node.liq.preBorrow = 0;
+
         // No lends should be unresolved because we always liq walk to parent.
         // TODO: Switch to warning in production.
-        require(node.liq.preBorrow == 0, UnwalkedParent());
-        // Net will always be positive. If not it'll fail when the pool walker updates liq.
+        require(node.liq.preLend == 0, WarningUnwalkedParent());
     }
 }

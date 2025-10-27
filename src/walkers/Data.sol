@@ -26,7 +26,10 @@ struct Data {
     // Outputs
     int256 xBalance;
     int256 yBalance;
-    /* Below are written to by walkers */
+    // Unlikely to EVER be used, but in some extreme fee cases, we have to limit fee collection sizes
+    // to fit in integer limits. In the unbelievable case where this actually gets used, those fees go to the owner.
+    uint256 escapedX;
+    uint256 escapedY;
 }
 
 using DataImpl for Data global;
@@ -72,7 +75,9 @@ library DataImpl {
                 fees: FeeDataLib.make(pInfo),
                 // Outputs
                 xBalance: 0,
-                yBalance: 0
+                yBalance: 0,
+                escapedX: 0,
+                escapedY: 0
             });
     }
 

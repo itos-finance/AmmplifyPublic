@@ -675,8 +675,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(110, FeeWalker.add128Fees(50, 60, data, true));
         assertEq(120, FeeWalker.add128Fees(50, 70, data, false));
         assertEq(type(uint128).max, FeeWalker.add128Fees(1 << 127, 1 << 127, data, true));
-        assertEq(data.xBalance, -1, "dx1");
+        assertEq(data.escapedX, 1, "dx1");
         assertEq(type(uint128).max, FeeWalker.add128Fees(1 << 127, 1 << 128, data, false));
-        assertEq(data.yBalance, -(1 << 127) - 1, "dy1");
+        assertEq(data.escapedY, (1 << 127) + 1, "dy1");
     }
 }

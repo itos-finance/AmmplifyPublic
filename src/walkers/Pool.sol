@@ -23,7 +23,7 @@ library PoolWalker {
         route.walk(down, up, phase, WalkerLib.toRaw(data));
     }
 
-    function down(Key, bool, bytes memory) private {
+    function down(Key key, bool, bytes memory raw) private {
         Data memory data = WalkerLib.toData(raw);
         Node storage node = data.node(key);
 
@@ -43,7 +43,7 @@ library PoolWalker {
                     Key sibKey = key.sibling();
                     Node storage sib = data.node(sibKey);
 
-                    LiqWalkerLite.solveSibLiq(sibKey, sib, data);
+                    LiqWalkerLite.solveSibLiq(sib);
                     updateLiq(sibKey, sib, data);
                     sib.liq.clean();
                 }
@@ -56,7 +56,7 @@ library PoolWalker {
                 Key sibKey = key.sibling();
                 Node storage sib = data.node(sibKey);
                 // There's no way they would have been visited yet so they'll definitely be dirty and need a solve.
-                LiqWalkerLite.solveSibLiq(sibKey, sib, data);
+                LiqWalkerLite.solveSibLiq(sib);
                 updateLiq(sibKey, sib, data);
                 sib.liq.clean();
             }
