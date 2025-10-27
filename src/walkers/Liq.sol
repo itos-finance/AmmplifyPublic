@@ -293,7 +293,6 @@ library LiqWalker {
             // Not worth compounding right now.
             return;
         }
-
         if (node.liq.compound(assignableLiq)) {
             // If we can't compound (cuz of overflow), we don't update the fees.
             uint128 usedX = availableCompoundX - leftoverX;
