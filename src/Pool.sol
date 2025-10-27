@@ -74,24 +74,28 @@ library PoolLib {
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
 
+    error PoolInsufficientObservations(uint16 observations, uint16 required);
+
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
-    uint8 private constant MIN_OBSERVATIONS = 5;
+    uint16 private constant MIN_OBSERVATIONS = 5;
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
-        IUniswapV3PoolImmutables poolImmutables = IUniswapV3PoolImmutables(pool);
-        pInfo.token0 = poolImmutables.token0();
-        pInfo.token1 = poolImmutables.token1();
+        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
+        pInfo.token0 = poolContract.token0();
+        pInfo.token1 = poolContract.token1();
 
-        pInfo.tickSpacing = poolImmutables.tickSpacing();
-        pInfo.fee = poolImmutables.fee();
+        pInfo.tickSpacing = poolContract.tickSpacing();
+        pInfo.fee = poolContract.fee();
         // We find the first power of two that is less than the number of tree indices to be the width.
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
-
         PoolInfoImpl.refreshPrice(pInfo);
+
+        (, , , , uint16 obsCardinalityNext, , ) = poolContract.slot0();
+        require(obsCardinalityNext >= MIN_OBSERVATIONS, PoolInsufficientObservations(obsCardinalityNext, MIN_OBSERVATIONS));
         return pInfo;
     }
 
