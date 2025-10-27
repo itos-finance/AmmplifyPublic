@@ -78,6 +78,7 @@ library PoolLib {
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
+    uint8 private constant MIN_OBSERVATIONS = 5;
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
