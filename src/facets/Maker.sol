@@ -6,7 +6,7 @@ import { Asset, AssetLib } from "../Asset.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { Data, DataImpl } from "../walkers/Data.sol";
 import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
-import { WalkerLib } from "../walkers/Lib.sol";
+import { WalkerLib, CompoundWalkerLib } from "../walkers/Lib.sol";
 import { PoolLib } from "../Pool.sol";
 import { PoolWalker } from "../walkers/Pool.sol";
 import { RFTLib } from "Commons/Util/RFT.sol";
@@ -169,8 +169,14 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         AssetLib.removePermission(msg.sender, opener);
     }
 
-    // TODO: Add function to compound a node. But to get the prefix accurately we have to walk down to that node.
-    // Does taker fees need to update first to save on fees cuz mliq is going up?
-    // Non-compounding liq is safe.
-    // function compound(uint256 key)
+    // Collect fees from and compound a specific range of nodes.
+    /// @inheritdoc IMaker
+    function compound(int24 lowTick, int24 highTick) external nonReentrant {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        // When compounding, the liq and asset parameters are unused.
+        Asset storage asset = Store.assets().assets[0]; // The zeroeth assetId is not used.
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
+        CompoundWalkerLib.modify(pInfo, lowTick, highTick, data);
+        PoolWalker.settle(pInfo, lowTick, highTick, data);
+    }
 }

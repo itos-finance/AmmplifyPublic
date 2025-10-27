@@ -8,6 +8,7 @@ import { VaultLib, VaultType } from "../vaults/Vault.sol";
 import { AssetLib } from "../Asset.sol";
 import { Store } from "../Store.sol";
 import { FeeStore } from "../Fee.sol";
+import { PoolLib, PoolInfo } from "../Pool.sol";
 
 library AmmplifyAdminRights {
     uint256 public constant TAKER = 0x1;
@@ -105,6 +106,19 @@ contract AdminFacet is TimedAdminFacet {
         compoundThreshold = store.defaultCompoundThreshold;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;
+    }
+
+    /// Send fees from the caller to a specific pool.
+    /// @dev Primarily used by owner to re-add standing fees if necessary.
+    /// But technically anyone can call this.
+    function sendStandingFees(address poolAddr, uint256 x, uint256 y) external {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        FeeStore storage feeStore = Store.fees();
+        // Errors if insufficient.
+        feeStore.collateral[msg.sender][pInfo.token0] -= x;
+        feeStore.collateral[msg.sender][pInfo.token1] -= y;
+        feeStore.standingX[poolAddr] += x;
+        feeStore.standingY[poolAddr] += y;
     }
 
     /* Opener Permissions */

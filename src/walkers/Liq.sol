@@ -26,6 +26,7 @@ struct LiqNode {
     uint128 tLiq;
     uint128 ncLiq;
     uint128 shares; // Total shares of compounding maker liq.
+    // This is updated after all changes to mliq are completed.
     uint256 subtreeMLiq;
     uint256 subtreeTLiq;
     uint256 subtreeBorrowedX; // Taker required for fee calculation.
@@ -59,7 +60,6 @@ library LiqNodeImpl {
         }
 
         self.mLiq += compoundedLiq;
-        self.subtreeMLiq += width * compoundedLiq;
         setDirty(self);
         return true;
     }
@@ -150,7 +150,6 @@ library LiqWalker {
     /// Data useful when visiting/propogating to a node.
     struct LiqIter {
         Key key;
-        bool visit;
         uint24 width;
         int24 lowTick;
         int24 highTick;
@@ -162,7 +161,7 @@ library LiqWalker {
         LiqIter memory iter;
         {
             (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-            iter = LiqIter({ key: key, visit: visit, width: key.width(), lowTick: lowTick, highTick: highTick });
+            iter = LiqIter({ key: key, width: key.width(), lowTick: lowTick, highTick: highTick });
         }
 
         // Compound first.
@@ -171,8 +170,10 @@ library LiqWalker {
         // Do the modifications.
         if (visit) {
             modify(iter, node, data, data.liq.liq);
-        } else {
-            // If propogating, we can't be at a leaf.
+        }
+
+        // Update subtree liqs.
+        if (iter.width > 1) {
             (Key lk, Key rk) = key.children();
             Node storage lNode = data.node(lk);
             Node storage rNode = data.node(rk);
@@ -180,7 +181,7 @@ library LiqWalker {
             node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
         }
 
-        // Make sure our liquidity is solvent at each node.
+        // Make sure our liquidity is solvent at each node. This must happened regardless of visit.
         solveLiq(iter.key, node, data);
     }
 
@@ -342,7 +343,6 @@ library LiqWalker {
                 uint128 liqDiff = targetLiq - currentLiq;
                 node.liq.mLiq += liqDiff;
                 node.liq.shares += targetSliq - sliq;
-                node.liq.subtreeMLiq += iter.width * liqDiff;
                 (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
@@ -366,7 +366,6 @@ library LiqWalker {
                 }
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
-                node.liq.subtreeMLiq -= iter.width * liq;
                 node.fees.xCFees -= uint128(xClaim);
                 data.xBalance -= int256(xClaim);
                 node.fees.yCFees -= uint128(yClaim);
@@ -384,7 +383,6 @@ library LiqWalker {
                 sliq = targetLiq;
                 node.liq.mLiq += liqDiff;
                 node.liq.ncLiq += liqDiff;
-                node.liq.subtreeMLiq += iter.width * liqDiff;
                 (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
@@ -392,7 +390,6 @@ library LiqWalker {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.mLiq -= liqDiff;
                 node.liq.ncLiq -= liqDiff;
-                node.liq.subtreeMLiq -= iter.width * liqDiff;
                 // Now we claim the balances from the liquidity itself.
                 (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xOwed);
@@ -404,7 +401,6 @@ library LiqWalker {
             if (sliq < targetLiq) {
                 uint128 liqDiff = targetLiq - sliq;
                 node.liq.tLiq += liqDiff;
-                node.liq.subtreeTLiq += iter.width * liqDiff;
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
@@ -417,7 +413,6 @@ library LiqWalker {
             } else if (sliq > targetLiq) {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.tLiq -= liqDiff;
-                node.liq.subtreeTLiq -= iter.width * liqDiff;
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrows(iter.key, liqDiff, true);
                 node.liq.subtreeBorrowedX -= xBorrow;
                 node.liq.subtreeBorrowedY -= yBorrow;

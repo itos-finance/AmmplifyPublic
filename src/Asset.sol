@@ -39,7 +39,7 @@ struct AssetStore {
     mapping(uint256 assetId => Asset) assets;
     mapping(address owner => mapping(address opener => bool)) permissions;
     mapping(address opener => bool) permissionedOpeners;
-    uint256 nextAssetId;
+    uint256 lastAssetId;
 }
 
 library AssetLib {
@@ -67,7 +67,7 @@ library AssetLib {
         // address 0x0 is a valid recipient for maker assets.
 
         AssetStore storage store = Store.assets();
-        assetId = ++store.nextAssetId;
+        assetId = ++store.lastAssetId;
         asset = store.assets[assetId];
         asset.owner = recipient;
         asset.poolAddr = pInfo.poolAddr;
@@ -94,7 +94,7 @@ library AssetLib {
         require(recipient != address(0x0), NoRecipient());
 
         AssetStore storage store = Store.assets();
-        assetId = ++store.nextAssetId;
+        assetId = ++store.lastAssetId;
         asset = store.assets[assetId];
         asset.owner = recipient;
         asset.poolAddr = pInfo.poolAddr;
