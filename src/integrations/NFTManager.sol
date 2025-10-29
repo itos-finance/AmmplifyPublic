@@ -267,7 +267,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return highTick The higher end of the tick range
      * @return liqType The liquidity type (MAKER, MAKER_NC, TAKER)
      * @return liquidity The liquidity of the position
-     * @return timestamp The timestamp of when the asset was last modified
      */
     function positions(
         uint256 tokenId
@@ -283,8 +282,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 lowTick,
             int24 highTick,
             LiqType liqType,
-            uint128 liquidity,
-            uint128 timestamp
+            uint128 liquidity
         )
     {
         // Check if the token was actually minted by checking if it's been assigned to an asset
@@ -321,8 +319,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             assetLowTick,
             assetHighTick,
             assetLiqType,
-            assetLiq,
-            0 // timestamp - not available from View facet, setting to 0 for now
+            assetLiq
         );
     }
 
