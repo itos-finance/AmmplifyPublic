@@ -46,7 +46,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         // Settle balances.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance;
+        balances[0] = data.xBalance; // There are no fees to consider on new positions.
         balances[1] = data.yBalance;
         RFTLib.settle(msg.sender, tokens, balances, rftData);
         PoolWalker.settle(pInfo, lowTick, highTick, data);
@@ -63,7 +63,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         bytes calldata rftData
     ) external nonReentrant returns (address token0, address token1, int256 delta0, int256 delta1) {
         Asset storage asset = AssetLib.getAsset(assetId);
-        require(targetLiq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(targetLiq)); // They should use remove if they want to remove.
+        require(targetLiq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(targetLiq)); // Use remove if you want to remove.
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
@@ -75,8 +75,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             revert DeMinimusMaker(targetLiq);
         } else if (targetLiq >= asset.liq) {
             // Adding more liq, may collect some fees but no need to apply JIT penalties.
-            balances[0] = data.xBalance;
-            balances[1] = data.yBalance;
+            balances[0] = data.xBalance - int256(data.xFees);
+            balances[1] = data.yBalance - int256(data.yFees);
             RFTLib.settle(msg.sender, tokens, balances, rftData);
             PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         } else {
@@ -87,8 +87,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             uint256 removedX = uint256(-data.xBalance);
             uint256 removedY = uint256(-data.yBalance);
             (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY, tokens[0], tokens[1]);
-            balances[0] = -int256(removedX);
-            balances[1] = -int256(removedY);
+            balances[0] = -int256(removedX + data.xFees);
+            balances[1] = -int256(removedY + data.yFees);
             RFTLib.settle(recipient, tokens, balances, rftData);
         }
         // The new "original" liq we collet to is now the targetLiq.
@@ -116,14 +116,17 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         // Settle balances.
+        address[] memory tokens = pInfo.tokens();
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         removedX = uint256(-data.xBalance); // These are definitely negative.
         removedY = uint256(-data.yBalance);
-        address[] memory tokens = pInfo.tokens();
         (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY, tokens[0], tokens[1]);
+        // Fees are removed but don't get JIT penalized.
+        removedX += data.xFees;
+        removedY += data.yFees;
         AssetLib.removeAsset(assetId);
         int256[] memory balances = new int256[](2);
-        balances[0] = -int256(removedX); // We know they fit since they can only be less (in magnitude) than before.
+        balances[0] = -int256(removedX);
         balances[1] = -int256(removedY);
         RFTLib.settle(recipient, tokens, balances, rftData);
         // Return values
@@ -152,11 +155,14 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         // Even if technically someone can marginally reduce their JIT penalty be collecting and then removing.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance;
-        balances[1] = data.yBalance;
+        // Compounding fees are treated like liq (since they're removed in PoolWalker) so they'll show up in
+        // the balance fields instead of the fee fields.
+        balances[0] = data.xBalance - int256(data.xFees);
+        balances[1] = data.yBalance - int256(data.yFees);
         RFTLib.settle(recipient, tokens, balances, rftData);
-        fees0 = uint256(-data.xBalance);
-        fees1 = uint256(-data.yBalance);
+        // But all of this is fees.
+        fees0 = uint256(-balances[0]);
+        fees1 = uint256(-balances[1]);
     }
 
     /// Allow this address to open positions and give you ownership.

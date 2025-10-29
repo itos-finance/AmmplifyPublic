@@ -26,6 +26,10 @@ struct Data {
     // Outputs
     int256 xBalance;
     int256 yBalance;
+    uint256 xFees;
+    uint256 yFees;
+    uint256 compoundSpendX;
+    uint256 compoundSpendY;
     // Unlikely to EVER be used, but in some extreme fee cases, we have to limit fee collection sizes
     // to fit in integer limits. In the unbelievable case where this actually gets used, those fees go to the owner.
     uint256 escapedX;
@@ -76,37 +80,14 @@ library DataImpl {
                 // Outputs
                 xBalance: 0,
                 yBalance: 0,
+                xFees: 0,
+                yFees: 0,
+                compoundSpendX: 0,
+                compoundSpendY: 0,
                 escapedX: 0,
                 escapedY: 0
             });
     }
-
-    /*
-    /// TODO: currently unused but potentially used for the compound method.
-    /// Used only for compounding (and testing) but the same as make.
-    function makeWithoutAsset(PoolInfo memory pInfo) internal view returns (Data memory) {
-        Pool storage pool = Store.pool(pInfo.poolAddr);
-        uint128 treeTimestamp = pool.timestamp;
-
-        bytes32 poolSlot;
-        assembly {
-            poolSlot := pool.slot
-        }
-
-        return
-            Data({
-                poolAddr: pInfo.poolAddr,
-                poolStore: poolSlot,
-                assetStore: bytes32(0),
-                sqrtPriceX96: PoolLib.getSqrtPriceX96(pInfo.poolAddr),
-                timestamp: treeTimestamp,
-                liq: LiqDataLib.makeEmpty(),
-                fees: FeeDataLib.make(pInfo),
-                // Outputs
-                xBalance: 0,
-                yBalance: 0
-            });
-    } */
 
     function computeBorrows(
         Data memory self,

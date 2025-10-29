@@ -8,19 +8,44 @@ import { Node } from "./Node.sol";
 import { Route, RouteImpl, Phase } from "../tree/Route.sol";
 import { PoolLib, PoolInfo } from "../Pool.sol";
 import { WalkerLib } from "./Lib.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /// Walk down and up the pool to settle balances with the underlying AMM.
 /// @dev When walking down, we settle all the liquidity decreases so we have balances to work with,
 /// and then on the walk up we add liquidity with the balances as necessary.
-/// @dev TODO: Do we need to track the actual balances changes for comparison or does our rounding suffice?
 library PoolWalker {
     error InsolventLiquidityUpdate(Key key, int256 targetLiq);
+    error MismatchedSettlementBalance(int256 required, int256 actual, address token);
+    error StalePoolPrice(address poolAddr, uint160 expectedSqrtPriceX96, uint160 actualSqrtPriceX96);
 
+    /// This does all the balances changes because all liquidity is only changed here.
+    /// Thus we verify the balances changes here.
+    /// TODO add test where we fudge the pool price during RFT settlement and hit the settlement mismatch.
     function settle(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
+        // Before we settle we make sure the pool price has not changed from the time we made all our initial
+        // calculations.
+        uint160 sqrtPriceX96 = PoolLib.getSqrtPriceX96(pInfo.poolAddr);
+        require(data.sqrtPriceX96 == sqrtPriceX96, StalePoolPrice(pInfo.poolAddr, data.sqrtPriceX96, sqrtPriceX96));
+
+        uint256 startingX = IERC20(pInfo.token0).balanceOf(address(this));
+        uint256 startingY = IERC20(pInfo.token1).balanceOf(address(this));
+
         uint24 low = pInfo.treeTick(lowTick);
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
         route.walk(down, up, phase, WalkerLib.toRaw(data));
+
+        uint256 endingX = IERC20(pInfo.token0).balanceOf(address(this));
+        uint256 endingY = IERC20(pInfo.token1).balanceOf(address(this));
+
+        // Verify balances. Technically just checking the pool price has not changed is sufficient
+        // but this adds an additional layer of safety just in case.
+        int256 expectedXSpend = data.xBalance + int256(data.compoundSpendX);
+        int256 actualXSpend = int256(startingX) - int256(endingX);
+        verifySpend(expectedXSpend, actualXSpend, pInfo.token0);
+        int256 expectedYSpend = data.yBalance + int256(data.compoundSpendY);
+        int256 actualYSpend = int256(startingY) - int256(endingY);
+        verifySpend(expectedYSpend, actualYSpend, pInfo.token1);
     }
 
     function down(Key key, bool, bytes memory raw) private {
@@ -82,7 +107,8 @@ library PoolWalker {
         // Do nothing.
     }
 
-    /// @dev internal just for testing. Not used elsewhere.
+    /* Helpers */
+
     function updateLiq(Key key, Node storage node, Data memory data) internal {
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
 
@@ -106,5 +132,9 @@ library PoolWalker {
             PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
             PoolLib.collect(data.poolAddr, lowTick, highTick, false);
         }
+    }
+
+    function verifySpend(int256 expectedSpend, int256 actualSpend, address token) internal pure {
+        require(actualSpend <= expectedSpend, MismatchedSettlementBalance(expectedSpend, actualSpend, token));
     }
 }

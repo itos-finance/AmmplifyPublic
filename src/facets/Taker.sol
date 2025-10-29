@@ -86,7 +86,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         // The walked balances will be negative since they're giving it to the user.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance;
+        balances[0] = data.xBalance; // No fees on a new position.
         balances[1] = data.yBalance;
         (uint256 xFreeze, uint256 yFreeze) = PoolLib.getAmounts(freezeSqrtPriceX96, ticks[0], ticks[1], liq, true);
         balances[0] += SafeCast.toInt256(xFreeze);
@@ -112,8 +112,8 @@ contract TakerFacet is ReentrancyGuardTransient {
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance;
-        balances[1] = data.yBalance;
+        balances[0] = data.xBalance + int256(data.xFees);
+        balances[1] = data.yBalance + int256(data.yFees);
         balances[0] -= SafeCast.toInt256(VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId));
         balances[1] -= SafeCast.toInt256(VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId));
         balance0 = -balances[0];

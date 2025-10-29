@@ -300,6 +300,8 @@ library LiqWalker {
             uint128 usedY = availableCompoundY - leftoverY;
             data.liq.xFeesCollected -= usedX;
             data.liq.yFeesCollected -= usedY;
+            data.compoundSpendX += usedX;
+            data.compoundSpendY += usedY;
             node.fees.xCFees -= usedX;
             node.fees.yCFees -= usedY;
         }
@@ -367,9 +369,9 @@ library LiqWalker {
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
                 node.fees.xCFees -= uint128(xClaim);
-                data.xBalance -= int256(xClaim);
+                data.xFees += xClaim;
                 node.fees.yCFees -= uint128(yClaim);
-                data.yBalance -= int256(yClaim);
+                data.yFees += yClaim;
                 // Now we claim the balances from the liquidity itself.
                 (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liq, false);
                 data.xBalance -= int256(xOwed);
@@ -525,8 +527,8 @@ library LiqWalker {
                 revert InsufficientStandingFees(earnedY, uint128(data.liq.yFeesCollected), false);
             }
             // Give them the fees.
-            data.xBalance -= int256(earnedX);
-            data.yBalance -= int256(earnedY);
+            data.xFees += earnedX;
+            data.yFees += earnedY;
             // When we remove non-compounding maker liq, we also need to reduce our standing fees
             // since they're being "spent". This is just like when compounding takes fees away to add as liq.
             data.liq.xFeesCollected -= uint128(earnedX);
@@ -536,8 +538,8 @@ library LiqWalker {
             aNode.fee1CheckX128 = node.fees.makerYFeesPerLiqX128;
         } else if (data.liq.liqType == LiqType.TAKER) {
             // Now we pay the taker fees.
-            data.xBalance += int256(FullMath.mulX128(liq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true));
-            data.yBalance += int256(FullMath.mulX128(liq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true));
+            data.xFees += FullMath.mulX128(liq, node.fees.takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
+            data.yFees += FullMath.mulX128(liq, node.fees.takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
             aNode.fee0CheckX128 = node.fees.takerXFeesPerLiqX128;
             aNode.fee1CheckX128 = node.fees.takerYFeesPerLiqX128;
         }
