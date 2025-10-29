@@ -5,6 +5,7 @@ import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { VaultLib, VaultType } from "../vaults/Vault.sol";
+import { AssetLib } from "../Asset.sol";
 import { Store } from "../Store.sol";
 import { FeeStore } from "../Fee.sol";
 
@@ -104,6 +105,18 @@ contract AdminFacet is TimedAdminFacet {
         compoundThreshold = store.defaultCompoundThreshold;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;
+    }
+
+    /* Opener Permissions */
+
+    function addPermissionedOpener(address opener) external {
+        AdminLib.validateOwner();
+        AssetLib.addPermissionedOpener(opener);
+    }
+
+    function removePermissionedOpener(address opener) external {
+        AdminLib.validateOwner();
+        AssetLib.removePermissionedOpener(opener);
     }
 
     /* Vault related */

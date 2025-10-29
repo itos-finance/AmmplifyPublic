@@ -5,12 +5,14 @@ import { msb } from "./BitMath.sol";
 
 library TreeTickLib {
     error UnalignedTick(int24 tick, int24 tickSpacing);
+    error OutOfRange(int24 tick, int24 tickWidth);
 
-    function tickToTreeIndex(int24 tick, uint24 rootWidth, int24 tickSpacing) internal pure returns (uint24) {
+    function tickToTreeIndex(int24 tick, uint24 rootWidth, int24 tickSpacing) internal pure returns (uint24 treeIndex) {
         unchecked {
             require(tick % tickSpacing == 0, UnalignedTick(tick, tickSpacing));
             // Convert tick to tree index, adjusting for the root width.
-            return uint24(tick / tickSpacing) + rootWidth / 2;
+            treeIndex = uint24(tick / tickSpacing) + rootWidth / 2;
+            require(treeIndex <= rootWidth, OutOfRange(tick, int24(rootWidth / 2) * tickSpacing));
         }
     }
 
