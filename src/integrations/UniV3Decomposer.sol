@@ -15,7 +15,8 @@ import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfu
 import { IERC721Receiver } from "openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 
-import { BitMath } from "../tree/BitMath.sol";
+import { msbBit } from "../tree/BitMath.sol";
+import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
 import { TreeTickLib } from "../tree/Tick.sol";
 import { RouteImpl, Route } from "../tree/Route.sol";
 
@@ -57,8 +58,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
     /// @param tickSpacing The pool's tickSpacing
     /// @return liquidityOffset The calculated liquidity offset
     function calculateLiquidityOffset(int24 tickLower, int24 tickUpper, int24 tickSpacing) internal pure returns (uint128 liquidityOffset) {
-        uint24 rootWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
-        uint8 depth = BitMath.msbBit(rootWidth);
+        uint24 rootWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, tickSpacing);
+        uint8 depth = msbBit(rootWidth);
 
         if (tickLower == tickUpper) {
             // Single node.
@@ -68,8 +69,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
         uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing);
         Route memory route = RouteImpl.make(rootWidth, treeLow, treeHigh);
-        uint8 lcaDepth = BitMath.msbBit(route.lca.width());
-        return depth + lcaDepth - BitMath.msbBit(route.left.width()) - BitMath.msbBit(route.right.width()) + 3;
+        uint8 lcaDepth = msbBit(route.lca.width());
+        return depth + lcaDepth - msbBit(route.left.width()) - msbBit(route.right.width()) + 3;
     }
 
     /// @notice Prevents reentrancy by locking the contract during the call.
@@ -136,7 +137,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver {
         if (poolAddr == address(0)) revert PoolNotDeployed();
 
         // Calculate dynamic liquidity offset based on tick range
-        int24 tickSpacing = IUniswapV3PoolImmutables(pool).tickSpacing();
+        int24 tickSpacing = IUniswapV3PoolImmutables(poolAddr).tickSpacing();
         uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper, tickSpacing);
 
         newAssetId = MAKER.newMaker(
