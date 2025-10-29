@@ -31,6 +31,11 @@ interface IView {
         view
         returns (address owner, address poolAddr, int24 lowTick, int24 highTick, LiqType liqType, uint128 liq);
 
+    /// @notice Get all asset IDs owned by a specific address.
+    /// @param owner The address of the asset owner.
+    /// @return assetIds An array of asset IDs owned by the specified address.
+    function getAssets(address owner) external view returns (uint256[] memory assetIds);
+
     /// @notice Get information about nodes in the pool.
     /// @dev You probably need to query the poolInfo first to get the treeWidth to compute valid keys
     /// first.
