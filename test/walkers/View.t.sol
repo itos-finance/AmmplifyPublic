@@ -9,6 +9,7 @@ import { Key, KeyImpl } from "../../src/tree/Key.sol";
 import { Pool, PoolInfo, PoolLib } from "../../src/Pool.sol";
 import { FeeLib } from "../../src/Fee.sol";
 import { UniV3IntegrationSetup } from "../UniV3.u.sol";
+import { Asset, AssetLib } from "../../src/Asset.sol";
 
 contract ViewWalkerTest is Test, UniV3IntegrationSetup {
     function setUp() public {
