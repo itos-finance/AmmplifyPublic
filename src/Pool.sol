@@ -14,6 +14,7 @@ import { TreeTickLib } from "./tree/Tick.sol";
 import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientSlot.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
+import { FeeLib } from "./Fee.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -95,7 +96,10 @@ library PoolLib {
         PoolInfoImpl.refreshPrice(pInfo);
 
         (, , , , uint16 obsCardinalityNext, , ) = poolContract.slot0();
-        require(obsCardinalityNext >= MIN_OBSERVATIONS, PoolInsufficientObservations(obsCardinalityNext, MIN_OBSERVATIONS));
+        require(
+            obsCardinalityNext >= MIN_OBSERVATIONS,
+            PoolInsufficientObservations(obsCardinalityNext, MIN_OBSERVATIONS)
+        );
         return pInfo;
     }
 
@@ -104,12 +108,15 @@ library PoolLib {
     }
 
     /// Get a slower moving price metric for the given pool.
-    /// @dev This is only used for taker borrow cost calculation so they're slowing moving and less susceptible to manipulation.
+    /// @dev This is used for taker borrow cost calculations and equivalent liq calculations.
     function getTwapSqrtPriceX96(address pool) internal view returns (uint160 twapSqrtPriceX96) {
         uint32 interval = FeeLib.getTwapInterval(pool);
         IUniswapV3PoolDerivedState poolContract = IUniswapV3PoolDerivedState(pool);
         // Get the TWAP.
-        (int56[] memory tickCumulatives, ) = poolContract.observe(new uint32[](2){0, interval});
+        uint32[] memory timepoints = new uint32[](2);
+        timepoints[0] = 0;
+        timepoints[1] = interval;
+        (int56[] memory tickCumulatives, ) = poolContract.observe(timepoints);
         int56 tickCumulativeDelta = tickCumulatives[1] - tickCumulatives[0];
         // We don't mind rounding the twapTick to 0 (price to 1).
         int24 twapTick = int24(tickCumulativeDelta / interval);

@@ -20,7 +20,7 @@ struct Data {
     bytes32 assetStore;
     uint160 sqrtPriceX96;
     int24 currentTick;
-    uint160 twapSqrtPriceX96; // A more robust measure of price. Before allowing takers we should add observations to the pool.
+    uint160 twapSqrtPriceX96; // A more robust measure of price.
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
