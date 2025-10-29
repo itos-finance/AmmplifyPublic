@@ -56,7 +56,7 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory adminSelectors = new bytes4[](24);
+            bytes4[] memory adminSelectors = new bytes4[](23);
             adminSelectors[0] = TimedAdminFacet.transferOwnership.selector;
             adminSelectors[1] = TimedAdminFacet.acceptOwnership.selector;
             adminSelectors[2] = TimedAdminFacet.submitRights.selector;
@@ -78,9 +78,8 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[18] = AdminFacet.addVault.selector;
             adminSelectors[19] = AdminFacet.removeVault.selector;
             adminSelectors[20] = AdminFacet.swapVault.selector;
-            adminSelectors[21] = AdminFacet.transferVaultBalance.selector;
-            adminSelectors[22] = AdminFacet.addPermissionedOpener.selector;
-            adminSelectors[23] = AdminFacet.removePermissionedOpener.selector;
+            adminSelectors[21] = AdminFacet.addPermissionedOpener.selector;
+            adminSelectors[22] = AdminFacet.removePermissionedOpener.selector;
             cuts[2] = FacetCut({
                 facetAddress: address(new AdminFacet()),
                 action: FacetCutAction.Add,

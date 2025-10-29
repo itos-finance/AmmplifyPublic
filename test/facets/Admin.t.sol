@@ -250,19 +250,4 @@ contract AdminFacetTest is MultiSetupTest {
         // Remove the old vault
         adminFacet.removeVault(address(mockVault));
     }
-
-    // function testTransferVaultBalance() public {
-    //     // Add source and destination vaults
-    //     adminFacet.addVault(address(mockToken), 0, address(mockVault), VaultType.E4626);
-
-    //     MockERC4626 destVault = new MockERC4626(ERC20(address(mockToken)), "destVault", "DV");
-    //     adminFacet.addVault(address(mockToken), 0, address(destVault), VaultType.E4626);
-
-    //     // TODO: add position, create taker, transfer taker collateral to new vault
-
-    //     // Test that transferVaultBalance function can be called (will revert due to access control or VaultLib call)
-    //     // This tests the basic function signature and access control
-    //     // vm.expectRevert(); // Expect revert due to access control or VaultLib call
-    //     adminFacet.transferVaultBalance(address(mockVault), address(destVault), transferAmount);
-    // }
 }

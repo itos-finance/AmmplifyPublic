@@ -50,7 +50,6 @@ interface IAdmin {
     function addVault(address token, uint8 vaultIdx, address vault, VaultType vType) external;
     function removeVault(address vault) external;
     function swapVault(address token, uint8 vaultId) external returns (address oldVault, address newVault);
-    function transferVaultBalance(address fromVault, address toVault, uint256 amount) external;
 
     // Internal overrides
     function getDelay(bool add) external pure returns (uint32);
