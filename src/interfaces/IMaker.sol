@@ -72,4 +72,10 @@ interface IMaker {
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (address token0, address token1, int256 delta0, int256 delta1);
+
+    /// Allow this address to open positions and give you ownership.
+    function addPermission(address opener) external;
+
+    /// Remove this address from opening positions and giving you ownership.
+    function removePermission(address opener) external;
 }

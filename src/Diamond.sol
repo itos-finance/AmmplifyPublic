@@ -56,7 +56,7 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory adminSelectors = new bytes4[](22);
+            bytes4[] memory adminSelectors = new bytes4[](23);
             adminSelectors[0] = TimedAdminFacet.transferOwnership.selector;
             adminSelectors[1] = TimedAdminFacet.acceptOwnership.selector;
             adminSelectors[2] = TimedAdminFacet.submitRights.selector;
@@ -78,7 +78,8 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[18] = AdminFacet.addVault.selector;
             adminSelectors[19] = AdminFacet.removeVault.selector;
             adminSelectors[20] = AdminFacet.swapVault.selector;
-            adminSelectors[21] = AdminFacet.transferVaultBalance.selector;
+            adminSelectors[21] = AdminFacet.addPermissionedOpener.selector;
+            adminSelectors[22] = AdminFacet.removePermissionedOpener.selector;
             cuts[2] = FacetCut({
                 facetAddress: address(new AdminFacet()),
                 action: FacetCutAction.Add,
@@ -87,11 +88,13 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](4);
+            bytes4[] memory selectors = new bytes4[](6);
             selectors[0] = MakerFacet.newMaker.selector;
             selectors[1] = MakerFacet.removeMaker.selector;
             selectors[2] = MakerFacet.collectFees.selector;
             selectors[3] = MakerFacet.adjustMaker.selector;
+            selectors[4] = MakerFacet.addPermission.selector;
+            selectors[5] = MakerFacet.removePermission.selector;
 
             cuts[3] = IDiamond.FacetCut({
                 facetAddress: address(new MakerFacet()),
@@ -124,13 +127,15 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](6);
+            bytes4[] memory selectors = new bytes4[](7);
             selectors[0] = ViewFacet.getPoolInfo.selector;
             selectors[1] = ViewFacet.getAssetInfo.selector;
-            selectors[2] = ViewFacet.getNodes.selector;
-            selectors[3] = ViewFacet.queryAssetBalances.selector;
-            selectors[4] = ViewFacet.getCollateralBalance.selector;
-            selectors[5] = ViewFacet.getCollateralBalances.selector;
+            selectors[2] = ViewFacet.getAssets.selector;
+            selectors[3] = ViewFacet.getNodes.selector;
+            selectors[4] = ViewFacet.queryAssetBalances.selector;
+            selectors[5] = ViewFacet.getCollateralBalance.selector;
+            selectors[6] = ViewFacet.getCollateralBalances.selector;
+            selectors[6] = ViewFacet.queryPermission.selector;
             cuts[6] = IDiamond.FacetCut({
                 facetAddress: address(new ViewFacet()),
                 action: IDiamond.FacetCutAction.Add,
