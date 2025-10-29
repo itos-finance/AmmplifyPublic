@@ -205,10 +205,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             revert NotAssetOwner(assetId, ownerOf(tokenId), msg.sender);
         }
 
-        // First collect fees from the position
-        (fees0, fees1) = MAKER_FACET.collectFees(msg.sender, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
-
-        // Then remove the maker position
+        // No need to collect fees. We can just remove immediately.
         (token0, token1, removedX, removedY) = MAKER_FACET.removeMaker(
             msg.sender,
             assetId,
@@ -270,7 +267,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return highTick The higher end of the tick range
      * @return liqType The liquidity type (MAKER, MAKER_NC, TAKER)
      * @return liquidity The liquidity of the position
-     * @return timestamp The timestamp of when the asset was last modified
      */
     function positions(
         uint256 tokenId
@@ -286,8 +282,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 lowTick,
             int24 highTick,
             LiqType liqType,
-            uint128 liquidity,
-            uint128 timestamp
+            uint128 liquidity
         )
     {
         // Check if the token was actually minted by checking if it's been assigned to an asset
@@ -324,8 +319,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             assetLowTick,
             assetHighTick,
             assetLiqType,
-            assetLiq,
-            0 // timestamp - not available from View facet, setting to 0 for now
+            assetLiq
         );
     }
 

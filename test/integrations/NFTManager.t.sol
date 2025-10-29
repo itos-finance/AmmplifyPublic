@@ -330,8 +330,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
             int24 lowTick,
             int24 highTick,
             LiqType liqType,
-            uint128 liquidity,
-            uint128 timestamp
+            uint128 liquidity
         ) = nftManager.positions(tokenId);
 
         // Verify all position data matches what we created
@@ -344,9 +343,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(highTick, HIGH_TICK);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC)); // Non-compounding maker
         assertEq(liquidity, LIQUIDITY);
-        // Note: timestamp is 0 because View facet doesn't provide timestamp
-        // This is acceptable for this test
-        assertGe(timestamp, 0); // Should be >= 0
     }
 
     // Required for IERC721Receiver
