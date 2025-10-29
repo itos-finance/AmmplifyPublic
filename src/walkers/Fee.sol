@@ -288,7 +288,7 @@ library FeeWalker {
             node.fees.makerXFeesPerLiqX128 += colMakerXRateX128;
             node.fees.makerYFeesPerLiqX128 += colMakerYRateX128;
             // We round down to avoid overpaying dust.
-            uint256 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
+            uint256 compoundingLiq = uint256(node.liq.mLiq - node.liq.ncLiq) * key.width();
             node.fees.xCFees = add128Fees(
                 node.fees.xCFees,
                 FullMath.mulX128(colMakerXRateX128, compoundingLiq, false),
