@@ -188,8 +188,11 @@ library ViewWalker {
                     );
                 }
             } else {
-                data.earningsX += FullMath.mulDiv(unclaimedX, aNode.sliq, node.liq.subtreeMLiq);
-                data.earningsY += FullMath.mulDiv(unclaimedY, aNode.sliq, node.liq.subtreeMLiq);
+                uint128 liq = (data.liq.liqType == LiqType.MAKER)
+                    ? uint128(FullMath.mulDiv(node.liq.mLiq - node.liq.ncLiq, aNode.sliq, node.liq.shares))
+                    : aNode.sliq;
+                data.earningsX += FullMath.mulDiv(unclaimedX, liq, node.liq.subtreeMLiq);
+                data.earningsY += FullMath.mulDiv(unclaimedY, liq, node.liq.subtreeMLiq);
             }
 
             // Now charge the true fee rate which will always be the case with visits.
