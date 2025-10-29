@@ -47,9 +47,11 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
 
         // Setup decomposer
         decomposer = new UniV3Decomposer(address(nfpm), address(makerFacet));
+        adminFacet.addPermissionedOpener(address(decomposer));
 
         // Setup NFT manager
         nftManager = new NFTManager(address(makerFacet), address(decomposer), address(nfpm));
+        adminFacet.addPermissionedOpener(address(nftManager));
 
         // Create vaults for token0 and token1 from the pool
         _createPoolVaults(poolAddr);
