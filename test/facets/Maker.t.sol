@@ -76,19 +76,28 @@ contract MakerFacetTest is MultiSetupTest {
             maxSqrtPriceX96,
             rftData
         );
+        skip(1 days);
 
         // Verify asset was created
         assertEq(assetId, 1);
 
         // Verify asset properties using ViewFacet
-        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
-            .getAssetInfo(assetId);
+        (
+            address owner,
+            address poolAddr_,
+            int24 lowTick_,
+            int24 highTick_,
+            LiqType liqType,
+            uint128 liq,
+            uint128 timestamp
+        ) = viewFacet.getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
         assertEq(highTick_, highTick);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
         assertEq(liq, liquidity);
+        assertEq(timestamp, uint128(block.timestamp - 1 days));
     }
 
     function testNewMakerCompounding() public {
@@ -107,7 +116,7 @@ contract MakerFacetTest is MultiSetupTest {
         );
 
         // Verify asset was created with compounding type
-        (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
+        (, , , , LiqType liqType, , ) = viewFacet.getAssetInfo(assetId);
         assertEq(uint8(liqType), uint8(LiqType.MAKER));
     }
 
@@ -338,14 +347,22 @@ contract MakerFacetTest is MultiSetupTest {
         );
 
         // Verify the position was created correctly using ViewFacet
-        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
-            .getAssetInfo(assetId);
+        (
+            address owner,
+            address poolAddr_,
+            int24 lowTick_,
+            int24 highTick_,
+            LiqType liqType,
+            uint128 liq,
+            uint128 timestamp
+        ) = viewFacet.getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
         assertEq(highTick_, highTick);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
         assertEq(liq, liquidity);
+        assertEq(timestamp, uint128(block.timestamp));
 
         // Get initial position balances
         (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);

@@ -11,7 +11,7 @@ import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC721Receiver } from "a@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import { Asset, AssetLib } from "../Asset.sol";
+import { Asset } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { IView } from "../interfaces/IView.sol";
@@ -300,7 +300,8 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 assetLowTick,
             int24 assetHighTick,
             LiqType assetLiqType,
-            uint128 assetLiq
+            uint128 assetLiq,
+
         ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
         if (assetPoolAddr == address(0)) {
@@ -375,9 +376,9 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateSVG(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
-        Asset storage asset = AssetLib.getAsset(assetId);
+        (, address assetPoolAddr, , , LiqType assetLiqType, , ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
-        string memory color = _getColorForLiqType(asset.liqType);
+        string memory color = _getColorForLiqType(assetLiqType);
 
         return
             string(
@@ -400,7 +401,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     '<text x="200" y="370" text-anchor="middle" fill="white" ',
                     'font-family="Arial" font-size="12">',
                     "Pool: ",
-                    _addressToString(asset.poolAddr),
+                    _addressToString(assetPoolAddr),
                     "</text>",
                     "</svg>"
                 )
@@ -414,10 +415,18 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateMetadata(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
-        Asset storage asset = AssetLib.getAsset(assetId);
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        (
+            address assetOwner,
+            address assetPoolAddr,
+            int24 assetLowTick,
+            int24 assetHighTick,
+            LiqType assetLiqType,
+            uint128 assetLiq,
+            uint128 assetTimestamp
+        ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(assetPoolAddr);
 
-        string memory liqTypeString = _getLiqTypeString(asset.liqType);
+        string memory liqTypeString = _getLiqTypeString(assetLiqType);
 
         return
             string(
@@ -434,7 +443,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     assetId.toString(),
                     '"},',
                     '{"trait_type":"Pool","value":"',
-                    _addressToString(asset.poolAddr),
+                    _addressToString(assetPoolAddr),
                     '"},',
                     '{"trait_type":"Token 0","value":"',
                     _addressToString(pInfo.token0),
@@ -443,19 +452,19 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     _addressToString(pInfo.token1),
                     '"},',
                     '{"trait_type":"Low Tick","value":"',
-                    _int24ToString(asset.lowTick),
+                    _int24ToString(assetLowTick),
                     '"},',
                     '{"trait_type":"High Tick","value":"',
-                    _int24ToString(asset.highTick),
+                    _int24ToString(assetHighTick),
                     '"},',
                     '{"trait_type":"Liquidity Type","value":"',
                     liqTypeString,
                     '"},',
                     '{"trait_type":"Liquidity","value":"',
-                    _uint128ToString(asset.liq),
+                    _uint128ToString(assetLiq),
                     '"},',
                     '{"trait_type":"Timestamp","value":"',
-                    _uint128ToString(asset.timestamp),
+                    _uint128ToString(assetTimestamp),
                     '"}',
                     "]}"
                 )
