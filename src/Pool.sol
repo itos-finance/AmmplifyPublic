@@ -54,6 +54,7 @@ library PoolLib {
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
+    uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
@@ -248,13 +249,13 @@ library PoolLib {
         uint160 sqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
-        (uint256 lxX128, uint256 lyX128) = getAmounts(sqrtPriceX96, lowTick, highTick, X128, roundUp);
-        uint256 liqValueX128 = (FullMath.mulX64(lxX128, sqrtPriceX96, false) >> 32) + (lyX128 << 96) / sqrtPriceX96;
+        (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
+        uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
         if (roundUp) {
-            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X128, liqValueX128));
+            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
         } else {
-            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X128, liqValueX128));
+            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
         }
     }
 

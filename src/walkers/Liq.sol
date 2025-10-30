@@ -43,13 +43,21 @@ struct LiqNode {
 using LiqNodeImpl for LiqNode global;
 
 library LiqNodeImpl {
-    function compound(LiqNode storage self, uint128 compoundedLiq, uint24 width) internal {
+    /// This is because we handle net liquidity as an int128.
+    uint128 public constant MAX_MLIQ = (1 << 127) - 1;
+
+    function compound(LiqNode storage self, uint128 compoundedLiq, uint24 width) internal returns (bool compounded) {
         if (compoundedLiq == 0) {
-            return;
+            return false;
         }
+        if (compoundedLiq > MAX_MLIQ - self.mLiq) {
+            return false;
+        }
+
         self.mLiq += compoundedLiq;
         self.subtreeMLiq += width * compoundedLiq;
         self.dirty = true;
+        return true;
     }
 
     /// The net liquidity owned by the node's position.
@@ -199,7 +207,7 @@ library LiqWalker {
         // If we have no maker liq in this node, then there is nothing to compound.
         if (node.liq.mLiq == 0) return;
 
-        // Otherwise, the fees should have been collected (or are avilable from collateral)
+        // Otherwise, the fees should have been collected (or are available from collateral)
         // and we can compound.
         uint256 x = FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false);
         uint256 y = FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false);
@@ -224,9 +232,11 @@ library LiqWalker {
             // Not worth compounding right now.
             return;
         }
-        node.liq.compound(assignableLiq, iter.width);
-        node.fees.xCFees = leftoverX;
-        node.fees.yCFees = leftoverY;
+        if (node.liq.compound(assignableLiq, iter.width)) {
+            // If we can't compound (cuz of overflow), we don't update the fees.
+            node.fees.xCFees = leftoverX;
+            node.fees.yCFees = leftoverY;
+        }
     }
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
@@ -257,6 +267,7 @@ library LiqWalker {
                 );
                 // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
                 // hence we allow the overflow error to revert. This won't affect other pools.
+                // This is recoverable once people close their positions and claim fees.
                 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
                 currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
                 // The shares we'll have afterwards.
