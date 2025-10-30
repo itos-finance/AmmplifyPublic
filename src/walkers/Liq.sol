@@ -143,9 +143,12 @@ library LiqDataLib {
     }
 }
 
+uint128 constant UINT120 = type(uint120).max;
+
 library LiqWalker {
     error InsufficientBorrowLiquidity(int256 netLiq);
     error InsufficientStandingFees(uint256 required, uint128 available, bool isX);
+    error SurpassedMaxLiquidity(uint128 liq);
 
     /// Data useful when visiting/propogating to a node.
     struct LiqIter {
@@ -311,6 +314,7 @@ library LiqWalker {
     }
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
+        require(targetLiq < UINT120, SurpassedMaxLiquidity(targetLiq));
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
@@ -324,10 +328,7 @@ library LiqWalker {
         if (data.liq.liqType == LiqType.MAKER) {
             uint128 compoundingLiq = 0;
             uint128 currentLiq = 0;
-            targetSliq = targetLiq; // Shares start equal to liq.
-            if (node.liq.shares == 0) {
-                targetSliq += 1e12;
-            }
+            targetSliq = targetLiq + type(uint48).max; // Shares start equal to liq plus the offset
             if (node.liq.shares != 0) {
                 // For adding liquidity, we need to consider existing fees
                 // and what amount of equivalent liq they're worth.
@@ -345,7 +346,7 @@ library LiqWalker {
                 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
                 currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
                 // The shares we'll have afterwards.
-                targetSliq = FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq);
+                targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
             }
             if (currentLiq < targetLiq) {
                 uint128 liqDiff = targetLiq - currentLiq;

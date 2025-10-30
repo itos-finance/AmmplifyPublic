@@ -6,7 +6,7 @@ import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console2 } from "forge-std/console2.sol";
 import { MultiSetupTest } from "../MultiSetup.u.sol";
 import { PoolInfo } from "../../src/Pool.sol";
-import { LiqType } from "../../src/walkers/Liq.sol";
+import { LiqType, LiqWalker } from "../../src/walkers/Liq.sol";
 import { MakerFacet } from "../../src/facets/Maker.sol";
 import { IMaker } from "../../src/interfaces/IMaker.sol";
 import { AssetLib } from "../../src/Asset.sol";
@@ -579,30 +579,46 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         assertApproxEqAbs(balance1, adjustedBalance1, 1, "Back to the original balance1");
     }
 
-    function uniswapV3FlashCallback(uint256 fee0, uint256 fee1, bytes calldata data) external {
-        token0.transfer(msg.sender, 1e18 + 1);
-        token1.transfer(msg.sender, 1e18 + 1);
-    }
-
-    function testFirstDepositorDrain() public {
+    function testNewMakerExcessiveLiquidityReverts() public {
         bytes memory rftData = "";
 
-        address victim = makeAddr("victimUser");
-        vm.label(victim, "victimUser");
+        // attempt to mint an excessive amount of liquidity to trigger SurpassedMaxLiquidity
+        uint128 excessiveLiq = type(uint128).max;
 
-        lowTick = 600;
-        highTick = 720;
-
-        // set current price to the middle of the interval
-        swapTo(0, TickMath.getSqrtRatioAtTick(630));
-
-        uint256 assetId = makerFacet.newMaker(
+        vm.expectRevert(abi.encodeWithSelector(LiqWalker.SurpassedMaxLiquidity.selector, excessiveLiq));
+        makerFacet.newMaker(
             recipient,
             poolAddr,
             lowTick,
             highTick,
-            1e6, // minimum liquidity
-            true, // compounding
+            excessiveLiq,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+    }
+
+    function testFirstDepositorDrain_NoValueLoss() public {
+        bytes memory rftData = "";
+
+        address victim = makeAddr("victimUser2");
+        vm.label(victim, "victimUser2");
+
+        int24 lt = 600;
+        int24 ht = 720;
+
+        // set current price to the middle of the interval
+        swapTo(0, TickMath.getSqrtRatioAtTick(630));
+
+        // create first compounding maker
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lt,
+            ht,
+            1e6,
+            true,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -617,35 +633,39 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         // donate again
         UniswapV3Pool(poolAddr).flash(address(this), 0, 0, "");
 
-        // mint new user who should get 0 shares
+        // victim mints and then immediately closes
         vm.startPrank(victim);
         MockERC20(token0).mint(victim, 2e18);
         MockERC20(token1).mint(victim, 2e18);
         uint balVictim0 = token0.balanceOf(victim);
         uint balVictim1 = token1.balanceOf(victim);
-        console2.log("victim balance before: ", balVictim0, balVictim1);
         MockERC20(token0).approve(diamond, type(uint256).max);
         MockERC20(token1).approve(diamond, type(uint256).max);
         uint256 assetId2 = makerFacet.newMaker(
             victim,
             poolAddr,
-            lowTick,
-            highTick,
+            lt,
+            ht,
             300e18,
-            true, // compounding
+            true,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
         );
-
-        // now close victim position to see how much he gets back
         makerFacet.removeMaker(victim, assetId2, minSqrtPriceX96, maxSqrtPriceX96, rftData);
         vm.stopPrank();
 
         uint balVictim0After = token0.balanceOf(victim);
         uint balVictim1After = token1.balanceOf(victim);
-        console2.log("victim balance after: ", balVictim0After, balVictim1After);
-        console2.log("victim balance loss: ");
-        console2.log(balVictim0, balVictim0After, balVictim1, balVictim1After);
+
+        // Assert total tokens (token0 + token1) increased compared to before
+        uint totalBefore = balVictim0 + balVictim1;
+        uint totalAfter = balVictim0After + balVictim1After;
+        assertGt(totalAfter, totalBefore, "victim total token amount should increase");
+    }
+
+    function uniswapV3FlashCallback(uint256 fee0, uint256 fee1, bytes calldata data) external {
+        token0.transfer(msg.sender, 1e18 + 1);
+        token1.transfer(msg.sender, 1e18 + 1);
     }
 }
