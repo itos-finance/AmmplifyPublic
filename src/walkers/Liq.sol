@@ -325,6 +325,9 @@ library LiqWalker {
             uint128 compoundingLiq = 0;
             uint128 currentLiq = 0;
             targetSliq = targetLiq; // Shares start equal to liq.
+            if (node.liq.shares == 0) {
+                targetSliq += 1e12;
+            }
             if (node.liq.shares != 0) {
                 // For adding liquidity, we need to consider existing fees
                 // and what amount of equivalent liq they're worth.
@@ -342,7 +345,7 @@ library LiqWalker {
                 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
                 currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
                 // The shares we'll have afterwards.
-                targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
+                targetSliq = FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq);
             }
             if (currentLiq < targetLiq) {
                 uint128 liqDiff = targetLiq - currentLiq;
