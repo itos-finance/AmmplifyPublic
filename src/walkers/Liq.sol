@@ -275,15 +275,24 @@ library LiqWalker {
                 // we can just remove the share-proportion of liq and fees (not equiv).
                 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
                 uint128 sliqDiff = sliq - targetSliq;
-                uint256 shareRatioX256 = FullMath.mulDivX256(sliqDiff, node.liq.shares, false);
-                uint128 liq = uint128(FullMath.mulX256(compoundingLiq, shareRatioX256, false));
+                uint128 liq;
+                uint256 xClaim;
+                uint256 yClaim;
+                if (sliqDiff == node.liq.shares) {
+                    liq = node.liq.mLiq;
+                    xClaim = node.fees.xCFees;
+                    yClaim = node.fees.yCFees;
+                } else {
+                    uint256 shareRatioX256 = FullMath.mulDivX256(sliqDiff, node.liq.shares, false);
+                    liq = uint128(FullMath.mulX256(compoundingLiq, shareRatioX256, false));
+                    xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
+                    yClaim = FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
+                }
                 node.liq.mLiq -= liq;
                 node.liq.shares -= sliqDiff;
                 node.liq.subtreeMLiq -= iter.width * liq;
-                uint256 xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
                 node.fees.xCFees -= uint128(xClaim);
                 data.xBalance -= int256(xClaim);
-                uint256 yClaim = FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
                 node.fees.yCFees -= uint128(yClaim);
                 data.yBalance -= int256(yClaim);
                 // Now we claim the balances from the liquidity itself.
