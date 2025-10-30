@@ -311,18 +311,33 @@ library PoolLib {
         }
     }
 
-    // How much liquidity is are these assets worth in the given range.
+    /// How much liquidity is are these assets worth in the given range.
+    /// We consider two prices, the current price and the twap price and use the one that produces more liquidity,
+    /// which causes an underweighting of the newly added liquidity. This slippage protects existing depositors
+    /// and new depositors can simply wait for low volatility moments to avoid slippage.
+    /// This protects us from someone manipulating the pool price to get a more favorable mint.
     function getEquivalentLiq(
         int24 lowTick,
         int24 highTick,
         uint256 x,
         uint256 y,
         uint160 sqrtPriceX96,
+        uint160 twapSqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
+        // Compute with the current price.
         (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
         uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
+        // Compute with the twap price.
+        (uint256 twapLxX96, uint256 twapLyX96) = getAmounts(twapSqrtPriceX96, lowTick, highTick, X96, roundUp);
+        uint256 twapLiqValueX96 = (FullMath.mulX64(twapLxX96, twapSqrtPriceX96, false) >> 32) +
+            (twapLyX96 << 96) /
+            twapSqrtPriceX96;
+        uint256 twapMyValue = FullMath.mulX128(x, uint256(twapSqrtPriceX96) << 32, false) +
+            (y << 96) /
+            twapSqrtPriceX96;
+
         if (roundUp) {
             equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
         } else {
