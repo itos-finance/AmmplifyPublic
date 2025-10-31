@@ -47,9 +47,11 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
 
         // Setup decomposer
         decomposer = new UniV3Decomposer(address(nfpm), address(makerFacet));
+        adminFacet.addPermissionedOpener(address(decomposer));
 
         // Setup NFT manager
         nftManager = new NFTManager(address(makerFacet), address(decomposer), address(nfpm));
+        adminFacet.addPermissionedOpener(address(nftManager));
 
         // Create vaults for token0 and token1 from the pool
         _createPoolVaults(poolAddr);
@@ -134,14 +136,14 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet.getAssetInfo(
-            assetId
-        );
+        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq, uint128 timestamp) = viewFacet
+            .getAssetInfo(assetId);
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
         assertEq(poolAddr, address(pools[0]));
         assertEq(lowTick, LOW_TICK);
         assertEq(highTick, HIGH_TICK);
         assertEq(liq, LIQUIDITY);
+        assertEq(timestamp, uint128(block.timestamp));
     }
 
     // ============ decomposeAndMint Tests ============
@@ -191,7 +193,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet.getAssetInfo(
+        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq, ) = viewFacet.getAssetInfo(
             assetId
         );
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
@@ -328,8 +330,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
             int24 lowTick,
             int24 highTick,
             LiqType liqType,
-            uint128 liquidity,
-            uint128 timestamp
+            uint128 liquidity
         ) = nftManager.positions(tokenId);
 
         // Verify all position data matches what we created
@@ -342,9 +343,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(highTick, HIGH_TICK);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC)); // Non-compounding maker
         assertEq(liquidity, LIQUIDITY);
-        // Note: timestamp is 0 because View facet doesn't provide timestamp
-        // This is acceptable for this test
-        assertGe(timestamp, 0); // Should be >= 0
     }
 
     // Required for IERC721Receiver

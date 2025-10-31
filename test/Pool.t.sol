@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
 
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
@@ -737,12 +738,27 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(equivLiqRoundingUp, actualLiq, "equivLiqRoundingUp.equals.actualLiq");
     }
 
+    function testFullRangeEquivLiq() public pure {
+        int24 lowTick = TickMath.MIN_TICK;
+        int24 highTick = TickMath.MAX_TICK;
+        uint160 sqrtPriceX96 = TickMath.getSqrtPriceAtTick(0);
+        uint128 x = 1 << 127;
+        uint128 y = 1 << 127;
+
+        // Should not revert.
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, y, sqrtPriceX96, true);
+        console.log("MIN_SQRT_PRICE");
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, 1 << 64, TickMath.MIN_SQRT_PRICE, true);
+        console.log("MAX_SQRT_PRICE");
+        PoolLib.getEquivalentLiq(lowTick, highTick, 1 << 64, y, TickMath.MAX_SQRT_PRICE, true);
+    }
+
     /// forge-config: default.allow_internal_expect_revert = true
     function testRevertGetEquivalentLiqBelowRangeLiqOverMaxRoundingDown() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                13612996131207439090653226566178355568195406,
+                13612996131207439090653231373011924683379703,
                 type(uint128).max
             )
         );
@@ -754,7 +770,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                13612996131207439090653226566178354767995391,
+                13612996131207439090653227936179023555179201,
                 type(uint128).max
             )
         );
@@ -810,7 +826,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                13612996182251070166403099169497108467528216,
+                13612996182251070166403103976120440650812069,
                 type(uint128).max
             )
         );
@@ -822,7 +838,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                13612996182251070166403099169497107667328197,
+                13612996182251070166403100539287526635776885,
                 type(uint128).max
             )
         );
@@ -893,7 +909,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                680768916872643588502673340623806917354623,
+                680768916872643588502673350572968592538008,
                 type(uint128).max
             )
         );
@@ -905,7 +921,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SafeCast.UnsafeUCast.selector,
-                680768916872643588502673340623806913352223,
+                680768916872643588502673333382789253472821,
                 type(uint128).max
             )
         );

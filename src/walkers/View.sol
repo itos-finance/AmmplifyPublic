@@ -259,7 +259,7 @@ library ViewWalker {
                 leftEarned = FullMath.mulX256(unclaimedX, leftRatioX256, false);
             }
             data.leftChildUnpaidX = leftPaid;
-            data.rightChildUnpaidY = unpaidX - leftPaid;
+            data.rightChildUnpaidX = unpaidX - leftPaid;
             data.leftChildUnclaimedX = leftEarned;
             data.rightChildUnclaimedX = unclaimedX - leftEarned;
 
@@ -335,10 +335,25 @@ library ViewWalker {
         uint256 fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
         uint256 fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         if (data.liq.liqType == LiqType.MAKER) {
-            // We just claim our shares.
-            // If the sliq and shares are zero, you should fail anyways.
-            data.earningsX += FullMath.mulDiv(node.fees.xCFees, aNode.sliq, node.liq.shares);
-            data.earningsY += FullMath.mulDiv(node.fees.yCFees, aNode.sliq, node.liq.shares);
+            if (node.liq.shares == 0) {
+                return;
+            }
+            // We claim our shares.
+            if (aNode.sliq == node.liq.shares) {
+                // Full shares, just take all fees.
+                data.earningsX += node.fees.xCFees;
+                data.earningsY += node.fees.yCFees;
+                uint256 liq = node.liq.mLiq - node.liq.ncLiq;
+                data.earningsX += FullMath.mulX128(liq, fee0DiffX128, false);
+                data.earningsY += FullMath.mulX128(liq, fee1DiffX128, false);
+            } else {
+                uint256 liqRatioX256 = FullMath.mulDivX256(aNode.sliq, node.liq.shares, false);
+                data.earningsX += FullMath.mulX256(node.fees.xCFees, liqRatioX256, false);
+                data.earningsY += FullMath.mulX256(node.fees.yCFees, liqRatioX256, false);
+                uint256 liq = FullMath.mulX256(node.liq.mLiq - node.liq.ncLiq, liqRatioX256, false);
+                data.earningsX += FullMath.mulX128(liq, fee0DiffX128, false);
+                data.earningsY += FullMath.mulX128(liq, fee1DiffX128, false);
+            }
         } else if (data.liq.liqType == LiqType.MAKER_NC) {
             data.earningsX += FullMath.mulX128(
                 aNode.sliq,

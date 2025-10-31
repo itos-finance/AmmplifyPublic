@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
+import { AdminLib } from "Commons/Util/Admin.sol";
 import { Store } from "./Store.sol";
 import { Asset } from "./Asset.sol";
 import { FullMath } from "./FullMath.sol";
@@ -25,15 +26,17 @@ struct FeeStore {
 /// and the borrow fees from any open takers.
 /// This just handles fees earned from takers.
 library FeeLib {
+    event JITPenalized(uint256 xPenalty, uint256 yPenalty);
+
     function init() internal {
         FeeStore storage store = Store.fees();
         store.defaultCompoundThreshold = 1e12; // 1 of each if both tokens are 6 decimals.
-        // Target 30% at 60% util. 5% at 0%.
+        // Target 20% APR at 70% util. 2% at 0%. Stored as SPR (second percentage rate).
         store.defaultFeeCurve = SmoothRateCurveConfig({
-            invAlphaX128: 102084710076281535261119195933814292480,
-            betaX64: 14757395258967642112,
-            maxUtilX64: 22136092888451461120, // 120%
-            maxRateX64: 17524406870024073216 // 95%
+            invAlphaX128: 658978001824224546224408100864,
+            betaX64: 18446744047804958848,
+            maxUtilX64: 17524406870024073216, // 95%
+            maxRateX64: 1169884834710 // 200%
         });
         // This is just for adding a super linear weight to the the split.
         // We base this around 1 to make a more even split when the difference is low.
@@ -82,6 +85,32 @@ library FeeLib {
     function applyJITPenalties(
         Asset storage asset,
         uint256 xBalance,
+        uint256 yBalance,
+        address tokenX,
+        address tokenY
+    ) internal returns (uint256 xBalanceOut, uint256 yBalanceOut) {
+        FeeStore storage store = Store.fees();
+        uint128 duration = uint128(block.timestamp) - asset.timestamp;
+        if (duration >= store.jitLifetime) {
+            return (xBalance, yBalance);
+        }
+        // Apply the JIT penalty.
+        uint256 penaltyX64 = (1 << 64) - store.jitPenaltyX64;
+        xBalanceOut = FullMath.mulX64(xBalance, penaltyX64, true);
+        yBalanceOut = FullMath.mulX64(yBalance, penaltyX64, true);
+        // Give the penalties to the owner address.
+        address owner = AdminLib.getOwner();
+        uint256 xDiff = xBalance - xBalanceOut;
+        store.collateral[owner][tokenX] += xDiff;
+        uint256 yDiff = yBalance - yBalanceOut;
+        store.collateral[owner][tokenY] += yDiff;
+        emit JITPenalized(xDiff, yDiff);
+    }
+
+    /// Views what JIT pentalties would be applied.
+    function viewJITPenalties(
+        Asset storage asset,
+        uint256 xBalance,
         uint256 yBalance
     ) internal view returns (uint256 xBalanceOut, uint256 yBalanceOut) {
         FeeStore storage store = Store.fees();
@@ -90,7 +119,7 @@ library FeeLib {
             return (xBalance, yBalance);
         }
         // Apply the JIT penalty.
-        uint256 penaltyX64 = store.jitPenaltyX64;
+        uint256 penaltyX64 = (1 << 64) - store.jitPenaltyX64;
         xBalanceOut = FullMath.mulX64(xBalance, penaltyX64, true);
         yBalanceOut = FullMath.mulX64(yBalance, penaltyX64, true);
     }

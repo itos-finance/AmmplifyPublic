@@ -62,7 +62,7 @@ contract AmmplifyForkBase is ForkableTest {
         token1 = IERC20(getAddr("TOKEN1"));
 
         // Deploy diamond
-        diamond = new SimplexDiamond();
+        diamond = new SimplexDiamond(address(0xDEADDEADDEAD));
         decomposer = new UniV3Decomposer(address(nftManager), address(diamond));
     }
 

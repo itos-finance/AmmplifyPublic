@@ -3,15 +3,16 @@ pragma solidity ^0.8.27;
 
 import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { FullMath } from "./FullMath.sol";
 import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
-import { msb } from "./tree/BitMath.sol";
 import { Node } from "./walkers/Node.sol";
 import { Key } from "./tree/Key.sol";
 import { TreeTickLib } from "./tree/Tick.sol";
 import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientSlot.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
+import { Store } from "./Store.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -20,6 +21,7 @@ struct PoolInfo {
     address token0;
     address token1;
     int24 tickSpacing;
+    uint24 fee;
     uint24 treeWidth;
     // Price info
     uint160 sqrtPriceX96; // Current price of the pool
@@ -51,6 +53,10 @@ library PoolInfoImpl {
         feeGrowthGlobal0X128 = poolContract.feeGrowthGlobal0X128();
         feeGrowthGlobal1X128 = poolContract.feeGrowthGlobal1X128();
     }
+
+    function validate(PoolInfo memory self) internal view {
+        PoolValidation.validate(self.poolAddr, self.token0, self.token1, self.fee);
+    }
 }
 
 /// Internal persistent storage bookkeeping for pools.
@@ -70,6 +76,7 @@ library PoolLib {
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
+    uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
@@ -78,6 +85,7 @@ library PoolLib {
         pInfo.token1 = poolImmutables.token1();
 
         pInfo.tickSpacing = poolImmutables.tickSpacing();
+        pInfo.fee = poolImmutables.fee();
         // We find the first power of two that is less than the number of tree indices to be the width.
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
 
@@ -282,13 +290,13 @@ library PoolLib {
         uint160 sqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
-        (uint256 lxX128, uint256 lyX128) = getAmounts(sqrtPriceX96, lowTick, highTick, X128, roundUp);
-        uint256 liqValueX128 = (FullMath.mulX64(lxX128, sqrtPriceX96, false) >> 32) + (lyX128 << 96) / sqrtPriceX96;
+        (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
+        uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
         if (roundUp) {
-            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X128, liqValueX128));
+            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
         } else {
-            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X128, liqValueX128));
+            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
         }
     }
 
@@ -320,5 +328,27 @@ library PoolLib {
             x = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, liq, roundUp);
             y = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, liq, roundUp);
         }
+    }
+}
+
+library PoolValidation {
+    // If you want to deploy a diamond for testing without validation, use this.
+    // But NEVER use this in production as malicious pools can drain fee earnings without this validation guard.
+    address public constant SKIP_VALIDATION_FACTORY = address(0xDEADDEADDEAD);
+
+    // This pool cannot be used with this ammplify deployment as it's from a different factory.
+    error UnrecognizedPool();
+
+    function initFactory(address factory) internal {
+        Store.load().factory = factory;
+    }
+
+    function validate(address poolAddr, address token0, address token1, uint24 fee) internal view {
+        address factory = Store.factory();
+        if (factory == SKIP_VALIDATION_FACTORY) return;
+
+        // We query the factory because we don't want to rely on the POOL_INIT_CODE_HASH
+        // which varies from fork to fork.
+        require(IUniswapV3Factory(factory).getPool(token0, token1, fee) == poolAddr, UnrecognizedPool());
     }
 }
