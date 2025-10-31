@@ -185,6 +185,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return removedY The amount of token1 removed
      * @return fees0 The amount of token0 fees collected
      * @return fees1 The amount of token1 fees collected
+     * @dev TODO: Do we need fees collected?
      */
     function burnAsset(
         uint256 tokenId,
@@ -416,8 +417,9 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateMetadata(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
+        // address assetOwner not used
         (
-            address assetOwner,
+            ,
             address assetPoolAddr,
             int24 assetLowTick,
             int24 assetHighTick,
