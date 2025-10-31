@@ -11,7 +11,7 @@ import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC721Receiver } from "a@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import { Asset, AssetLib } from "../Asset.sol";
+import { Asset } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { IView } from "../interfaces/IView.sol";
@@ -153,6 +153,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         NFPM.approve(address(DECOMPOSER), positionId);
 
         // Set the token requester context so tokenRequestCB knows who to pull tokens from (if needed)
+        // and who to send residuals to.
         _currentTokenRequester = msg.sender;
 
         // Decompose the Uniswap V3 position
@@ -205,10 +206,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             revert NotAssetOwner(assetId, ownerOf(tokenId), msg.sender);
         }
 
-        // First collect fees from the position
-        (fees0, fees1) = MAKER_FACET.collectFees(msg.sender, assetId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
-
-        // Then remove the maker position
+        // No need to collect fees. We can just remove immediately.
         (token0, token1, removedX, removedY) = MAKER_FACET.removeMaker(
             msg.sender,
             assetId,
@@ -270,7 +268,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return highTick The higher end of the tick range
      * @return liqType The liquidity type (MAKER, MAKER_NC, TAKER)
      * @return liquidity The liquidity of the position
-     * @return timestamp The timestamp of when the asset was last modified
      */
     function positions(
         uint256 tokenId
@@ -286,8 +283,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 lowTick,
             int24 highTick,
             LiqType liqType,
-            uint128 liquidity,
-            uint128 timestamp
+            uint128 liquidity
         )
     {
         // Check if the token was actually minted by checking if it's been assigned to an asset
@@ -305,7 +301,8 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 assetLowTick,
             int24 assetHighTick,
             LiqType assetLiqType,
-            uint128 assetLiq
+            uint128 assetLiq,
+
         ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
         if (assetPoolAddr == address(0)) {
@@ -324,8 +321,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             assetLowTick,
             assetHighTick,
             assetLiqType,
-            assetLiq,
-            0 // timestamp - not available from View facet, setting to 0 for now
+            assetLiq
         );
     }
 
@@ -381,9 +377,9 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateSVG(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
-        Asset storage asset = AssetLib.getAsset(assetId);
+        (, address assetPoolAddr, , , LiqType assetLiqType, , ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
-        string memory color = _getColorForLiqType(asset.liqType);
+        string memory color = _getColorForLiqType(assetLiqType);
 
         return
             string(
@@ -406,7 +402,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     '<text x="200" y="370" text-anchor="middle" fill="white" ',
                     'font-family="Arial" font-size="12">',
                     "Pool: ",
-                    _addressToString(asset.poolAddr),
+                    _addressToString(assetPoolAddr),
                     "</text>",
                     "</svg>"
                 )
@@ -420,10 +416,18 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateMetadata(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
-        Asset storage asset = AssetLib.getAsset(assetId);
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
+        (
+            address assetOwner,
+            address assetPoolAddr,
+            int24 assetLowTick,
+            int24 assetHighTick,
+            LiqType assetLiqType,
+            uint128 assetLiq,
+            uint128 assetTimestamp
+        ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(assetPoolAddr);
 
-        string memory liqTypeString = _getLiqTypeString(asset.liqType);
+        string memory liqTypeString = _getLiqTypeString(assetLiqType);
 
         return
             string(
@@ -440,7 +444,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     assetId.toString(),
                     '"},',
                     '{"trait_type":"Pool","value":"',
-                    _addressToString(asset.poolAddr),
+                    _addressToString(assetPoolAddr),
                     '"},',
                     '{"trait_type":"Token 0","value":"',
                     _addressToString(pInfo.token0),
@@ -449,19 +453,19 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     _addressToString(pInfo.token1),
                     '"},',
                     '{"trait_type":"Low Tick","value":"',
-                    _int24ToString(asset.lowTick),
+                    _int24ToString(assetLowTick),
                     '"},',
                     '{"trait_type":"High Tick","value":"',
-                    _int24ToString(asset.highTick),
+                    _int24ToString(assetHighTick),
                     '"},',
                     '{"trait_type":"Liquidity Type","value":"',
                     liqTypeString,
                     '"},',
                     '{"trait_type":"Liquidity","value":"',
-                    _uint128ToString(asset.liq),
+                    _uint128ToString(assetLiq),
                     '"},',
                     '{"trait_type":"Timestamp","value":"',
-                    _uint128ToString(asset.timestamp),
+                    _uint128ToString(assetTimestamp),
                     '"}',
                     "]}"
                 )
@@ -553,7 +557,17 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         int256[] calldata requests,
         bytes calldata /* data */
     ) external override returns (bytes memory cbData) {
-        // Only allow calls from MAKER_FACET
+        if (msg.sender == address(DECOMPOSER)) {
+            // We received some decompose residuals. Can forward to caller.
+            for (uint256 i = 0; i < tokens.length; ++i) {
+                if (requests[i] < 0) {
+                    TransferHelper.safeTransfer(tokens[i], _currentTokenRequester, uint256(-requests[i]));
+                }
+            }
+            return "";
+        }
+
+        // Otherwise, only allow calls from MAKER_FACET
         if (msg.sender != address(MAKER_FACET)) {
             revert OnlyMakerFacet(msg.sender);
         }

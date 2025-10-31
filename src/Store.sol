@@ -8,6 +8,7 @@ import { FeeStore } from "./Fee.sol";
 
 struct Storage {
     AssetStore _assets;
+    address factory;
     mapping(address poolAddr => Pool) pools;
     VaultStore _vaults;
     FeeStore _fees;
@@ -39,5 +40,9 @@ library Store {
 
     function fees() internal view returns (FeeStore storage f) {
         f = load()._fees;
+    }
+
+    function factory() internal view returns (address) {
+        return load().factory;
     }
 }

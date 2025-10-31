@@ -123,7 +123,7 @@ library FullMath {
     /// A slightly optimized version of mulDiv for when we want to divide a by b (where b > a) and get an X256 result.
     /// @custom:gas 548
     function mulDivX256(uint256 num, uint256 denominator, bool roundUp) internal pure returns (uint256 result) {
-        require(denominator > num, "0");
+        require(denominator > num, "md0");
 
         ///////////////////////////////////////////////
         // 512 by 256 division.

@@ -48,6 +48,19 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         addPoolLiq(0, 160000, 160010, 5e8);
         LiqWalker.compound(iter, n, data);
         assertGt(n.liq.mLiq, 5e8, "mLiq");
+        assertLt(n.fees.xCFees, 100e18, "xFees");
+        // Cuz we're above the current price, we just need x to compound.
+        assertEq(n.fees.yCFees, 200e18, "yFees same");
+
+        // But if we were to overflow, the compound doesn't happen.
+        console.log("Overflow compound");
+        n.fees.xCFees = 1 << 127;
+        n.fees.yCFees = 1 << 127;
+        n.liq.mLiq = LiqNodeImpl.MAX_MLIQ - 1e8;
+        LiqWalker.compound(iter, n, data);
+        assertEq(n.liq.mLiq, LiqNodeImpl.MAX_MLIQ - 1e8, "mLiq same");
+        assertEq(n.fees.xCFees, 1 << 127, "xFees same");
+        assertEq(n.fees.yCFees, 1 << 127, "yFees same still");
     }
 
     function testModifyMakerAdd() public {
@@ -90,6 +103,34 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertGt(data.xBalance, 0, "8");
         // Because our range is entirely above the current price.
         assertEq(data.yBalance, 0, "9");
+    }
+
+    function testModifyAddRemove() public {
+        // Generic data setup.
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
+
+        Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
+        (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
+            key: key,
+            visit: true,
+            width: 1,
+            lowTick: low,
+            highTick: high
+        });
+        // We start with nothing.
+        Node storage n = data.node(key);
+        n.liq.mLiq = 0;
+        n.liq.shares = 0;
+        AssetNode storage aNode = data.assetNode(key);
+        aNode.sliq = 0;
+        // Add to 100e8.
+        LiqWalker.modify(iter, n, data, 100e8);
+        console.log("added");
+        // Remove it all
+        LiqWalker.modify(iter, n, data, 0);
     }
 
     function testModifyMakerSubtract() public {

@@ -21,6 +21,7 @@ contract UniV3DecomposerTest is MultiSetupTest {
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
         decomposer = new UniV3Decomposer(address(nfpm), address(diamond));
+        adminFacet.addPermissionedOpener(address(decomposer));
         addPoolLiq(0, -600, 600, 1e18);
     }
 

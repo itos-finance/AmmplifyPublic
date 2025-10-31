@@ -15,11 +15,6 @@ import { PoolWalker } from "../walkers/Pool.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { LiqType } from "../walkers/Liq.sol";
 
-// Mistake. Intended so we can move all takers over at once, but instead we
-// deposited with assetId. Which we can do if we want to further split the bookkeeping
-// but without that, we just can't transfer.
-uint256 constant TAKER_VAULT_ID = 80085;
-
 contract TakerFacet is ReentrancyGuardTransient {
     // Higher requirement than makers.
     uint128 public constant MIN_TAKER_LIQUIDITY = 1e12;
@@ -71,6 +66,8 @@ contract TakerFacet is ReentrancyGuardTransient {
         if (liq < MIN_TAKER_LIQUIDITY) revert DeMinimusTaker(liq);
         AdminLib.validateRights(AmmplifyAdminRights.TAKER);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        // When creating new positions, we make sure to validate the pool isn't malicious.
+        pInfo.validate();
         (Asset storage asset, uint256 assetId) = AssetLib.newTaker(
             recipient,
             pInfo,

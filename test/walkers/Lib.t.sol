@@ -52,6 +52,16 @@ contract WalkerLibTest is Test, UniV3IntegrationSetup {
         PoolWalker.settle(pInfo, -100, 100, data);
     }
 
+    function testWalkAddRemove() public {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
+        WalkerLib.modify(pInfo, -100, 100, data);
+        PoolWalker.settle(pInfo, -100, 100, data);
+        data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
+        WalkerLib.modify(pInfo, -100, 100, data);
+    }
+
     function testEmptyNCWalk() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, false);

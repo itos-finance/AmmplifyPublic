@@ -30,6 +30,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
     ) external nonReentrant returns (uint256 _assetId) {
         require(liq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(liq));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        // When creating new positions, we make sure to validate the pool isn't malicious.
+        pInfo.validate();
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
             pInfo,
@@ -71,23 +73,26 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         int256[] memory balances = new int256[](2);
         if (data.xBalance == 0 && data.yBalance == 0) {
             revert DeMinimusMaker(targetLiq);
-        } else if (data.xBalance > 0 || (data.xBalance == 0 && data.yBalance > 0)) {
-            // Both should go up together.
-            require(data.yBalance >= 0);
+        } else if (targetLiq >= asset.liq) {
+            // Adding more liq, may collect some fees but no need to apply JIT penalties.
             balances[0] = data.xBalance;
             balances[1] = data.yBalance;
             RFTLib.settle(msg.sender, tokens, balances, rftData);
             PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         } else {
-            require(data.yBalance < 0);
+            // We're reducing, we may need to apply JIT penalties.
+            // When reducing there should be no reason to pay anything more.
+            require((data.yBalance <= 0) && (data.xBalance <= 0), "AIE");
             PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
             uint256 removedX = uint256(-data.xBalance);
             uint256 removedY = uint256(-data.yBalance);
             (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY, tokens[0], tokens[1]);
             balances[0] = -int256(removedX);
             balances[1] = -int256(removedY);
-            RFTLib.settle(msg.sender, tokens, balances, rftData);
+            RFTLib.settle(recipient, tokens, balances, rftData);
         }
+        // The new "original" liq we collet to is now the targetLiq.
+        asset.liq = targetLiq;
         // We have to apply jit afterwards in case someone is trying to use adjust to get around that.
         AssetLib.updateTimestamp(asset);
         token0 = tokens[0];
@@ -143,8 +148,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
-        // Update timestamp because for compounding liq, the liq has changed.
-        AssetLib.updateTimestamp(asset);
+        // We don't apply the JIT penalty here because keeping the fees earned in the pool is not really a concern.
+        // Even if technically someone can marginally reduce their JIT penalty be collecting and then removing.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
@@ -152,6 +157,16 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         RFTLib.settle(recipient, tokens, balances, rftData);
         fees0 = uint256(-data.xBalance);
         fees1 = uint256(-data.yBalance);
+    }
+
+    /// Allow this address to open positions and give you ownership.
+    function addPermission(address opener) external {
+        AssetLib.addPermission(msg.sender, opener);
+    }
+
+    /// Remove this address from opening positions and giving you ownership.
+    function removePermission(address opener) external {
+        AssetLib.removePermission(msg.sender, opener);
     }
 
     // TODO: Add function to compound a node. But to get the prefix accurately we have to walk down to that node.
