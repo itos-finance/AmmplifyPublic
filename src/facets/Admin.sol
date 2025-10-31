@@ -25,6 +25,8 @@ contract AdminFacet is TimedAdminFacet {
     event TwapIntervalSet(address indexed pool, uint32 interval);
     event DefaultTwapIntervalSet(uint32 interval);
 
+    error InvalidZeroInterval();
+
     /* Taker related */
 
     uint256 private constant RIGHTS_USE_ID = uint256(keccak256("ammplify.rights.useid.20250714"));
@@ -72,12 +74,14 @@ contract AdminFacet is TimedAdminFacet {
     }
 
     function setTwapInterval(address pool, uint32 interval) external {
+        require(interval > 0, InvalidZeroInterval());
         AdminLib.validateOwner();
         Store.fees().twapIntervals[pool] = interval;
         emit TwapIntervalSet(pool, interval);
     }
 
     function setDefaultTwapInterval(uint32 interval) external {
+        require(interval > 0, InvalidZeroInterval());
         AdminLib.validateOwner();
         Store.fees().defaultTwapInterval = interval;
         emit DefaultTwapIntervalSet(interval);

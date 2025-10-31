@@ -117,7 +117,7 @@ library PoolLib {
         timepoints[0] = 0;
         timepoints[1] = interval;
         (int56[] memory tickCumulatives, ) = poolContract.observe(timepoints);
-        int56 tickCumulativeDelta = tickCumulatives[1] - tickCumulatives[0];
+        int56 tickCumulativeDelta = tickCumulatives[0] - tickCumulatives[1];
         // We don't mind rounding the twapTick to 0 (price to 1).
         int24 twapTick = int24(tickCumulativeDelta / int32(interval));
         twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);

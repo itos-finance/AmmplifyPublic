@@ -778,11 +778,11 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         uint128 y = 1 << 127;
 
         // Should not revert.
-        PoolLib.getEquivalentLiq(lowTick, highTick, x, y, sqrtPriceX96, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, y, sqrtPriceX96, sqrtPriceX96, true);
         console.log("MIN_SQRT_PRICE");
-        PoolLib.getEquivalentLiq(lowTick, highTick, x, 1 << 64, TickMath.MIN_SQRT_PRICE, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, 1 << 64, TickMath.MIN_SQRT_PRICE, TickMath.MIN_SQRT_PRICE, true);
         console.log("MAX_SQRT_PRICE");
-        PoolLib.getEquivalentLiq(lowTick, highTick, 1 << 64, y, TickMath.MAX_SQRT_PRICE, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, 1 << 64, y, TickMath.MAX_SQRT_PRICE, TickMath.MAX_SQRT_PRICE, true);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
