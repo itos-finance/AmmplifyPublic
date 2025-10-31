@@ -50,7 +50,7 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
 
     /// Deploy the diamond and facets
     function _newDiamond() internal {
-        diamond = address(new SimplexDiamond());
+        diamond = address(new SimplexDiamond(address(factory)));
 
         adminFacet = AdminFacet(diamond);
         makerFacet = MakerFacet(diamond);
