@@ -81,7 +81,7 @@ library PoolLib {
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
-    uint16 private constant MIN_OBSERVATIONS = 5;
+    uint16 private constant MIN_OBSERVATIONS = 32;
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
@@ -119,7 +119,7 @@ library PoolLib {
         (int56[] memory tickCumulatives, ) = poolContract.observe(timepoints);
         int56 tickCumulativeDelta = tickCumulatives[1] - tickCumulatives[0];
         // We don't mind rounding the twapTick to 0 (price to 1).
-        int24 twapTick = int24(tickCumulativeDelta / interval);
+        int24 twapTick = int24(tickCumulativeDelta / int32(interval));
         twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
     }
 
@@ -334,14 +334,18 @@ library PoolLib {
         uint256 twapLiqValueX96 = (FullMath.mulX64(twapLxX96, twapSqrtPriceX96, false) >> 32) +
             (twapLyX96 << 96) /
             twapSqrtPriceX96;
-        uint256 twapMyValue = FullMath.mulX128(x, uint256(twapSqrtPriceX96) << 32, false) +
+        uint256 myTwapValue = FullMath.mulX128(x, uint256(twapSqrtPriceX96) << 32, false) +
             (y << 96) /
             twapSqrtPriceX96;
 
         if (roundUp) {
-            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
+            uint128 liq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
+            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myTwapValue, X96, twapLiqValueX96));
+            equivLiq = liq > twapLiq ? liq : twapLiq;
         } else {
-            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
+            uint128 liq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
+            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDiv(myTwapValue, X96, twapLiqValueX96));
+            equivLiq = liq > twapLiq ? liq : twapLiq;
         }
     }
 

@@ -20,6 +20,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
     Node public right;
 
     function setUp() public {
+        FeeLib.init();
         setUpPool(500); // For a tick spacing of 10.
     }
 
@@ -148,7 +149,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.mLiq = 200e8;
         n.liq.subtreeMLiq = 1000e8;
         n.fees.xCFees = 500;
-        uint128 equivLiq = PoolLib.getEquivalentLiq(low, high, 500, 0, data.sqrtPriceX96, true);
+        uint128 equivLiq = PoolLib.getEquivalentLiq(low, high, 500, 0, data.sqrtPriceX96, data.sqrtPriceX96, true);
         n.liq.ncLiq = 100e8;
         n.liq.shares = 200e8; // Actual shares
         uint128 totalShares = 200e8 + LiqWalker.VIRTUAL_SHARES;
@@ -288,7 +289,6 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
     }
 
     function testSolveLiqRepay() public {
-        FeeLib.init();
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         // Non-compounding

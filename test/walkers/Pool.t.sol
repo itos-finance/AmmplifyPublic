@@ -14,11 +14,13 @@ import { Node } from "../../src/walkers/Node.sol";
 import { TreeTickLib } from "../../src/tree/Tick.sol";
 import { PoolWalker } from "../../src/walkers/Pool.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
+import { FeeLib } from "../../src/Fee.sol";
 
 contract PoolWalkerTest is Test, UniV3IntegrationSetup {
     Node public node;
 
     function setUp() public {
+        FeeLib.init();
         setUpPool(500); // For a tick spacing of 10.
 
         MockERC20(poolToken0s[0]).mint(address(this), 1e24);

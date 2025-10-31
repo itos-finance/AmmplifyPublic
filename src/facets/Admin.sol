@@ -21,7 +21,9 @@ contract AdminFacet is TimedAdminFacet {
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
     event DefaultCompoundThresholdSet(uint256 threshold);
     event CompoundThresholdSet(address indexed pool, uint256 threshold);
-    event JITPenaltySet(uint64 lifetime, uint64 penaltyX64);
+    event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
+    event TwapIntervalSet(address indexed pool, uint32 interval);
+    event DefaultTwapIntervalSet(uint32 interval);
 
     /* Taker related */
 
@@ -72,14 +74,16 @@ contract AdminFacet is TimedAdminFacet {
     function setTwapInterval(address pool, uint32 interval) external {
         AdminLib.validateOwner();
         Store.fees().twapIntervals[pool] = interval;
+        emit TwapIntervalSet(pool, interval);
     }
 
     function setDefaultTwapInterval(uint32 interval) external {
         AdminLib.validateOwner();
         Store.fees().defaultTwapInterval = interval;
+        emit DefaultTwapIntervalSet(interval);
     }
 
-    function setJITPenalties(uint64 lifetime, uint64 penaltyX64) external {
+    function setJITPenalties(uint32 lifetime, uint64 penaltyX64) external {
         AdminLib.validateOwner();
         Store.fees().jitLifetime = lifetime;
         Store.fees().jitPenaltyX64 = penaltyX64;
@@ -113,7 +117,7 @@ contract AdminFacet is TimedAdminFacet {
             SmoothRateCurveConfig memory splitCurve,
             uint128 compoundThreshold,
             uint32 twapInterval,
-            uint64 jitLifetime,
+            uint32 jitLifetime,
             uint64 jitPenaltyX64
         )
     {
