@@ -86,7 +86,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
             uint256 removedX = uint256(-data.xBalance);
             uint256 removedY = uint256(-data.yBalance);
-            (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY);
+            (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY, tokens[0], tokens[1]);
             balances[0] = -int256(removedX);
             balances[1] = -int256(removedY);
             RFTLib.settle(recipient, tokens, balances, rftData);
@@ -119,9 +119,9 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         removedX = uint256(-data.xBalance); // These are definitely negative.
         removedY = uint256(-data.yBalance);
-        (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY);
-        AssetLib.removeAsset(assetId);
         address[] memory tokens = pInfo.tokens();
+        (removedX, removedY) = FeeLib.applyJITPenalties(asset, removedX, removedY, tokens[0], tokens[1]);
+        AssetLib.removeAsset(assetId);
         int256[] memory balances = new int256[](2);
         balances[0] = -int256(removedX); // We know they fit since they can only be less (in magnitude) than before.
         balances[1] = -int256(removedY);

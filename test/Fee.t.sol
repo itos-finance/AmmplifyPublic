@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import { Test } from "forge-std/Test.sol";
 
+import { AdminLib } from "Commons/Util/Admin.sol";
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
 
 import { Store } from "../src/Store.sol";
@@ -115,17 +116,24 @@ contract FeeTest is Test {
         feeStore.jitLifetime = 1000;
         feeStore.jitPenaltyX64 = 6148914691236516864; // 33%
 
+        address owner = address(0xDEADBEEF);
+        AdminLib.initOwner(owner);
+
         // No penalty
         vm.warp(1200);
-        (uint256 xBalanceOut, uint256 yBalanceOut) = FeeLib.applyJITPenalties(asset, 100, 100);
+        (uint256 xBalanceOut, uint256 yBalanceOut) = FeeLib.applyJITPenalties(asset, 100, 100, address(0), address(1));
         assertEq(xBalanceOut, 100, "noPenalty.xBalanceOut");
         assertEq(yBalanceOut, 100, "noPenalty.yBalanceOut");
+        assertEq(feeStore.collateral[owner][address(0)], 0, "noX");
+        assertEq(feeStore.collateral[owner][address(1)], 0, "noY");
 
         // Penalty
         vm.warp(1000);
-        (xBalanceOut, yBalanceOut) = FeeLib.applyJITPenalties(asset, 100, 100);
-        assertEq(xBalanceOut, 34, "penalty.xBalanceOut"); // rounds up
-        assertEq(yBalanceOut, 34, "penalty.yBalanceOut"); // rounds up
+        (xBalanceOut, yBalanceOut) = FeeLib.applyJITPenalties(asset, 100, 100, address(0), address(1));
+        assertEq(xBalanceOut, 67, "penalty.xBalanceOut"); // rounds up
+        assertEq(yBalanceOut, 67, "penalty.yBalanceOut"); // rounds up
+        assertEq(feeStore.collateral[owner][address(0)], 33, "hasX");
+        assertEq(feeStore.collateral[owner][address(1)], 33, "hasY");
     }
 
     // Helpers
