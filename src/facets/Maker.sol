@@ -148,8 +148,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
-        // Update timestamp because for compounding liq, the liq has changed.
-        AssetLib.updateTimestamp(asset);
+        // We don't apply the JIT penalty here because keeping the fees earned in the pool is not really a concern.
+        // Even if technically someone can marginally reduce their JIT penalty be collecting and then removing.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance;
