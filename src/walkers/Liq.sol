@@ -143,12 +143,13 @@ library LiqDataLib {
     }
 }
 
-uint128 constant UINT120 = type(uint120).max;
-
 library LiqWalker {
+    // When calculating shares for compounding liq, we use virtual share accounting to avoid inflation attacks.
+    uint128 public constant VIRTUAL_LIQ = 1;
+    uint128 public constant VIRTUAL_SHARES = type(uint32).max;
+
     error InsufficientBorrowLiquidity(int256 netLiq);
     error InsufficientStandingFees(uint256 required, uint128 available, bool isX);
-    error SurpassedMaxLiquidity(uint128 liq);
 
     /// Data useful when visiting/propogating to a node.
     struct LiqIter {
@@ -314,7 +315,6 @@ library LiqWalker {
     }
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
-        require(targetLiq < UINT120, SurpassedMaxLiquidity(targetLiq));
         AssetNode storage aNode = data.assetNode(iter.key);
         // First we collect fees for the position (not the pool which happens in compound).
         // Fee collection happens automatically for compounding liq when modifying liq.
@@ -326,10 +326,10 @@ library LiqWalker {
         uint128 targetSliq = targetLiq; // Only changed in the MAKER case
 
         if (data.liq.liqType == LiqType.MAKER) {
-            uint128 compoundingLiq = 0;
-            uint128 currentLiq = 0;
-            targetSliq = targetLiq + type(uint48).max; // Shares start equal to liq plus the offset
-            if (node.liq.shares != 0) {
+            // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
+            // hence we allow the overflow error to revert. This won't affect other pools.
+            uint128 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + VIRTUAL_LIQ;
+            {
                 // For adding liquidity, we need to consider existing fees
                 // and what amount of equivalent liq they're worth.
                 uint128 equivLiq = PoolLib.getEquivalentLiq(
@@ -340,49 +340,50 @@ library LiqWalker {
                     data.sqrtPriceX96,
                     true
                 );
-                // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
-                // hence we allow the overflow error to revert. This won't affect other pools.
-                // This is recoverable once people close their positions and claim fees.
-                compoundingLiq = node.liq.mLiq - node.liq.ncLiq + equivLiq;
-                currentLiq = uint128(FullMath.mulDiv(compoundingLiq, sliq, node.liq.shares));
-                // The shares we'll have afterwards.
-                targetSliq = uint128(FullMath.mulDiv(node.liq.shares, targetLiq, compoundingLiq));
+                compoundingLiq += equivLiq;
             }
-            if (currentLiq < targetLiq) {
-                uint128 liqDiff = targetLiq - currentLiq;
+            // We ONLY use virtual shares when adding and removing compounding liq.
+            // All fee calculations, liquidity minted/burned etc. are done using real liq values.
+            uint128 nodeShares = node.liq.shares + VIRTUAL_SHARES;
+            // The shares we'll have afterwards.
+            targetSliq = SafeCast.toUint128(FullMath.mulDiv(nodeShares, targetLiq, compoundingLiq));
+            if (sliq < targetSliq) {
+                uint128 sliqDiff = targetSliq - sliq;
+                uint128 liqDiff = uint128(FullMath.mulDivRoundingUp(compoundingLiq, sliqDiff, nodeShares));
                 node.liq.mLiq += liqDiff;
-                node.liq.shares += targetSliq - sliq;
+                node.liq.shares += sliqDiff;
                 (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
-            } else if (currentLiq > targetLiq) {
-                // When subtracting liquidity, since we've already considered the equiv liq in adding,
-                // we can just remove the share-proportion of liq and fees (not equiv).
-                compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-                uint128 sliqDiff = sliq - targetSliq;
-                uint128 liq;
-                uint256 xClaim;
-                uint256 yClaim;
-                if (sliqDiff == node.liq.shares) {
-                    liq = node.liq.mLiq;
-                    xClaim = node.fees.xCFees;
-                    yClaim = node.fees.yCFees;
-                } else {
-                    uint256 shareRatioX256 = FullMath.mulDivX256(sliqDiff, node.liq.shares, false);
-                    liq = uint128(FullMath.mulX256(compoundingLiq, shareRatioX256, false));
-                    xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
-                    yClaim = FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
+            } else if (sliq > targetSliq) {
+                uint256 shareRatioX256;
+                {
+                    uint128 sliqDiff = sliq - targetSliq;
+                    node.liq.shares -= sliqDiff;
+                    shareRatioX256 = FullMath.mulDivX256(sliqDiff, nodeShares, false);
                 }
-                node.liq.mLiq -= liq;
-                node.liq.shares -= sliqDiff;
-                node.fees.xCFees -= uint128(xClaim);
-                data.xFees += xClaim;
-                node.fees.yCFees -= uint128(yClaim);
-                data.yFees += yClaim;
-                // Now we claim the balances from the liquidity itself.
-                (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liq, false);
-                data.xBalance -= int256(xOwed);
-                data.yBalance -= int256(yOwed);
+                {
+                    // When subtracting shares, the actual liq removed is based on the real liq without the equiv liq
+                    // since we'll be removing the fees directly as well.
+                    uint128 realCLiq = node.liq.mLiq - node.liq.ncLiq + VIRTUAL_LIQ;
+                    uint128 liq = uint128(FullMath.mulX256(realCLiq, shareRatioX256, false));
+                    node.liq.mLiq -= liq;
+                    // Claim the balances from the liquidity itself.
+                    (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liq, false);
+                    data.xBalance -= int256(xOwed);
+                    data.yBalance -= int256(yOwed);
+                }
+                // Now claim your fees.
+                {
+                    uint256 xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
+                    node.fees.xCFees -= uint128(xClaim);
+                    data.xFees += xClaim;
+                }
+                {
+                    uint256 yClaim = FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
+                    node.fees.yCFees -= uint128(yClaim);
+                    data.yFees += yClaim;
+                }
             } else {
                 dirty = false;
             }

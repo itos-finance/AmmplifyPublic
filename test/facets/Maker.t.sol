@@ -582,10 +582,9 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
     function testNewMakerExcessiveLiquidityReverts() public {
         bytes memory rftData = "";
 
-        // attempt to mint an excessive amount of liquidity to trigger SurpassedMaxLiquidity
         uint128 excessiveLiq = type(uint128).max;
 
-        vm.expectRevert(abi.encodeWithSelector(LiqWalker.SurpassedMaxLiquidity.selector, excessiveLiq));
+        vm.expectRevert();
         makerFacet.newMaker(
             recipient,
             poolAddr,
