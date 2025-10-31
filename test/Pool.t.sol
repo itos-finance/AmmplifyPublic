@@ -61,7 +61,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
     function testGetSqrtPriceX96() public {
         (uint160 slot0SqrtPriceX96, int24 slot0Tick, , , , , ) = pool.slot0();
-        assertEq(slot0SqrtPriceX96, PoolLib.getSqrtPriceX96(poolAddr));
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        assertEq(slot0SqrtPriceX96, pInfo.sqrtPriceX96);
 
         uint160 currentTickSqrtPriceX96 = TickMath.getSqrtPriceAtTick(slot0Tick);
         uint160 nextTickSqrtPriceX96 = TickMath.getSqrtPriceAtTick(slot0Tick + pool.tickSpacing());
@@ -77,7 +78,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
         // verify reported sqrt price is between ticks
         (slot0SqrtPriceX96, , , , , , ) = pool.slot0();
-        assertEq(slot0SqrtPriceX96, PoolLib.getSqrtPriceX96(poolAddr));
+        pInfo.refreshPrice();
+        assertEq(slot0SqrtPriceX96, pInfo.sqrtPriceX96);
         assertEq(slot0SqrtPriceX96, middleSqrtPriceX96);
     }
 
@@ -188,9 +190,16 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
         PoolLib.mint(poolAddr, tickLower, tickUpper, liq);
 
+        // get global fee growth.
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+
         // verify fees are 0
         (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
             tickLower,
             tickUpper
         );
@@ -227,8 +236,16 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (, currentTick, , , , , ) = pool.slot0();
         assertLt(currentTick, tickLower, "currentTick.lt.tickLower");
 
-        PoolLib.mint(poolAddr, tickLower, tickUpper, 1); // accumulate fees
-        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(poolAddr, tickLower, tickUpper);
+        (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
+            tickLower,
+            tickUpper
+        );
+        PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
         (, uint256 posFeeGrowthInside0X128, uint256 posFeeGrowthInside1X128, , ) = pool.positions(
             keccak256(abi.encodePacked(address(this), tickLower, tickUpper))
         );
@@ -250,8 +267,16 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (, currentTick, , , , , ) = pool.slot0();
         assertGt(currentTick, tickUpper, "currentTick.gt.tickUpper");
 
-        PoolLib.mint(poolAddr, tickLower, tickUpper, 1); // accumulate fees
-        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(poolAddr, tickLower, tickUpper);
+        (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
+            tickLower,
+            tickUpper
+        );
+        PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
         (, posFeeGrowthInside0X128, posFeeGrowthInside1X128, , ) = pool.positions(
             keccak256(abi.encodePacked(address(this), tickLower, tickUpper))
         );
@@ -274,8 +299,16 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertLt(currentTick, tickUpper, "currentTick.lt.tickUpper");
         assertGt(currentTick, tickLower, "currentTick.gt.tickLower");
 
-        PoolLib.mint(poolAddr, tickLower, tickUpper, 1); // accumulate fees
-        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(poolAddr, tickLower, tickUpper);
+        (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
+            tickLower,
+            tickUpper
+        );
+        PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
         (, posFeeGrowthInside0X128, posFeeGrowthInside1X128, , ) = pool.positions(
             keccak256(abi.encodePacked(address(this), tickLower, tickUpper))
         );
@@ -291,6 +324,126 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         );
         assertGt(posFeeGrowthInside0X128, 0, "posFeeGrowthInside0X128.gt.0");
         assertGt(posFeeGrowthInside1X128, 0, "posFeeGrowthInside1X128.gt.0");
+    }
+
+    /// Test inside fees remains zero when uninitialized.
+    /// And once initialized collects fees.
+    function testInsideFeesUninitialized() public {
+        int24 tickSpacing = pool.tickSpacing();
+        bypassPoolGuardAssert = true;
+        addPoolLiq(0, tickSpacing * -1000, tickSpacing * 1000, 1e20);
+        bypassPoolGuardAssert = false;
+
+        // verify starting tick is 0
+        (, int24 currentTick, , , , , ) = pool.slot0();
+        assertEq(currentTick, 0, "currentTick.equals.0");
+
+        // create position
+        int24 tickLower = tickSpacing * -10;
+        int24 tickUpper = tickSpacing * 10;
+
+        // The current inside fees is zero.
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        (uint256 global00, uint256 global10) = pInfo.getFeeGrowthGlobals();
+
+        // verify fees are 0
+        (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global00,
+            global10,
+            tickLower,
+            tickUpper
+        );
+        assertEq(feeGrowthInside0X128, 0, "uninit.starts.0");
+        assertEq(feeGrowthInside1X128, 0, "uninit.starts.0");
+
+        // Even swapping up nothing.
+        swapTo(0, TickMath.getSqrtPriceAtTick(tickUpper + (tickSpacing * 10)));
+        // Global goes up.
+        (uint256 global01, uint256 global11) = pInfo.getFeeGrowthGlobals();
+        (, currentTick, , , , , ) = pool.slot0();
+        assertGt(global11, global01, "y goes up");
+        assertEq(global01, global00, "x stays same");
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global01,
+            global11,
+            tickLower,
+            tickUpper
+        );
+        assertEq(feeGrowthInside0X128, 0, "uninit.still.0");
+        assertEq(feeGrowthInside1X128, 0, "uninit.still.0");
+
+        // Swap down, nothing.
+        swapTo(0, TickMath.getSqrtPriceAtTick(tickLower - (tickSpacing * 10)));
+        // Global goes up.
+        (uint256 global02, uint256 global12) = pInfo.getFeeGrowthGlobals();
+        (, currentTick, , , , , ) = pool.slot0();
+        assertEq(global12, global11, "y stays same");
+        assertGt(global02, global10, "x goes up");
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global02,
+            global12,
+            tickLower,
+            tickUpper
+        );
+        assertEq(feeGrowthInside0X128, 0, "uninit.still.0.1");
+        assertEq(feeGrowthInside1X128, 0, "uninit.still.0.1");
+
+        // Now we init the ticks
+        PoolLib.mint(poolAddr, tickLower, tickUpper, 1);
+        // Still zero.
+        (global02, global12) = pInfo.getFeeGrowthGlobals();
+        (, currentTick, , , , , ) = pool.slot0();
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global02,
+            global12,
+            tickLower,
+            tickUpper
+        );
+        assertEq(feeGrowthInside0X128, 0, "uninit.still.0.2");
+        assertEq(feeGrowthInside1X128, 0, "uninit.still.0.2");
+
+        // Swap up in range.
+        swapTo(0, 1 << 96);
+        // Global goes up.
+        (uint256 global03, uint256 global13) = pInfo.getFeeGrowthGlobals();
+        (, currentTick, , , , , ) = pool.slot0();
+        assertGt(global03 + global13, global02 + global12, "global goes up");
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global03,
+            global13,
+            tickLower,
+            tickUpper
+        );
+        assertGt(feeGrowthInside1X128, 0, "now inside y goes up");
+        assertEq(feeGrowthInside0X128, 0, "inside x still 0");
+        assertLt(feeGrowthInside1X128, global13, "inside y less than global");
+
+        // Swap down
+        swapTo(0, TickMath.getSqrtPriceAtTick(tickLower));
+        (global03, global13) = pInfo.getFeeGrowthGlobals();
+        (, currentTick, , , , , ) = pool.slot0();
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            global03,
+            global13,
+            tickLower,
+            tickUpper
+        );
+        assertGt(feeGrowthInside0X128, 0, "now inside x goes up");
+        assertGt(feeGrowthInside1X128, 0, "inside y still up");
+        assertLt(feeGrowthInside0X128, global03, "inside x less than global");
+        assertLt(feeGrowthInside1X128, global13, "inside y less than global");
     }
 
     // Assignable Liq

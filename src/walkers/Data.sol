@@ -19,6 +19,7 @@ struct Data {
     bytes32 poolStore;
     bytes32 assetStore;
     uint160 sqrtPriceX96;
+    int24 currentTick;
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
@@ -53,7 +54,7 @@ library DataImpl {
         assembly {
             assetSlot := asset.slot
         }
-        uint160 currentSqrtPriceX96 = PoolLib.getSqrtPriceX96(pInfo.poolAddr);
+        uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
         require(
             currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
             PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
@@ -65,6 +66,7 @@ library DataImpl {
                 poolStore: poolSlot,
                 assetStore: assetSlot,
                 sqrtPriceX96: currentSqrtPriceX96,
+                currentTick: pInfo.currentTick,
                 timestamp: treeTimestamp,
                 liq: LiqDataLib.make(asset, pInfo, liq),
                 fees: FeeDataLib.make(pInfo),

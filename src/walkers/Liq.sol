@@ -193,6 +193,9 @@ library LiqWalker {
         // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
+            data.currentTick,
+            data.fees.feeGrowthGlobal0X128,
+            data.fees.feeGrowthGlobal1X128,
             iter.lowTick,
             iter.highTick
         );
