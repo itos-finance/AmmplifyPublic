@@ -349,7 +349,7 @@ library FeeWalker {
                 uint256 leftTLiq = left.subtreeTLiq + myTLiq;
                 uint256 totalTLiq = leftTLiq + liqData.tLiqPrefix * childWidth;
                 // It's okay to round down here. That's incorporated in the rate curve.
-                uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
+                uint128 utilX64 = uint128((totalTLiq << 64) / totalMLiq);
                 leftWeight = feeData.splitConfig.calculateRateX64(utilX64);
             }
         }
@@ -362,7 +362,7 @@ library FeeWalker {
                 uint256 rightTLiq = right.subtreeTLiq + myTLiq;
                 uint256 totalTLiq = rightTLiq + liqData.tLiqPrefix * childWidth;
                 // It's okay to round down here. That's incorporated in the rate curve.
-                uint64 utilX64 = uint64((totalTLiq << 64) / totalMLiq);
+                uint128 utilX64 = uint128((totalTLiq << 64) / totalMLiq);
                 // Important to incorporate tliq in the weight so the same ratio, but different tLiqs
                 // pay proportionally.
                 rightWeight = feeData.splitConfig.calculateRateX64(utilX64);
@@ -401,7 +401,7 @@ library FeeWalker {
             return (0, 0, 1, 1);
         }
         uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
-        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint64((totalTLiq << 64) / totalMLiq));
+        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
         // Then we use the total column x and y borrows to calculate the total fees paid.
         (uint256 totalXBorrows, uint256 totalYBorrows) = data.computeBorrows(key, data.liq.tLiqPrefix, true);
         totalXBorrows += node.liq.subtreeBorrowedX;
