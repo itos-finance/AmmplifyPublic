@@ -11,7 +11,7 @@ import { Pool, PoolInfo, PoolLib } from "../../src/Pool.sol";
 import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 import { Asset, AssetLib } from "../../src/Asset.sol";
 import { TreeTickLib } from "../../src/tree/Tick.sol";
-import { WalkerLib } from "../../src/walkers/Lib.sol";
+import { WalkerLib, CompoundWalkerLib } from "../../src/walkers/Lib.sol";
 import { PoolWalker } from "../../src/walkers/Pool.sol";
 import { FeeLib } from "../../src/Fee.sol";
 
@@ -67,6 +67,13 @@ contract WalkerLibTest is Test, UniV3IntegrationSetup {
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, false);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
         WalkerLib.modify(pInfo, -100, 100, data);
+    }
+
+    function testCompound() public {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
+        Asset storage asset = AssetLib.nullAsset();
+        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
+        CompoundWalkerLib.compound(pInfo, -100, 100, data);
     }
 
     function testEmptyTakerFails() public {

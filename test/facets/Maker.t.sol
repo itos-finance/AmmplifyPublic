@@ -264,6 +264,7 @@ contract MakerFacetTest is MultiSetupTest {
     function testCollectFeesBasic() public {
         // First create a maker position
         bytes memory rftData = "";
+
         uint256 assetId = makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -334,6 +335,9 @@ contract MakerFacetTest is MultiSetupTest {
         bytes memory rftData = "";
 
         // Create a maker position
+        uint256 startingBalance0 = token0.balanceOf(address(this));
+        uint256 startingBalance1 = token1.balanceOf(address(this));
+
         uint256 assetId = makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -345,6 +349,11 @@ contract MakerFacetTest is MultiSetupTest {
             maxSqrtPriceX96,
             rftData
         );
+
+        uint256 postCreationBalance0 = token0.balanceOf(address(this));
+        uint256 postCreationBalance1 = token1.balanceOf(address(this));
+        uint256 usedBalance0 = startingBalance0 - postCreationBalance0;
+        uint256 usedBalance1 = startingBalance1 - postCreationBalance1;
 
         // Verify the position was created correctly using ViewFacet
         (
@@ -366,6 +375,18 @@ contract MakerFacetTest is MultiSetupTest {
 
         // Get initial position balances
         (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);
+        assertApproxEqAbs(uint256(initialNetBalance0), usedBalance0, 2);
+        assertApproxEqAbs(uint256(initialNetBalance1), usedBalance1, 2);
+        assertGt(
+            usedBalance0,
+            uint256(initialNetBalance0),
+            "Initial net balance0 should be less than or equal to used balance0"
+        );
+        assertGt(
+            usedBalance1,
+            uint256(initialNetBalance1),
+            "Initial net balance1 should be less than or equal to used balance1"
+        );
 
         // Move price up by swapping to a higher tick
         int24 targetTick = 300; // Move price up

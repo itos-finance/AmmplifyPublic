@@ -78,4 +78,10 @@ interface IMaker {
 
     /// Remove this address from opening positions and giving you ownership.
     function removePermission(address opener) external;
+
+    /// Collect swap fees from and compound a specific ranges of nodes by performing a full walk
+    /// but without any liquidity modifications (though potential solves may occur).
+    /// @dev Use this when there is insufficient standing fees due to a deep borrow or simply
+    /// because you want a node compounded.
+    function compound(address poolAddr, int24 lowTick, int24 highTick) external;
 }

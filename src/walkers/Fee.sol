@@ -533,22 +533,28 @@ library FeeWalker {
         rightNode.fees.unclaimedMakerYFees += uint128(yEarned - leftEarned);
     }
 
-    /// Increase fees by an amount but limit the output the uint128, giving the extra to the caller through
+    /// Increase fees by an amount but limit the output the uint128, giving the extra to the pool owner through
     /// the data balances.
     function add128Fees(uint128 a, uint256 b, Data memory data, bool isX) internal pure returns (uint128 res) {
-        if (a + b > type(uint128).max) {
+        if (b > type(uint128).max || a + b > type(uint128).max) {
             // If the result overflows, cap it at uint128 max and add the excess to the user's received balances.
             res = type(uint128).max;
             // Any pool that has fees actually greater than int256.max must be so contrived we don't care if it
             // fails in a way that doesn't affect other pools. So we do an unsafe cast here.
-            uint256 excess = a + b - type(uint128).max;
-            if (isX) {
-                data.xBalance -= int256(excess);
-            } else {
-                data.yBalance -= int256(excess);
+            unchecked {
+                uint256 excess = a + b - type(uint128).max;
+                if (isX) {
+                    // This will probably never be hit.
+                    // If it is, the pool owner should try to do something reasonable.
+                    data.escapedX += excess;
+                } else {
+                    data.escapedY += excess;
+                }
             }
         } else {
-            res = uint128(a + b);
+            unchecked {
+                res = uint128(a + b);
+            }
         }
     }
 }

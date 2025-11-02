@@ -20,6 +20,13 @@ struct FeeStore {
     uint64 jitPenaltyX64; // Fee paid by those who's positions are held too shortly.
     /* Collateral */
     mapping(address sender => mapping(address token => uint256)) collateral;
+    /* Standing fees */
+    // Similar to collateral but these are specifically fees collected from the underlying pool for swap fees.
+    // (Taker fees paid to compensate for missed pool swap fees are counted here as well.)
+    // For this to overflow the entirely of the value of all bitcoin would have to be in the AMM and
+    // earn its own value in fees 26 times over. I think we're safe. For contrived tokens we don't care.
+    mapping(address pool => uint128) standingX;
+    mapping(address pool => uint128) standingY;
 }
 
 /// Makers earn fees in two ways, from the swap fees of the underlying pool

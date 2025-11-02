@@ -10,7 +10,7 @@ import { LiqType } from "../src/walkers/Liq.sol";
 
 contract AssetTest is Test {
     function testNewMaker() public {
-        assertEq(Store.assets().nextAssetId, 0, "AssetStore.nextAssetId.default");
+        assertEq(Store.assets().lastAssetId, 0, "AssetStore.lastAssetId.default");
 
         address owner = makeAddr("cOwner");
         AssetLib.addPermission(owner, msg.sender);
@@ -78,7 +78,7 @@ contract AssetTest is Test {
     }
 
     function testNewTaker() public {
-        assertEq(Store.assets().nextAssetId, 0, "AssetStore.nextAssetId.default");
+        assertEq(Store.assets().lastAssetId, 0, "AssetStore.lastAssetId.default");
 
         address owner = makeAddr("owner");
         AssetLib.addPermission(owner, msg.sender);
