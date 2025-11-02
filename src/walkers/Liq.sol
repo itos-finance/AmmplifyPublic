@@ -51,11 +51,7 @@ library LiqNodeImpl {
     uint8 public constant DIRTY_FLAG = 1;
     uint8 public constant SIB_DIRTY_FLAG = 2;
 
-<<<<<<< HEAD
     function compound(LiqNode storage self, uint128 compoundedLiq) internal returns (bool compounded) {
-=======
-    function compound(LiqNode storage self, uint128 compoundedLiq) internal {
->>>>>>> 5f5e077 (working but untested compound walker lib added)
         if (compoundedLiq == 0) {
             return false;
         }
