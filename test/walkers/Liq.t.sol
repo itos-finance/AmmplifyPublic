@@ -82,7 +82,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         LiqWalker.modify(iter, n, data, 200e8);
         uint128 sliq = n.liq.shares;
         assertEq(n.liq.dirty, 1, "1d");
-        n.liq.dirty = false; // clear.
+        n.liq.dirty = 0; // clear.
         assertGt(data.xBalance, 0, "1x");
         assertEq(data.yBalance, 0, "1y");
         data.xBalance = 0;
