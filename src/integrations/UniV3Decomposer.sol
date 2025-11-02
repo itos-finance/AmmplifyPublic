@@ -9,6 +9,7 @@ import { RFTPayer, RFTLib } from "../../lib/Commons/src/Util/RFT.sol";
 import { IRFTPayer } from "../../lib/Commons/src/Util/RFT.sol";
 import { TransferHelper } from "../../lib/Commons/src/Util/TransferHelper.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { Auto165 } from  "Commons/ERC/Auto165.sol";
 
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { INonfungiblePositionManager } from "./univ3-periphery/interfaces/INonfungiblePositionManager.sol";
@@ -24,7 +25,7 @@ import { RouteImpl, Route } from "../tree/Route.sol";
 /// @title UniV3Decomposer
 /// @notice  Converts an existing Uniswap-V3 position NFT into an Ammplify Maker
 ///          position in a single transaction.
-contract UniV3Decomposer is RFTPayer, IERC721Receiver {
+contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     // Custom errors ------------------------------------------------------
     error OnlyMakerFacet(address caller);
     error NotPositionOwner(address expected, address sender);
