@@ -76,25 +76,34 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         console.log("ticks", uint24(low), uint24(high));
         LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
 
+        // Empty node.
         Node storage n = data.node(key);
-        n.liq.mLiq = 200e8;
-        n.liq.shares = 100e8;
         AssetNode storage aNode = data.assetNode(key);
-        aNode.sliq = 50e8;
+        LiqWalker.modify(iter, n, data, 200e8);
+        uint128 sliq = n.liq.shares;
+        assertEq(n.liq.dirty, 1, "1d");
+        n.liq.dirty = 0; // clear.
+        assertGt(data.xBalance, 0, "1x");
+        assertEq(data.yBalance, 0, "1y");
+        data.xBalance = 0;
+        data.yBalance = 0;
+
+        // Now modify it to itself. There should be no change.
+        aNode.sliq = sliq / 2;
         // The sliq should be worth 100e8 so no change happens.
         LiqWalker.modify(iter, n, data, 100e8);
         assertEq(n.liq.dirty, 0, "d0");
-        assertEq(aNode.sliq, 50e8, "0");
-        assertEq(n.liq.shares, 100e8, "1");
+        assertEq(aNode.sliq, sliq / 2, "0");
+        assertEq(n.liq.shares, sliq, "1");
         assertEq(n.liq.mLiq, 200e8, "2");
         assertEq(data.xBalance, 0, "3");
         assertEq(data.yBalance, 0, "4");
 
-        // But now with a higher target we'll add liq.
+        // But now with a higher target we'll add liq. We'll double the position.
         LiqWalker.modify(iter, n, data, 200e8);
         assertEq(n.liq.dirty, 1, "d1");
-        assertEq(aNode.sliq, 100e8, "5");
-        assertEq(n.liq.shares, 150e8, "6");
+        assertEq(aNode.sliq, sliq, "5");
+        assertEq(n.liq.shares, (3 * sliq) / 2, "6");
         assertEq(n.liq.mLiq, 300e8, "7");
         assertGt(data.xBalance, 0, "8");
         // Because our range is entirely above the current price.
@@ -141,15 +150,17 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         n.fees.xCFees = 500;
         uint128 equivLiq = PoolLib.getEquivalentLiq(low, high, 500, 0, data.sqrtPriceX96, true);
         n.liq.ncLiq = 100e8;
-        n.liq.shares = 200e8;
-        aNode.sliq = 100e8;
+        n.liq.shares = 200e8; // Actual shares
+        uint128 totalShares = 200e8 + LiqWalker.VIRTUAL_SHARES;
+        aNode.sliq = totalShares / 2; // If we want half we need half of the virtual shares as well.
         // The asset owns half the liq here and we want 2/5th of their position left.
         LiqWalker.modify(iter, n, data, ((100e8 + equivLiq) * 2) / 10);
         assertEq(n.liq.dirty, 1);
-        assertApproxEqAbs(aNode.sliq, 40e8, 1, "0");
-        assertLt(aNode.sliq, 40e8, "00");
-        assertApproxEqAbs(n.liq.shares, 140e8, 1, "1");
-        assertLt(n.liq.shares, 140e8, "11");
+        assertApproxEqAbs(aNode.sliq, totalShares / 5, 1, "0"); // Half of 2/5ths
+        assertLt(aNode.sliq, totalShares / 5, "00");
+        uint128 sharesLost = totalShares / 2 - (totalShares / 5);
+        assertApproxEqAbs(n.liq.shares, 200e8 - sharesLost, 1, "1");
+        assertLt(n.liq.shares, 200e8 - sharesLost, "11");
         assertEq(n.liq.mLiq, 170e8, "2");
         assertLt(data.xBalance, 0, "3");
         assertEq(data.yBalance, 0, "4"); // Since we're above the range.

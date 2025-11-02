@@ -6,7 +6,7 @@ import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
 import { Node } from "./Node.sol";
-import { LiqType, LiqData, LiqDataLib } from "./Liq.sol";
+import { LiqType, LiqData, LiqDataLib, LiqWalker } from "./Liq.sol";
 import { FullMath } from "../FullMath.sol";
 import { FeeData, FeeDataLib, FeeWalker } from "./Fee.sol";
 import { Asset, AssetNode } from "../Asset.sol";
@@ -196,7 +196,13 @@ library ViewWalker {
             // Now claim the liquidity balances.
             bool roundUp = (data.liq.liqType == LiqType.TAKER);
             uint128 liq = (data.liq.liqType == LiqType.MAKER)
-                ? uint128(FullMath.mulDiv(node.liq.mLiq - node.liq.ncLiq, aNode.sliq, node.liq.shares))
+                ? uint128(
+                    FullMath.mulDiv(
+                        node.liq.mLiq - node.liq.ncLiq,
+                        aNode.sliq,
+                        node.liq.shares + LiqWalker.VIRTUAL_SHARES
+                    )
+                )
                 : aNode.sliq;
             (uint256 x, uint256 y) = data.computeBalances(key, liq, roundUp);
             data.liqBalanceX += x;
@@ -335,22 +341,16 @@ library ViewWalker {
         uint256 fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
         uint256 fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         if (data.liq.liqType == LiqType.MAKER) {
-            if (node.liq.shares == 0) {
-                return;
+            // We just claim our shares.
+            // If the sliq and shares are zero, you should fail anyways.
+            uint128 nodeShares = node.liq.shares + LiqWalker.VIRTUAL_SHARES;
+            uint256 shareRatioX256 = FullMath.mulDivX256(aNode.sliq, nodeShares, false);
+            {
+                data.earningsX += FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
+                data.earningsY += FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
             }
-            // We claim our shares.
-            if (aNode.sliq == node.liq.shares) {
-                // Full shares, just take all fees.
-                data.earningsX += node.fees.xCFees;
-                data.earningsY += node.fees.yCFees;
-                uint256 liq = node.liq.mLiq - node.liq.ncLiq;
-                data.earningsX += FullMath.mulX128(liq, fee0DiffX128, false);
-                data.earningsY += FullMath.mulX128(liq, fee1DiffX128, false);
-            } else {
-                uint256 liqRatioX256 = FullMath.mulDivX256(aNode.sliq, node.liq.shares, false);
-                data.earningsX += FullMath.mulX256(node.fees.xCFees, liqRatioX256, false);
-                data.earningsY += FullMath.mulX256(node.fees.yCFees, liqRatioX256, false);
-                uint256 liq = FullMath.mulX256(node.liq.mLiq - node.liq.ncLiq, liqRatioX256, false);
+            {
+                uint256 liq = FullMath.mulX256(node.liq.mLiq - node.liq.ncLiq, shareRatioX256, false);
                 data.earningsX += FullMath.mulX128(liq, fee0DiffX128, false);
                 data.earningsY += FullMath.mulX128(liq, fee1DiffX128, false);
             }
