@@ -93,6 +93,10 @@ library PoolLib {
         return pInfo;
     }
 
+    function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
+        (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+    }
+
     /*
     /// Currently unused
     /// This assumes the position in the pool still exists, and queries how much fees are owed.

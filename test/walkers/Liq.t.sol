@@ -109,13 +109,7 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
 
         Key key = KeyImpl.make(data.fees.rootWidth / 2, 1);
         (int24 low, int24 high) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
-        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({
-            key: key,
-            visit: true,
-            width: 1,
-            lowTick: low,
-            highTick: high
-        });
+        LiqWalker.LiqIter memory iter = LiqWalker.LiqIter({ key: key, width: 1, lowTick: low, highTick: high });
         // We start with nothing.
         Node storage n = data.node(key);
         n.liq.mLiq = 0;

@@ -139,7 +139,6 @@ library AssetLib {
         asset.timestamp = uint128(block.timestamp);
     }
 
-<<<<<<< HEAD
     /* Permissions */
 
     function addPermission(address owner, address opener) internal {
@@ -170,15 +169,15 @@ library AssetLib {
             (owner == opener) ||
             (store.permissionedOpeners[opener]) ||
             store.permissions[owner][opener]);
-=======
+    }
+
+    /* Helpers */
+
     /// Get a null asset (used for compounding where no asset is needed).
     function nullAsset() internal view returns (Asset storage asset) {
         // The zeroeth assetId is never used.
         return Store.assets().assets[0];
->>>>>>> 5f5e077 (working but untested compound walker lib added)
     }
-
-    /* Helpers */
 
     function addAssetToOwner(AssetStore storage store, uint256 assetId, address owner) private {
         require(
