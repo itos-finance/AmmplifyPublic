@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
-import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
+import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
 import { VaultLib, VaultType } from "../vaults/Vault.sol";
 import { AssetLib } from "../Asset.sol";
 import { Store } from "../Store.sol";
@@ -29,26 +29,30 @@ contract AdminFacet is TimedAdminFacet {
 
     /* Fee related */
 
-    function setFeeCurve(address pool, SmoothRateCurveConfig calldata feeCurve) external {
+    function setFeeCurve(address pool, SmoothRateCurveConfig memory feeCurve) external {
         AdminLib.validateOwner();
+        SmoothRateCurveLib.validate(feeCurve);
         Store.fees().feeCurves[pool] = feeCurve;
         emit FeeCurveSet(pool, feeCurve);
     }
 
-    function setDefaultFeeCurve(SmoothRateCurveConfig calldata feeCurve) external {
+    function setDefaultFeeCurve(SmoothRateCurveConfig memory feeCurve) external {
         AdminLib.validateOwner();
+        SmoothRateCurveLib.validate(feeCurve);
         Store.fees().defaultFeeCurve = feeCurve;
         emit DefaultFeeCurveSet(feeCurve);
     }
 
-    function setDefaultSplitCurve(SmoothRateCurveConfig calldata splitCurve) external {
+    function setDefaultSplitCurve(SmoothRateCurveConfig memory splitCurve) external {
         AdminLib.validateOwner();
+        SmoothRateCurveLib.validate(splitCurve);
         Store.fees().defaultSplitCurve = splitCurve;
         emit DefaultSplitCurveSet(splitCurve);
     }
 
-    function setSplitCurve(address pool, SmoothRateCurveConfig calldata splitCurve) external {
+    function setSplitCurve(address pool, SmoothRateCurveConfig memory splitCurve) external {
         AdminLib.validateOwner();
+        SmoothRateCurveLib.validate(splitCurve);
         Store.fees().splitCurves[pool] = splitCurve;
         emit SplitCurveSet(pool, splitCurve);
     }
