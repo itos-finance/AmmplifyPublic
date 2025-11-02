@@ -47,9 +47,9 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         // But once we add them in.
         data.liq.xFeesCollected = 100e18;
         data.liq.yFeesCollected = 200e18;
+
         LiqWalker.compound(iter, n, data);
         assertGt(n.liq.mLiq, 5e8, "mLiq2");
-
         assertLt(n.fees.xCFees, 100e18, "xFees");
         // Cuz we're above the current price, we just need x to compound.
         assertEq(n.fees.yCFees, 200e18, "yFees same");
