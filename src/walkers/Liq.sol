@@ -183,6 +183,9 @@ library LiqWalker {
             Node storage rNode = data.node(rk);
             node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
             node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
+        } else {
+            node.liq.subtreeMLiq = node.liq.mLiq;
+            node.liq.subtreeTLiq = node.liq.tLiq;
         }
 
         // Make sure our liquidity is solvent at each node. This must happened regardless of visit.
@@ -249,13 +252,13 @@ library LiqWalker {
         node.fees.takerXFeesPerLiqX128 += feeDiffInside0X128;
         node.fees.takerYFeesPerLiqX128 += feeDiffInside1X128;
         // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
-        data.liq.xFeesCollected += FeeWalker.add128Fees(
+        data.liq.xFeesCollected = FeeWalker.add128Fees(
             data.liq.xFeesCollected,
             FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false),
             data,
             true
         );
-        data.liq.yFeesCollected += FeeWalker.add128Fees(
+        data.liq.yFeesCollected = FeeWalker.add128Fees(
             data.liq.yFeesCollected,
             FullMath.mulX128(node.liq.tLiq, feeDiffInside1X128, false),
             data,
