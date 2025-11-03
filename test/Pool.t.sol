@@ -64,7 +64,6 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
         (uint160 slot0SqrtPriceX96, int24 slot0Tick, , , , , ) = pool.slot0();
 
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         assertEq(slot0SqrtPriceX96, pInfo.sqrtPriceX96);
         assertEq(slot0Tick, pInfo.currentTick);
 

@@ -15,6 +15,8 @@ import { PoolWalker } from "../walkers/Pool.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { LiqType } from "../walkers/Liq.sol";
 
+import { console } from "forge-std/console.sol";
+
 contract TakerFacet is ReentrancyGuardTransient {
     // Higher requirement than makers.
     uint128 public constant MIN_TAKER_LIQUIDITY = 1e12;

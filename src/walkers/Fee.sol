@@ -12,6 +12,8 @@ import { FullMath } from "../FullMath.sol";
 import { FeeLib } from "../Fee.sol";
 import { PoolInfo } from "../Pool.sol";
 
+import { console } from "forge-std/console.sol";
+
 /// Data we need to persist for fee accounting.
 /// @dev ONLY operations in FeeWalker are modifying this data.
 /// Others can read though so they should be aware of their ordering.
@@ -103,21 +105,28 @@ library FeeWalker {
 
         // We just claim all of our unclaimed.
         if (key.isLeaf()) {
+            console.log("leaf node claiming fees");
             // If we're at a leaf, we can claim fees.
             // We round up to overpay dust.
             if (node.liq.subtreeTLiq > 0) {
                 // If the tLiq is zero we would never propogate any fees down anyways.
                 // For unclaims and unpaids, we specify if the taker is borrowing as x or y.
-                node.fees.xTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                    node.fees.unpaidTakerXFees,
-                    1 << 128,
-                    node.liq.xTLiq
-                );
-                node.fees.yTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                    node.fees.unpaidTakerYFees,
-                    1 << 128,
-                    node.liq.tLiq - node.liq.xTLiq
-                );
+                if (node.fees.unpaidTakerXFees > 0) {
+                    // There has to be some xTLiq if there are unpaid x fees.
+                    node.fees.xTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                        node.fees.unpaidTakerXFees,
+                        1 << 128,
+                        node.liq.xTLiq
+                    );
+                }
+                if (node.fees.unpaidTakerYFees > 0) {
+                    // There has to be some yTLiq if there are unpaid y fees.
+                    node.fees.yTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                        node.fees.unpaidTakerYFees,
+                        1 << 128,
+                        node.liq.tLiq - node.liq.xTLiq
+                    );
+                }
                 node.fees.unpaidTakerXFees = 0;
                 node.fees.unpaidTakerYFees = 0;
             }
@@ -140,36 +149,42 @@ library FeeWalker {
 
         // We claim our own fees first.
         {
+            console.log("internal node claiming fees");
             uint24 width = key.width();
             // Takers
             if (node.liq.tLiq > 0) {
                 // Unlike makers, we divy via borrowed balances.
-                uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
-                    uint256(node.fees.unpaidTakerXFees) << 128,
-                    node.liq.borrowedX,
-                    node.liq.subtreeBorrowedX
-                );
-                node.fees.xTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(myUnpaidX128, node.liq.xTLiq);
-                if (node.liq.borrowedX == node.liq.subtreeBorrowedX) {
-                    // If we're the entire subtree, we can just zero it out.
-                    node.fees.unpaidTakerXFees = 0;
-                } else {
-                    // We round down to avoid underpaying dust
-                    node.fees.unpaidTakerXFees -= uint128(myUnpaidX128 >> 128);
+                console.log("subtree borrowed x:", node.liq.subtreeBorrowedX, node.liq.borrowedX);
+                if (node.liq.borrowedX > 0) {
+                    uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
+                        uint256(node.fees.unpaidTakerXFees) << 128,
+                        node.liq.borrowedX,
+                        node.liq.subtreeBorrowedX
+                    );
+                    node.fees.xTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(myUnpaidX128, node.liq.xTLiq);
+                    if (node.liq.borrowedX == node.liq.subtreeBorrowedX) {
+                        // If we're the entire subtree, we can just zero it out.
+                        node.fees.unpaidTakerXFees = 0;
+                    } else {
+                        // We round down to avoid underpaying dust
+                        node.fees.unpaidTakerXFees -= uint128(myUnpaidX128 >> 128);
+                    }
                 }
-                myUnpaidX128 = FullMath.mulDivRoundingUp(
-                    uint256(node.fees.unpaidTakerYFees) << 128,
-                    node.liq.borrowedY,
-                    node.liq.subtreeBorrowedY
-                );
-                node.fees.yTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(
-                    myUnpaidX128,
-                    node.liq.tLiq - node.liq.xTLiq
-                );
-                if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
-                    node.fees.unpaidTakerYFees = 0;
-                } else {
-                    node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
+                if (node.liq.borrowedY > 0) {
+                    uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
+                        uint256(node.fees.unpaidTakerYFees) << 128,
+                        node.liq.borrowedY,
+                        node.liq.subtreeBorrowedY
+                    );
+                    node.fees.yTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(
+                        myUnpaidX128,
+                        node.liq.tLiq - node.liq.xTLiq
+                    );
+                    if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
+                        node.fees.unpaidTakerYFees = 0;
+                    } else {
+                        node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
+                    }
                 }
             }
             // Makers
@@ -186,8 +201,10 @@ library FeeWalker {
                 node.fees.makerYFeesPerLiqX128 += nonCX128;
                 node.fees.yCFees += c;
             }
+            console.log("internal node claimed fees");
         }
 
+        console.log("internal node splitting fees");
         // Now split fees before updating prefixes.
         (Key leftChild, Key rightChild) = key.children();
         Node storage leftNode = data.node(leftChild);
@@ -214,6 +231,7 @@ library FeeWalker {
             data.liq.mLiqPrefix += node.liq.mLiq;
             data.liq.tLiqPrefix += node.liq.tLiq;
         }
+        console.log("internal node done down");
     }
 
     function up(Key key, bool visit, Data memory data) internal {
@@ -451,15 +469,24 @@ library FeeWalker {
         // Implicit is that maker liq below and maker liq above should earn the same amount which is not true
         // but is a resonable approximation that is true in the limit of a totally efficient market.
         if (aboveMLiq != 0) {
-            uint256 aboveMLiqRatioX256 = FullMath.mulDivX256(aboveMLiq * width, totalMLiq, false);
-            // X first.
-            uint256 aboveEarned = FullMath.mulX256(colXPaid, aboveMLiqRatioX256, false);
-            colRatesX128[0] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
-            childrenPaidEarned[2] = colXPaid - aboveEarned;
-            // Now Y.
-            aboveEarned = FullMath.mulX256(colYPaid, aboveMLiqRatioX256, false);
-            colRatesX128[1] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
-            childrenPaidEarned[3] = colYPaid - aboveEarned;
+            uint256 aboveMLiqTotal = aboveMLiq * width;
+            if (aboveMLiqTotal == totalMLiq) {
+                // If all the maker liq is above, we don't need to consider children.
+                colRatesX128[0] = FullMath.mulDiv(colXPaid, 1 << 128, aboveMLiq);
+                colRatesX128[1] = FullMath.mulDiv(colYPaid, 1 << 128, aboveMLiq);
+                childrenPaidEarned[2] = 0;
+                childrenPaidEarned[3] = 0;
+            } else {
+                uint256 aboveMLiqRatioX256 = FullMath.mulDivX256(aboveMLiqTotal, totalMLiq, false);
+                // X first.
+                uint256 aboveEarned = FullMath.mulX256(colXPaid, aboveMLiqRatioX256, false);
+                colRatesX128[0] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
+                childrenPaidEarned[2] = colXPaid - aboveEarned;
+                // Now Y.
+                aboveEarned = FullMath.mulX256(colYPaid, aboveMLiqRatioX256, false);
+                colRatesX128[1] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
+                childrenPaidEarned[3] = colYPaid - aboveEarned;
+            }
         }
 
         // Now pay/charge these fees ourselves.

@@ -13,6 +13,8 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { FeeStore } from "../Fee.sol";
 import { Store } from "../Store.sol";
 
+import { console } from "forge-std/console.sol";
+
 library WalkerLib {
     function modify(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
         uint24 low = pInfo.treeTick(lowTick);
@@ -25,13 +27,18 @@ library WalkerLib {
 
     function down(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
+        console.log("WalkerLib down called");
         FeeWalker.down(key, visit, data);
+        console.log("WalkerLib down after FeeWalker");
     }
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
+        console.log("WalkerLib up called");
         FeeWalker.up(key, visit, data);
+        console.log("WalkerLib up after FeeWalker");
         LiqWalker.up(key, visit, data);
+        console.log("WalkerLib up after LiqWalker");
     }
 
     function phase(Phase walkPhase, bytes memory raw) internal pure {

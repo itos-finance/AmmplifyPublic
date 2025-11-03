@@ -35,8 +35,8 @@ struct LiqNode {
     uint256 subtreeBorrowedX;
     uint256 subtreeBorrowedY;
     uint128 xTLiq; // The amount of taker liq borrowing as x.
-    // Dirty bit for liquidity modifications.
-    bool dirty;
+    // Dirty flags for liquidity modifications.
+    uint8 dirty;
     // Swap fee earnings checkpointing - Also used by takers to measure swap fees owed.
     uint256 feeGrowthInside0X128;
     uint256 feeGrowthInside1X128;
