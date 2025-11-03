@@ -75,13 +75,13 @@ library PoolLib {
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
 
-    error PoolInsufficientObservations(uint16 observations, uint16 required);
-
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
-    uint16 private constant MIN_OBSERVATIONS = 32;
+
+    // How many observations we want from our pools for the twap calculations.
+    uint16 public constant MIN_OBSERVATIONS = 32;
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
@@ -95,11 +95,6 @@ library PoolLib {
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
         PoolInfoImpl.refreshPrice(pInfo);
 
-        (, , , , uint16 obsCardinalityNext, , ) = poolContract.slot0();
-        require(
-            obsCardinalityNext >= MIN_OBSERVATIONS,
-            PoolInsufficientObservations(obsCardinalityNext, MIN_OBSERVATIONS)
-        );
         return pInfo;
     }
 
@@ -387,6 +382,8 @@ library PoolValidation {
 
     // This pool cannot be used with this ammplify deployment as it's from a different factory.
     error UnrecognizedPool();
+    // This pool needs more observations to be safely used.
+    error PoolInsufficientObservations(uint16 observations, uint16 required);
 
     function initFactory(address factory) internal {
         Store.load().factory = factory;
@@ -399,5 +396,11 @@ library PoolValidation {
         // We query the factory because we don't want to rely on the POOL_INIT_CODE_HASH
         // which varies from fork to fork.
         require(IUniswapV3Factory(factory).getPool(token0, token1, fee) == poolAddr, UnrecognizedPool());
+
+        (, , , , uint16 obsCardinalityNext, , ) = IUniswapV3Pool(poolAddr).slot0();
+        require(
+            obsCardinalityNext >= PoolLib.MIN_OBSERVATIONS,
+            PoolInsufficientObservations(obsCardinalityNext, PoolLib.MIN_OBSERVATIONS)
+        );
     }
 }

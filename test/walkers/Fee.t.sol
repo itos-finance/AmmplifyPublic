@@ -149,15 +149,15 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.fees.makerYFeesPerLiqX128, 0, "1");
         assertEq(n.fees.takerXFeesPerLiqX128, 0, "2");
         assertEq(n.fees.takerYFeesPerLiqX128, 0, "3");
-        assertEq(data.fees.leftColMakerXRateX128, 0, "4");
-        assertEq(data.fees.leftColMakerYRateX128, 0, "5");
-        assertEq(data.fees.leftColTakerXRateX128, 1, "6");
-        assertEq(data.fees.leftColTakerYRateX128, 1, "7");
+        assertEq(data.fees.leftColMakerXEarningsPerLiqX128, 0, "4");
+        assertEq(data.fees.leftColMakerYEarningsPerLiqX128, 0, "5");
+        assertEq(data.fees.leftColTakerXEarningsPerLiqX128, 1, "6");
+        assertEq(data.fees.leftColTakerYEarningsPerLiqX128, 1, "7");
         assertEq(
-            data.fees.rightColMakerXRateX128 +
-                data.fees.rightColMakerYRateX128 +
-                data.fees.rightColTakerXRateX128 +
-                data.fees.rightColTakerYRateX128,
+            data.fees.rightColMakerXEarningsPerLiqX128 +
+                data.fees.rightColMakerYEarningsPerLiqX128 +
+                data.fees.rightColTakerXEarningsPerLiqX128 +
+                data.fees.rightColTakerYEarningsPerLiqX128,
             0,
             "8"
         );
@@ -166,9 +166,9 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.subtreeMLiq = 100e18;
         FeeWalker.up(key, true, data);
         // Nothing without borrows.
-        assertEq(data.fees.leftColMakerXRateX128 + data.fees.leftColMakerYRateX128, 0, "9");
-        assertEq(data.fees.leftColTakerXRateX128, 1, "10");
-        assertEq(data.fees.leftColTakerYRateX128, 1, "11");
+        assertEq(data.fees.leftColMakerXEarningsPerLiqX128 + data.fees.leftColMakerYEarningsPerLiqX128, 0, "9");
+        assertEq(data.fees.leftColTakerXEarningsPerLiqX128, 1, "10");
+        assertEq(data.fees.leftColTakerYEarningsPerLiqX128, 1, "11");
 
         // We get charged even without any unclaims.
         n.liq.tLiq = 30e18;
@@ -176,14 +176,14 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         n.liq.subtreeBorrowedX = 15e18;
         n.liq.subtreeBorrowedY = 25e18;
         FeeWalker.up(key, true, data);
-        assertGt(data.fees.leftColMakerXRateX128, 0, "12");
-        assertGt(data.fees.leftColMakerYRateX128, 0, "13");
-        assertGt(data.fees.leftColTakerXRateX128, 1, "14");
-        assertGt(data.fees.leftColTakerYRateX128, 1, "15");
-        data.fees.leftColMakerXRateX128 = 0;
-        data.fees.leftColMakerYRateX128 = 0;
-        data.fees.leftColTakerXRateX128 = 0;
-        data.fees.leftColTakerYRateX128 = 0;
+        assertGt(data.fees.leftColMakerXEarningsPerLiqX128, 0, "12");
+        assertGt(data.fees.leftColMakerYEarningsPerLiqX128, 0, "13");
+        assertGt(data.fees.leftColTakerXEarningsPerLiqX128, 1, "14");
+        assertGt(data.fees.leftColTakerYEarningsPerLiqX128, 1, "15");
+        data.fees.leftColMakerXEarningsPerLiqX128 = 0;
+        data.fees.leftColMakerYEarningsPerLiqX128 = 0;
+        data.fees.leftColTakerXEarningsPerLiqX128 = 0;
+        data.fees.leftColTakerYEarningsPerLiqX128 = 0;
 
         // Test with a non-leaf node and see that the visit also charges to children's unclaimeds.
         key = KeyImpl.make(36, 4);
@@ -206,35 +206,35 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(rightNode.fees.unclaimedMakerYFees, 0, "17");
         assertGt(rightNode.fees.unpaidTakerXFees, 0, "18");
         assertGt(rightNode.fees.unpaidTakerYFees, 0, "19");
-        assertGt(data.fees.rightColMakerXRateX128, 0, "20");
-        assertGt(data.fees.rightColMakerYRateX128, 0, "21");
-        assertGt(data.fees.rightColTakerXRateX128, 1, "22");
-        assertGt(data.fees.rightColTakerYRateX128, 1, "23");
+        assertGt(data.fees.rightColMakerXEarningsPerLiqX128, 0, "20");
+        assertGt(data.fees.rightColMakerYEarningsPerLiqX128, 0, "21");
+        assertGt(data.fees.rightColTakerXEarningsPerLiqX128, 1, "22");
+        assertGt(data.fees.rightColTakerYEarningsPerLiqX128, 1, "23");
         assertEq(
-            data.fees.leftColMakerXRateX128 +
-                data.fees.leftColMakerYRateX128 +
-                data.fees.leftColTakerXRateX128 +
-                data.fees.leftColTakerYRateX128,
+            data.fees.leftColMakerXEarningsPerLiqX128 +
+                data.fees.leftColMakerYEarningsPerLiqX128 +
+                data.fees.leftColTakerXEarningsPerLiqX128 +
+                data.fees.leftColTakerYEarningsPerLiqX128,
             0,
             "24"
         );
-        data.fees.rightColMakerXRateX128 = 0;
-        data.fees.rightColMakerYRateX128 = 0;
-        data.fees.rightColTakerXRateX128 = 0;
-        data.fees.rightColTakerYRateX128 = 0;
+        data.fees.rightColMakerXEarningsPerLiqX128 = 0;
+        data.fees.rightColMakerYEarningsPerLiqX128 = 0;
+        data.fees.rightColTakerXEarningsPerLiqX128 = 0;
+        data.fees.rightColTakerYEarningsPerLiqX128 = 0;
 
         // Now test a non-visit without the need to infer rates.
         key = KeyImpl.make(76, 4);
         n = data.node(key);
         // Empty node.
-        data.fees.leftColMakerXRateX128 = 10;
-        data.fees.leftColMakerYRateX128 = 20;
-        data.fees.leftColTakerXRateX128 = 17;
-        data.fees.leftColTakerYRateX128 = 21;
-        data.fees.rightColMakerXRateX128 = 10;
-        data.fees.rightColMakerYRateX128 = 20;
-        data.fees.rightColTakerXRateX128 = 13;
-        data.fees.rightColTakerYRateX128 = 19;
+        data.fees.leftColMakerXEarningsPerLiqX128 = 10;
+        data.fees.leftColMakerYEarningsPerLiqX128 = 20;
+        data.fees.leftColTakerXEarningsPerLiqX128 = 17;
+        data.fees.leftColTakerYEarningsPerLiqX128 = 21;
+        data.fees.rightColMakerXEarningsPerLiqX128 = 10;
+        data.fees.rightColMakerYEarningsPerLiqX128 = 20;
+        data.fees.rightColTakerXEarningsPerLiqX128 = 13;
+        data.fees.rightColTakerYEarningsPerLiqX128 = 19;
         FeeWalker.up(key, false, data);
         assertEq(n.fees.xCFees, 0);
         assertEq(n.fees.yCFees, 0);
@@ -242,15 +242,15 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.fees.makerYFeesPerLiqX128, 20, "26");
         assertEq(n.fees.takerXFeesPerLiqX128, 15, "27");
         assertEq(n.fees.takerYFeesPerLiqX128, 20, "28");
-        assertEq(data.fees.rightColMakerXRateX128, 10, "29");
-        assertEq(data.fees.rightColMakerYRateX128, 20, "30");
-        assertEq(data.fees.rightColTakerXRateX128, 15, "31");
-        assertEq(data.fees.rightColTakerYRateX128, 20, "32");
+        assertEq(data.fees.rightColMakerXEarningsPerLiqX128, 10, "29");
+        assertEq(data.fees.rightColMakerYEarningsPerLiqX128, 20, "30");
+        assertEq(data.fees.rightColTakerXEarningsPerLiqX128, 15, "31");
+        assertEq(data.fees.rightColTakerYEarningsPerLiqX128, 20, "32");
         assertEq(
-            data.fees.leftColMakerXRateX128 +
-                data.fees.leftColMakerYRateX128 +
-                data.fees.leftColTakerXRateX128 +
-                data.fees.leftColTakerYRateX128,
+            data.fees.leftColMakerXEarningsPerLiqX128 +
+                data.fees.leftColMakerYEarningsPerLiqX128 +
+                data.fees.leftColTakerXEarningsPerLiqX128 +
+                data.fees.leftColTakerYEarningsPerLiqX128,
             0,
             "33"
         );
@@ -379,7 +379,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         Key key = KeyImpl.make(32, 8);
         // Since we're using small keys, we'll limit the rootwidth to avoid going under the mintick.
         data.fees.rootWidth = 1 << 12;
-        (uint256 cmx, uint256 cmy, uint256 ctx, uint256 cty) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        uint256[4] memory rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (uint256 cmx, uint256 cmy, uint256 ctx, uint256 cty) = (rates[0], rates[1], rates[2], rates[3]);
         assertEq(cmx, 0, "cmx0");
         assertEq(cmy, 0, "cmy0");
         assertEq(ctx, 1, "ctx0");
@@ -387,7 +388,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         // Test without any takers first to see if their rates get set to 1 and makers stay at 0.
         node.liq.subtreeMLiq = 100e18;
         node.liq.mLiq = 12.5e18;
-        (cmx, cmy, ctx, cty) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (cmx, cmy, ctx, cty) = (rates[0], rates[1], rates[2], rates[3]);
         assertEq(cmx, 0, "cmx1");
         assertEq(cmy, 0, "cmy1");
         assertEq(ctx, 1, "ctx1");
@@ -395,7 +397,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         // Now with some takers.
         key = KeyImpl.make(16, 1); // Leaf from here.
         node.liq.subtreeTLiq = 20e18;
-        (cmx, cmy, ctx, cty) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (cmx, cmy, ctx, cty) = (rates[0], rates[1], rates[2], rates[3]);
         // Because borrows are still 0 the results are still 0/1.
         assertEq(cmx, 0, "cmx2");
         assertEq(cmy, 0, "cmy2");
@@ -404,7 +407,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         // Now with some borrows.
         node.liq.subtreeBorrowedX = 2e18;
         node.liq.subtreeBorrowedY = 1e18;
-        (cmx, cmy, ctx, cty) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (cmx, cmy, ctx, cty) = (rates[0], rates[1], rates[2], rates[3]);
         assertGt(ctx, 1, "ctx3");
         assertGt(cty, 1, "cty3");
         assertApproxEqAbs(ctx, cty * 2, 1, "ctxcty3");
@@ -421,7 +425,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         node.fees.xCFees = 0;
         node.fees.yCFees = 0;
         node.liq.ncLiq = 6.25e18; // Gets subtracted from the overall mliq.
-        (uint256 cmx2, uint256 cmy2, uint256 ctx2, uint256 cty2) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (uint256 cmx2, uint256 cmy2, uint256 ctx2, uint256 cty2) = (rates[0], rates[1], rates[2], rates[3]);
         assertEq(ctx, ctx2, "ctx4");
         assertEq(cty, cty2, "cty4");
         assertEq(cmx, cmx2, "cmx4");
@@ -434,7 +439,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         node.liq.subtreeBorrowedX = 0;
         node.liq.subtreeBorrowedY = 0;
         data.liq.tLiqPrefix = 50e18;
-        (cmx, cmy, ctx, cty) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (cmx, cmy, ctx, cty) = (rates[0], rates[1], rates[2], rates[3]);
         assertGt(ctx, 1, "ctx5");
         assertGt(cty, 1, "cty5");
         assertGt(cmx, 0, "cmx5");
@@ -462,7 +468,8 @@ contract FeeWalkerTest is Test, UniV3IntegrationSetup {
         rightChild.liq.tLiq = 1e17;
         rightChild.liq.subtreeBorrowedX = 18e18;
         rightChild.liq.subtreeBorrowedY = 40e18;
-        (cmx2, cmy2, ctx2, cty2) = FeeWalker.chargeTrueFeeRate(key, node, data);
+        rates = FeeWalker.chargeTrueFeeRate(key, node, data);
+        (cmx2, cmy2, ctx2, cty2) = (rates[0], rates[1], rates[2], rates[3]);
         assertGt(ctx2, ctx, "ctx6");
         assertGt(cty2, cty, "cty6");
         assertGt(cmx2, cmx, "cmx6");

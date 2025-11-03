@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
+import { UnsafeMath } from "Commons/Math/UnsafeMath.sol";
 import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
@@ -11,12 +12,19 @@ import { FullMath } from "../FullMath.sol";
 import { FeeLib } from "../Fee.sol";
 import { PoolInfo } from "../Pool.sol";
 
+import { console } from "forge-std/console.sol";
+
 /// Data we need to persist for fee accounting.
 /// @dev ONLY operations in FeeWalker are modifying this data.
 /// Others can read though so they should be aware of their ordering.
 struct FeeNode {
+    // Unlike maker fees, we don't track swap fees here to avoid another storage write.
+    // We store taker swap fees in the feeGrowthInside tracker in liq, and this is just the borrow fees.
     uint256 takerXFeesPerLiqX128;
     uint256 takerYFeesPerLiqX128;
+    uint256 xTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as x.
+    uint256 yTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as y.
+    // Maker fees including swap fees and lending earnings.
     uint256 makerXFeesPerLiqX128; // Used for non-compounding makers
     uint256 makerYFeesPerLiqX128; // Used for non-compounding makers
     // Note that these are uint128. They hold a fee balance which can grow unbounded.
@@ -44,19 +52,19 @@ struct FeeData {
     // @dev These ALREADY have the time diff multiplied in to avoid re-multiplying.
     // These report the per liq fee rate paid by each "column" of the tree,
     // for which you can just average for your own column rate.
-    uint256 leftColMakerXRateX128;
-    uint256 leftColTakerXRateX128;
-    uint256 leftColMakerYRateX128;
-    uint256 leftColTakerYRateX128;
-    uint256 rightColMakerXRateX128;
-    uint256 rightColTakerXRateX128;
-    uint256 rightColMakerYRateX128;
-    uint256 rightColTakerYRateX128;
+    uint256 leftColMakerXEarningsPerLiqX128;
+    uint256 leftColTakerXEarningsPerLiqX128;
+    uint256 leftColMakerYEarningsPerLiqX128;
+    uint256 leftColTakerYEarningsPerLiqX128;
+    uint256 rightColMakerXEarningsPerLiqX128;
+    uint256 rightColTakerXEarningsPerLiqX128;
+    uint256 rightColMakerYEarningsPerLiqX128;
+    uint256 rightColTakerYEarningsPerLiqX128;
     // Root switch entries
-    uint256 lcaLeftColMakerXRateX128;
-    uint256 lcaLeftColTakerXRateX128;
-    uint256 lcaLeftColMakerYRateX128;
-    uint256 lcaLeftColTakerYRateX128;
+    uint256 lcaLeftColMakerXEarningsPerLiqX128;
+    uint256 lcaLeftColTakerXEarningsPerLiqX128;
+    uint256 lcaLeftColMakerYEarningsPerLiqX128;
+    uint256 lcaLeftColTakerYEarningsPerLiqX128;
     // We don't need a right rate since that can be copied from the above right rates.
 }
 
@@ -72,18 +80,18 @@ library FeeDataLib {
                 rateConfig: FeeLib.getRateCurve(pInfo.poolAddr),
                 splitConfig: FeeLib.getSplitCurve(pInfo.poolAddr),
                 // Unused till propogation.
-                leftColMakerXRateX128: 0,
-                leftColTakerXRateX128: 0,
-                leftColMakerYRateX128: 0,
-                leftColTakerYRateX128: 0,
-                rightColMakerXRateX128: 0,
-                rightColTakerXRateX128: 0,
-                rightColMakerYRateX128: 0,
-                rightColTakerYRateX128: 0,
-                lcaLeftColMakerXRateX128: 0,
-                lcaLeftColTakerXRateX128: 0,
-                lcaLeftColMakerYRateX128: 0,
-                lcaLeftColTakerYRateX128: 0
+                leftColMakerXEarningsPerLiqX128: 0,
+                leftColTakerXEarningsPerLiqX128: 0,
+                leftColMakerYEarningsPerLiqX128: 0,
+                leftColTakerYEarningsPerLiqX128: 0,
+                rightColMakerXEarningsPerLiqX128: 0,
+                rightColTakerXEarningsPerLiqX128: 0,
+                rightColMakerYEarningsPerLiqX128: 0,
+                rightColTakerYEarningsPerLiqX128: 0,
+                lcaLeftColMakerXEarningsPerLiqX128: 0,
+                lcaLeftColTakerXEarningsPerLiqX128: 0,
+                lcaLeftColMakerYEarningsPerLiqX128: 0,
+                lcaLeftColTakerYEarningsPerLiqX128: 0
             });
     }
 }
@@ -97,20 +105,28 @@ library FeeWalker {
 
         // We just claim all of our unclaimed.
         if (key.isLeaf()) {
+            console.log("leaf node claiming fees");
             // If we're at a leaf, we can claim fees.
             // We round up to overpay dust.
             if (node.liq.subtreeTLiq > 0) {
                 // If the tLiq is zero we would never propogate any fees down anyways.
-                node.fees.takerXFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                    node.fees.unpaidTakerXFees,
-                    1 << 128,
-                    node.liq.subtreeTLiq
-                );
-                node.fees.takerYFeesPerLiqX128 += FullMath.mulDivRoundingUp(
-                    node.fees.unpaidTakerYFees,
-                    1 << 128,
-                    node.liq.subtreeTLiq
-                );
+                // For unclaims and unpaids, we specify if the taker is borrowing as x or y.
+                if (node.fees.unpaidTakerXFees > 0) {
+                    // There has to be some xTLiq if there are unpaid x fees.
+                    node.fees.xTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                        node.fees.unpaidTakerXFees,
+                        1 << 128,
+                        node.liq.xTLiq
+                    );
+                }
+                if (node.fees.unpaidTakerYFees > 0) {
+                    // There has to be some yTLiq if there are unpaid y fees.
+                    node.fees.yTakerFeesPerLiqX128 += FullMath.mulDivRoundingUp(
+                        node.fees.unpaidTakerYFees,
+                        1 << 128,
+                        node.liq.tLiq - node.liq.xTLiq
+                    );
+                }
                 node.fees.unpaidTakerXFees = 0;
                 node.fees.unpaidTakerYFees = 0;
             }
@@ -133,35 +149,47 @@ library FeeWalker {
 
         // We claim our own fees first.
         {
+            console.log("internal node claiming fees");
             uint24 width = key.width();
-            uint256 myLiq;
             // Takers
             if (node.liq.tLiq > 0) {
-                myLiq = node.liq.tLiq * width;
-                uint256 perTLiqX128 = FullMath.mulDivRoundingUp(
-                    node.fees.unpaidTakerXFees,
-                    1 << 128,
-                    node.liq.subtreeTLiq
-                );
-                node.fees.takerXFeesPerLiqX128 += perTLiqX128;
-                if (myLiq == node.liq.subtreeTLiq) {
-                    // If we're the entire subtree, we can just zero it out.
-                    node.fees.unpaidTakerXFees = 0;
-                } else {
-                    // Otherwise we round up to avoid underpaying dust.
-                    node.fees.unpaidTakerXFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                // Unlike makers, we divy via borrowed balances.
+                console.log("subtree borrowed x:", node.liq.subtreeBorrowedX, node.liq.borrowedX);
+                if (node.liq.borrowedX > 0) {
+                    uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
+                        uint256(node.fees.unpaidTakerXFees) << 128,
+                        node.liq.borrowedX,
+                        node.liq.subtreeBorrowedX
+                    );
+                    node.fees.xTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(myUnpaidX128, node.liq.xTLiq);
+                    if (node.liq.borrowedX == node.liq.subtreeBorrowedX) {
+                        // If we're the entire subtree, we can just zero it out.
+                        node.fees.unpaidTakerXFees = 0;
+                    } else {
+                        // We round down to avoid underpaying dust
+                        node.fees.unpaidTakerXFees -= uint128(myUnpaidX128 >> 128);
+                    }
                 }
-                perTLiqX128 = FullMath.mulDivRoundingUp(node.fees.unpaidTakerYFees, 1 << 128, node.liq.subtreeTLiq);
-                node.fees.takerYFeesPerLiqX128 += perTLiqX128;
-                if (myLiq == node.liq.subtreeTLiq) {
-                    node.fees.unpaidTakerYFees = 0;
-                } else {
-                    node.fees.unpaidTakerYFees -= uint128(FullMath.mulX128(perTLiqX128, myLiq, true));
+                if (node.liq.borrowedY > 0) {
+                    uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
+                        uint256(node.fees.unpaidTakerYFees) << 128,
+                        node.liq.borrowedY,
+                        node.liq.subtreeBorrowedY
+                    );
+                    node.fees.yTakerFeesPerLiqX128 += UnsafeMath.divRoundingUp(
+                        myUnpaidX128,
+                        node.liq.tLiq - node.liq.xTLiq
+                    );
+                    if (node.liq.borrowedY == node.liq.subtreeBorrowedY) {
+                        node.fees.unpaidTakerYFees = 0;
+                    } else {
+                        node.fees.unpaidTakerYFees -= uint128(myUnpaidX128 >> 128);
+                    }
                 }
             }
             // Makers
             if (node.liq.mLiq > 0) {
-                myLiq = node.liq.mLiq * width;
+                uint256 myLiq = node.liq.mLiq * width;
                 uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
                 node.fees.unclaimedMakerXFees -= uint128(myEarnings);
                 (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(myEarnings);
@@ -173,8 +201,10 @@ library FeeWalker {
                 node.fees.makerYFeesPerLiqX128 += nonCX128;
                 node.fees.yCFees += c;
             }
+            console.log("internal node claimed fees");
         }
 
+        console.log("internal node splitting fees");
         // Now split fees before updating prefixes.
         (Key leftChild, Key rightChild) = key.children();
         Node storage leftNode = data.node(leftChild);
@@ -201,6 +231,7 @@ library FeeWalker {
             data.liq.mLiqPrefix += node.liq.mLiq;
             data.liq.tLiqPrefix += node.liq.tLiq;
         }
+        console.log("internal node done down");
     }
 
     function up(Key key, bool visit, Data memory data) internal {
@@ -209,48 +240,47 @@ library FeeWalker {
         if (visit) {
             // We use the real fee rate calculation since we can.
             // The prefix will be correct going into this because the prop beforehand has removed their prefix.
+            uint256[4] memory earnings = chargeTrueFeeRate(key, node, data);
             if (key.isLeft()) {
-                (
-                    data.fees.leftColMakerXRateX128,
-                    data.fees.leftColMakerYRateX128,
-                    data.fees.leftColTakerXRateX128,
-                    data.fees.leftColTakerYRateX128
-                ) = chargeTrueFeeRate(key, node, data);
+                data.fees.leftColMakerXEarningsPerLiqX128 = earnings[0];
+                data.fees.leftColMakerYEarningsPerLiqX128 = earnings[1];
+                data.fees.leftColTakerXEarningsPerLiqX128 = earnings[2];
+                data.fees.leftColTakerYEarningsPerLiqX128 = earnings[3];
             } else {
-                (
-                    data.fees.rightColMakerXRateX128,
-                    data.fees.rightColMakerYRateX128,
-                    data.fees.rightColTakerXRateX128,
-                    data.fees.rightColTakerYRateX128
-                ) = chargeTrueFeeRate(key, node, data);
+                data.fees.rightColMakerXEarningsPerLiqX128 = earnings[0];
+                data.fees.rightColMakerYEarningsPerLiqX128 = earnings[1];
+                data.fees.rightColTakerXEarningsPerLiqX128 = earnings[2];
+                data.fees.rightColTakerYEarningsPerLiqX128 = earnings[3];
             }
         } else {
             // Check for any uncalculated fee rates using the Taker rate.
             (Key leftKey, Key rightKey) = key.children();
-            if (data.fees.leftColTakerXRateX128 == 0) {
+            if (data.fees.leftColTakerXEarningsPerLiqX128 == 0) {
                 // The prefix is correct here since we haven't removed ourselves yet.
-                (
-                    data.fees.leftColMakerXRateX128,
-                    data.fees.leftColMakerYRateX128,
-                    data.fees.leftColTakerXRateX128,
-                    data.fees.leftColTakerYRateX128
-                ) = chargeTrueFeeRate(leftKey, data.node(leftKey), data);
+                uint256[4] memory earnings = chargeTrueFeeRate(leftKey, data.node(leftKey), data);
+                data.fees.leftColMakerXEarningsPerLiqX128 = earnings[0];
+                data.fees.leftColMakerYEarningsPerLiqX128 = earnings[1];
+                data.fees.leftColTakerXEarningsPerLiqX128 = earnings[2];
+                data.fees.leftColTakerYEarningsPerLiqX128 = earnings[3];
             }
-            if (data.fees.rightColTakerXRateX128 == 0) {
-                (
-                    data.fees.rightColMakerXRateX128,
-                    data.fees.rightColMakerYRateX128,
-                    data.fees.rightColTakerXRateX128,
-                    data.fees.rightColTakerYRateX128
-                ) = chargeTrueFeeRate(rightKey, data.node(rightKey), data);
+            if (data.fees.rightColTakerXEarningsPerLiqX128 == 0) {
+                uint256[4] memory earnings = chargeTrueFeeRate(rightKey, data.node(rightKey), data);
+                data.fees.rightColMakerXEarningsPerLiqX128 = earnings[0];
+                data.fees.rightColMakerYEarningsPerLiqX128 = earnings[1];
+                data.fees.rightColTakerXEarningsPerLiqX128 = earnings[2];
+                data.fees.rightColTakerYEarningsPerLiqX128 = earnings[3];
             }
 
             // We just infer our rate from the children.
-            uint256 colMakerXRateX128 = (data.fees.leftColMakerXRateX128 + data.fees.rightColMakerXRateX128) / 2;
-            uint256 colMakerYRateX128 = (data.fees.leftColMakerYRateX128 + data.fees.rightColMakerYRateX128) / 2;
-            // +1 to round up.
-            uint256 colTakerXRateX128 = (data.fees.leftColTakerXRateX128 + data.fees.rightColTakerXRateX128 + 1) / 2;
-            uint256 colTakerYRateX128 = (data.fees.leftColTakerYRateX128 + data.fees.rightColTakerYRateX128 + 1) / 2;
+            // A unit of liquidity at a parent node will earn the rates of both children's ranges.
+            uint256 colMakerXRateX128 = data.fees.leftColMakerXEarningsPerLiqX128 +
+                data.fees.rightColMakerXEarningsPerLiqX128;
+            uint256 colMakerYRateX128 = data.fees.leftColMakerYEarningsPerLiqX128 +
+                data.fees.rightColMakerYEarningsPerLiqX128;
+            uint256 colTakerXRateX128 = data.fees.leftColTakerXEarningsPerLiqX128 +
+                data.fees.rightColTakerXEarningsPerLiqX128;
+            uint256 colTakerYRateX128 = data.fees.leftColTakerYEarningsPerLiqX128 +
+                data.fees.rightColTakerYEarningsPerLiqX128;
 
             // We charge/pay our own fees.
             node.fees.takerXFeesPerLiqX128 += colTakerXRateX128;
@@ -276,23 +306,23 @@ library FeeWalker {
 
             // We propogate up our fees.
             if (key.isLeft()) {
-                data.fees.leftColMakerXRateX128 = colMakerXRateX128;
-                data.fees.leftColMakerYRateX128 = colMakerYRateX128;
-                data.fees.leftColTakerXRateX128 = colTakerXRateX128;
-                data.fees.leftColTakerYRateX128 = colTakerYRateX128;
-                data.fees.rightColMakerXRateX128 = 0;
-                data.fees.rightColMakerYRateX128 = 0;
-                data.fees.rightColTakerXRateX128 = 0;
-                data.fees.rightColTakerYRateX128 = 0;
+                data.fees.leftColMakerXEarningsPerLiqX128 = colMakerXRateX128;
+                data.fees.leftColMakerYEarningsPerLiqX128 = colMakerYRateX128;
+                data.fees.leftColTakerXEarningsPerLiqX128 = colTakerXRateX128;
+                data.fees.leftColTakerYEarningsPerLiqX128 = colTakerYRateX128;
+                data.fees.rightColMakerXEarningsPerLiqX128 = 0;
+                data.fees.rightColMakerYEarningsPerLiqX128 = 0;
+                data.fees.rightColTakerXEarningsPerLiqX128 = 0;
+                data.fees.rightColTakerYEarningsPerLiqX128 = 0;
             } else {
-                data.fees.rightColMakerXRateX128 = colMakerXRateX128;
-                data.fees.rightColMakerYRateX128 = colMakerYRateX128;
-                data.fees.rightColTakerXRateX128 = colTakerXRateX128;
-                data.fees.rightColTakerYRateX128 = colTakerYRateX128;
-                data.fees.leftColMakerXRateX128 = 0;
-                data.fees.leftColMakerYRateX128 = 0;
-                data.fees.leftColTakerXRateX128 = 0;
-                data.fees.leftColTakerYRateX128 = 0;
+                data.fees.rightColMakerXEarningsPerLiqX128 = colMakerXRateX128;
+                data.fees.rightColMakerYEarningsPerLiqX128 = colMakerYRateX128;
+                data.fees.rightColTakerXEarningsPerLiqX128 = colTakerXRateX128;
+                data.fees.rightColTakerYEarningsPerLiqX128 = colTakerYRateX128;
+                data.fees.leftColMakerXEarningsPerLiqX128 = 0;
+                data.fees.leftColMakerYEarningsPerLiqX128 = 0;
+                data.fees.leftColTakerXEarningsPerLiqX128 = 0;
+                data.fees.leftColTakerYEarningsPerLiqX128 = 0;
             }
 
             // We remove the prefix now, before we potentially visit the sibling.
@@ -305,21 +335,21 @@ library FeeWalker {
         if (walkPhase == Phase.LEFT_UP) {
             // At the end of left, if we visited the lca right child then
             // we can just proceed to the root propogation with the same child rates.
-            if (data.fees.rightColTakerXRateX128 == 0) {
+            if (data.fees.rightColTakerXEarningsPerLiqX128 == 0) {
                 // We're going to visit the right route, so we need to save the left.
-                data.fees.lcaLeftColMakerXRateX128 = data.fees.leftColMakerXRateX128;
-                data.fees.lcaLeftColMakerYRateX128 = data.fees.leftColMakerYRateX128;
-                data.fees.lcaLeftColTakerXRateX128 = data.fees.leftColTakerXRateX128;
-                data.fees.lcaLeftColTakerYRateX128 = data.fees.leftColTakerYRateX128;
+                data.fees.lcaLeftColMakerXEarningsPerLiqX128 = data.fees.leftColMakerXEarningsPerLiqX128;
+                data.fees.lcaLeftColMakerYEarningsPerLiqX128 = data.fees.leftColMakerYEarningsPerLiqX128;
+                data.fees.lcaLeftColTakerXEarningsPerLiqX128 = data.fees.leftColTakerXEarningsPerLiqX128;
+                data.fees.lcaLeftColTakerYEarningsPerLiqX128 = data.fees.leftColTakerYEarningsPerLiqX128;
             }
         } else if (walkPhase == Phase.RIGHT_UP) {
             // At the end of right, we'll proceed to root propogation but if we have a
             // saved lca left child rate, then we need to move that back into use.
-            if (data.fees.lcaLeftColTakerXRateX128 != 0) {
-                data.fees.leftColMakerXRateX128 = data.fees.lcaLeftColMakerXRateX128;
-                data.fees.leftColMakerYRateX128 = data.fees.lcaLeftColMakerYRateX128;
-                data.fees.leftColTakerXRateX128 = data.fees.lcaLeftColTakerXRateX128;
-                data.fees.leftColTakerYRateX128 = data.fees.lcaLeftColTakerYRateX128;
+            if (data.fees.lcaLeftColTakerXEarningsPerLiqX128 != 0) {
+                data.fees.leftColMakerXEarningsPerLiqX128 = data.fees.lcaLeftColMakerXEarningsPerLiqX128;
+                data.fees.leftColMakerYEarningsPerLiqX128 = data.fees.lcaLeftColMakerYEarningsPerLiqX128;
+                data.fees.leftColTakerXEarningsPerLiqX128 = data.fees.lcaLeftColTakerXEarningsPerLiqX128;
+                data.fees.leftColTakerYEarningsPerLiqX128 = data.fees.lcaLeftColTakerYEarningsPerLiqX128;
             }
         }
     }
@@ -329,6 +359,7 @@ library FeeWalker {
     /// Returns the initial split weights for the left and right children according to liquidity utilization.
     /// @dev Be sure to multiply the by weights by the quantity of the borrowed asset to get the actual
     /// split weights.
+    /// @dev Think of this like how much a single borrow of a token is worth in this column versus other columns.
     /// @dev This assumes the prefix does not include the current node's liquidity.
     function getLeftRightWeights(
         LiqData memory liqData,
@@ -344,6 +375,7 @@ library FeeWalker {
             uint256 leftMLiq = left.subtreeMLiq + myMLiq;
             uint256 totalMLiq = leftMLiq + liqData.mLiqPrefix * childWidth;
             if (totalMLiq == 0) {
+                // There can't be any takers in this column.
                 leftWeight = feeData.splitConfig.calculateRateX64(0);
             } else {
                 uint256 leftTLiq = left.subtreeTLiq + myTLiq;
@@ -377,86 +409,125 @@ library FeeWalker {
         Key key,
         Node storage node,
         Data memory data
-    )
-        internal
-        returns (
-            uint256 colMakerXRateX128,
-            uint256 colMakerYRateX128,
-            uint256 colTakerXRateX128,
-            uint256 colTakerYRateX128
-        )
-    {
+    ) internal returns (uint256[4] memory colRatesX128) {
         uint24 width = key.width();
         // We use the liq ratio to calculate the true fee rate the entire column should pay.
         uint256 totalMLiq = width * data.liq.mLiqPrefix + node.liq.subtreeMLiq;
-        uint256 totalTLiq = width * data.liq.tLiqPrefix + node.liq.subtreeTLiq;
-        if (totalMLiq == 0 || totalTLiq == 0) {
-            // There is no maker or taker liq in this entire column, so no fees to charge, no fee rates to update,
-            // no unclaimeds to propogate down.
-            // But we do have to return 1 for the taker rates to indicate we've actually calculated them.
-            // This is okay because without any taker liq in this subtree (or any subtree above) no one will pay this 1.
-            // And makers aren't trying to claim this dust.
-            // The only time it actually manifests is in a subtree above that actually has takers. Their rates will be
-            // higher by at most the subtree nodes visited which is at most 21. This is dwarfed by anything meaningful.
-            return (0, 0, 1, 1);
-        }
-        uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
-        uint256 takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
-        // Then we use the total column x and y borrows to calculate the total fees paid.
-        (uint256 totalXBorrows, uint256 totalYBorrows) = data.computeBorrows(key, data.liq.tLiqPrefix, true);
-        totalXBorrows += node.liq.subtreeBorrowedX;
-        totalYBorrows += node.liq.subtreeBorrowedY;
-        uint256 colXPaid = FullMath.mulX64(totalXBorrows, takerRateX64, true);
-        uint256 colYPaid = FullMath.mulX64(totalYBorrows, takerRateX64, true);
+        uint256 takerRateX64;
+        {
+            uint256 totalTLiq = width * data.liq.tLiqPrefix + node.liq.subtreeTLiq;
+            if (totalMLiq == 0 || totalTLiq == 0) {
+                // There is no maker or taker liq in this entire column, so no fees to charge, no fee rates to update,
+                // no unclaimeds to propogate down.
+                // But we do have to return 1 for the taker rates to indicate we've actually calculated them.
+                // This is okay because without any taker liq in this subtree (or any subtree above)
+                // no one will pay this 1 and makers aren't trying to claim this dust.
+                // The only time it actually manifests is in a subtree above that actually has takers.
+                // Their rates will be higher by at most the subtree nodes visited which is at most 21.
+                // This is dwarfed by anything meaningful.
+                colRatesX128[2] = 1;
+                colRatesX128[3] = 1;
+                return colRatesX128;
+            }
 
-        // Determine our column rates.
-        // We round down but add one to ensure that taker rates are never 0 if visited.
-        // This is important for indicating no fees vs. uncalculated fees.
-        colTakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalTLiq) + 1;
-        colTakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalTLiq) + 1;
-        colMakerXRateX128 = FullMath.mulDiv(colXPaid, 1 << 128, totalMLiq);
-        colMakerYRateX128 = FullMath.mulDiv(colYPaid, 1 << 128, totalMLiq);
-        // Now add this to our node's fee accounting.
-        node.fees.takerXFeesPerLiqX128 += colTakerXRateX128;
-        node.fees.takerYFeesPerLiqX128 += colTakerYRateX128;
-        node.fees.makerXFeesPerLiqX128 += colMakerXRateX128;
-        node.fees.makerYFeesPerLiqX128 += colMakerYRateX128;
+            uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
+            takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
+        }
+
+        uint256 colXPaid;
+        uint256 colYPaid;
+        {
+            // Then we calculate the payment made by the takers at and above the current node to set the taker rates.
+            // And we calculate the payment made by the takers below the current node to set the unpaids.
+            // And we use the total balances to set the maker rates and unclaimeds.
+            uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
+            (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
+            colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
+            colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
+            // We round down column taker rates but add one to ensure that taker rates are never 0 if visited.
+            // This is important for indicating no fees vs. uncalculated fees.
+            if (aboveTLiq != 0) {
+                colRatesX128[2] = FullMath.mulDiv(colXPaid, 1 << 128, aboveTLiq) + 1;
+                colRatesX128[3] = FullMath.mulDiv(colYPaid, 1 << 128, aboveTLiq) + 1;
+            } else {
+                colRatesX128[2] = 1;
+                colRatesX128[3] = 1;
+            }
+        }
+
+        // Now we compute the unpaids for subtree borrows.
+        // We could store subtree borrows without the node borrow to save a subtract here,
+        // but let's just use one convention.
+        uint256[4] memory childrenPaidEarned;
+        childrenPaidEarned[0] = FullMath.mulX64(node.liq.subtreeBorrowedX - node.liq.borrowedX, takerRateX64, true);
+        childrenPaidEarned[1] = FullMath.mulX64(node.liq.subtreeBorrowedY - node.liq.borrowedY, takerRateX64, true);
+        colXPaid += childrenPaidEarned[0];
+        colYPaid += childrenPaidEarned[1];
+
+        // Now divy this up among all makers above and below in the column.
+        uint256 aboveMLiq = data.liq.mLiqPrefix + node.liq.mLiq;
+        // Implicit is that maker liq below and maker liq above should earn the same amount which is not true
+        // but is a resonable approximation that is true in the limit of a totally efficient market.
+        if (aboveMLiq != 0) {
+            uint256 aboveMLiqTotal = aboveMLiq * width;
+            if (aboveMLiqTotal == totalMLiq) {
+                // If all the maker liq is above, we don't need to consider children.
+                colRatesX128[0] = FullMath.mulDiv(colXPaid, 1 << 128, aboveMLiq);
+                colRatesX128[1] = FullMath.mulDiv(colYPaid, 1 << 128, aboveMLiq);
+                childrenPaidEarned[2] = 0;
+                childrenPaidEarned[3] = 0;
+            } else {
+                uint256 aboveMLiqRatioX256 = FullMath.mulDivX256(aboveMLiqTotal, totalMLiq, false);
+                // X first.
+                uint256 aboveEarned = FullMath.mulX256(colXPaid, aboveMLiqRatioX256, false);
+                colRatesX128[0] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
+                childrenPaidEarned[2] = colXPaid - aboveEarned;
+                // Now Y.
+                aboveEarned = FullMath.mulX256(colYPaid, aboveMLiqRatioX256, false);
+                colRatesX128[1] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
+                childrenPaidEarned[3] = colYPaid - aboveEarned;
+            }
+        }
+
+        // Now pay/charge these fees ourselves.
+        node.fees.takerXFeesPerLiqX128 += colRatesX128[2];
+        node.fees.takerYFeesPerLiqX128 += colRatesX128[3];
+        node.fees.makerXFeesPerLiqX128 += colRatesX128[0];
+        node.fees.makerYFeesPerLiqX128 += colRatesX128[1];
         uint256 compoundingLiq = width * (node.liq.mLiq - node.liq.ncLiq);
         node.fees.xCFees = add128Fees(
             node.fees.xCFees,
-            FullMath.mulX128(colMakerXRateX128, compoundingLiq, false),
+            FullMath.mulX128(colRatesX128[0], compoundingLiq, false),
             data,
             true
         );
         node.fees.yCFees = add128Fees(
             node.fees.yCFees,
-            FullMath.mulX128(colMakerYRateX128, compoundingLiq, false),
+            FullMath.mulX128(colRatesX128[1], compoundingLiq, false),
             data,
             false
         );
         // Then we calculate the children's fees and split.
-        if (!key.isLeaf()) {
+        if (
+            childrenPaidEarned[0] > 0 ||
+            childrenPaidEarned[1] > 0 ||
+            childrenPaidEarned[2] > 0 ||
+            childrenPaidEarned[3] > 0
+        ) {
             (Key leftChild, Key rightChild) = key.children();
             Node storage leftNode = data.node(leftChild);
             Node storage rightNode = data.node(rightChild);
 
-            /// The earnings to split.
-            uint256 childrenTLiq = leftNode.liq.subtreeTLiq + rightNode.liq.subtreeTLiq;
-            uint256 childrenXPaid = FullMath.mulX128(colTakerXRateX128, childrenTLiq, true);
-            uint256 childrenYPaid = FullMath.mulX128(colTakerYRateX128, childrenTLiq, true);
-            uint256 childrenMLiq = leftNode.liq.subtreeMLiq + rightNode.liq.subtreeMLiq;
-            uint256 childrenXEarned = FullMath.mulX128(colMakerXRateX128, childrenMLiq, false);
-            uint256 childrenYEarned = FullMath.mulX128(colMakerYRateX128, childrenMLiq, false);
             childSplit(
                 data,
                 node,
                 leftNode,
                 rightNode,
                 width / 2,
-                childrenXPaid,
-                childrenYPaid,
-                childrenXEarned,
-                childrenYEarned
+                childrenPaidEarned[0],
+                childrenPaidEarned[1],
+                childrenPaidEarned[2],
+                childrenPaidEarned[3]
             );
         }
     }

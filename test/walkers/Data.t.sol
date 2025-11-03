@@ -48,22 +48,31 @@ contract DataTest is Test, UniV3IntegrationSetup {
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         uint24 base = TreeTickLib.tickToTreeIndex(100, data.fees.rootWidth, data.fees.tickSpacing);
         Key key = KeyImpl.make(base, 16);
-        (uint256 x, uint256 y) = data.computeBorrows(key, 100e18, false);
+        // First test it with taking as X.
+        data.takeAsX = true;
+        (uint256 x, uint256 y) = data.computeBorrow(key, 100e18, false);
+        assertGt(x, 0);
+        assertEq(y, 0);
         // Pool price changes don't affect borrow amount.
         swapTo(0, 4 << 96);
-        (uint256 x2, uint256 y2) = data.computeBorrows(key, 100e18, false);
+        (uint256 x2, uint256 y2) = data.computeBorrow(key, 100e18, false);
         assertEq(x, x2, "x2");
         assertEq(y, y2, "y2");
-        (x2, y2) = data.computeBorrows(key, 200e18, false);
+        (x2, y2) = data.computeBorrow(key, 200e18, false);
         // Roughly doubles the amount.
         assertApproxEqAbs(x * 2, x2, 1, "x22");
         assertApproxEqAbs(y * 2, y2, 1, "y22");
-        // Doubling the with should also double the amounts (roughly).
+        // Doubling the width should also double the amounts (roughly).
         base = TreeTickLib.tickToTreeIndex(20, data.fees.rootWidth, data.fees.tickSpacing);
         key = KeyImpl.make(base, 32);
-        (x2, y2) = data.computeBorrows(key, 100e18, false);
+        (x2, y2) = data.computeBorrow(key, 100e18, false);
         assertApproxEqRel(x * 2, x2, 1e16, "x222");
         assertApproxEqRel(y * 2, y2, 1e16, "y222");
+        // However if we switch to taking as y, we have no x now.
+        data.takeAsX = false;
+        (x, y) = data.computeBorrow(key, 100e18, false);
+        assertEq(x, 0);
+        assertGt(y, 0);
     }
 
     function testComputeBalances() public {
@@ -74,22 +83,23 @@ contract DataTest is Test, UniV3IntegrationSetup {
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         console.log("data created");
         uint24 base = TreeTickLib.tickToTreeIndex(-640, data.fees.rootWidth, data.fees.tickSpacing);
-        console.log("base computed");
+        console.log("base", base);
+        console.log("rootWidth", data.fees.rootWidth);
+        console.log("tickSpacing", data.fees.tickSpacing);
         Key key = KeyImpl.make(base, 128);
-        console.log("key made");
-        // This is centered around 0, so the current balances and the borrows will match.
-        (uint256 bx, uint256 by) = data.computeBorrows(key, 100e18, false);
-        console.log("borrows computed");
+        // This is centered around 0, so we'll have balances in both.
         (uint256 x, uint256 y) = data.computeBalances(key, 100e18, false);
-        console.log("balances computed");
-        assertEq(bx, x, "bx");
-        assertEq(by, y, "by");
         assertNotEq(x, 0, "x0");
         assertNotEq(y, 0, "y0");
-        // But if the price moves this isn't true anymore.
+        // But if the price moves out of range, we'll just have one token, and in fact it matches
+        // the borrow balances.
         data.sqrtPriceX96 = 4 << 96;
+        // Taking as y to match the price going above.
+        (uint256 bx, uint256 by) = data.computeBorrow(key, 100e18, false);
         (uint256 x2, uint256 y2) = data.computeBalances(key, 100e18, false);
         assertNotEq(x, x2, "x8");
         assertNotEq(y, y2, "y8");
+        assertEq(x2, bx, "xb");
+        assertEq(y2, by, "yb");
     }
 }
