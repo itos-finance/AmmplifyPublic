@@ -14,6 +14,9 @@ import { RouteImpl } from "../../src/tree/Route.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { IUniswapV3FlashCallback } from "v3-core/interfaces/callback/IUniswapV3FlashCallback.sol";
+import { FullMath } from "../../src/FullMath.sol";
+
+import { console } from "forge-std/console.sol";
 
 /// @dev The minimum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MIN_TICK)
 uint160 constant MIN_SQRT_RATIO = 4295128739;
@@ -599,6 +602,9 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
     }
 
     function testFirstDepositorDrain_NoValueLoss() public {
+        // We're opening and closing immediately to check so we need to disable JIT penalties.
+        adminFacet.setJITPenalties(0, 0);
+
         bytes memory rftData = "";
 
         address victim = makeAddr("victimUser2");
@@ -611,6 +617,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         swapTo(0, TickMath.getSqrtRatioAtTick(630));
 
         // create first compounding maker
+        uint256 attackerBalance0 = token0.balanceOf(address(this));
+        uint256 attackerBalance1 = token1.balanceOf(address(this));
         uint256 assetId = makerFacet.newMaker(
             recipient,
             poolAddr,
@@ -622,17 +630,37 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
             maxSqrtPriceX96,
             rftData
         );
+        int256 attackerSpend0 = int256(attackerBalance0 - token0.balanceOf(address(this)));
+        int256 attackerSpend1 = int256(attackerBalance1 - token1.balanceOf(address(this)));
 
         // donate some amount to compound liquidity
         UniswapV3Pool(poolAddr).flash(address(this), 0, 0, "");
+        attackerSpend0 += 1e18;
+        attackerSpend1 += 1e18;
 
         // reduce liquidity shares
-        makerFacet.adjustMaker(recipient, assetId, 4e14, minSqrtPriceX96, maxSqrtPriceX96, rftData);
+        (, , int256 adjustReceive0, int256 adjustReceive1) = makerFacet.adjustMaker(
+            recipient,
+            assetId,
+            4e14,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+        attackerSpend0 += adjustReceive0;
+        attackerSpend1 += adjustReceive1;
 
         // donate again
         UniswapV3Pool(poolAddr).flash(address(this), 0, 0, "");
+        attackerSpend0 += 1e18;
+        attackerSpend1 += 1e18;
 
         // victim mints and then immediately closes
+        // By opening and closing immediately they're swapping fees for adding liquidity without any slippage.
+        // This is actually benefitial to both sides. They're doing the swap at the worse price of either
+        // the current price or the TWAP. We want to compound but we can't because our fees are imbalanced.
+        // This lets them avoid slippage if they're happy with the twap and current price, and we get to
+        // compound immediately without having to pay swap fees ourselves. Win win!
         vm.startPrank(victim);
         MockERC20(token0).mint(victim, 2e18);
         MockERC20(token1).mint(victim, 2e18);
@@ -657,10 +685,34 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         uint balVictim0After = token0.balanceOf(victim);
         uint balVictim1After = token1.balanceOf(victim);
 
-        // Assert total tokens (token0 + token1) increased compared to before
-        uint totalBefore = balVictim0 + balVictim1;
-        uint totalAfter = balVictim0After + balVictim1After;
-        assertGt(totalAfter, totalBefore, "victim total token amount should increase");
+        (int256 attackerValue0, int256 attackerValue1, , ) = viewFacet.queryAssetBalances(assetId);
+        int256 attackerLoss0 = attackerSpend0 - attackerValue0;
+        int256 attackerLoss1 = attackerSpend1 - attackerValue1;
+        assertGt(attackerLoss0, 0, "attacker should not profit in token0");
+        assertGt(attackerLoss1, 0, "attacker should not profit in token1");
+        console.log("attackerLosses", uint256(attackerLoss0), uint256(attackerLoss1));
+
+        int256 victimDiff0 = int256(balVictim0After) - int256(balVictim0);
+        int256 victimDiff1 = int256(balVictim1After) - int256(balVictim1);
+        console.log("victimDiff0", victimDiff0);
+        console.log("victimDiff1", victimDiff1);
+
+        // Assert the victim losses are less than the attacker gains
+        assertLt(-victimDiff0, attackerLoss0, "victim token0 loss should be less than attacker gain");
+        assertLt(-victimDiff1, attackerLoss1, "victim token1 loss should be less than attacker gain");
+
+        // Assert the victim has not lost value overall at the current price.
+        (uint160 sqrtPriceX96, , , , , , ) = UniswapV3Pool(poolAddr).slot0();
+        uint256 priceX64 = FullMath.mulX128(sqrtPriceX96, sqrtPriceX96, false);
+        uint256 totalBefore = FullMath.mulX64(balVictim0, priceX64, false) + balVictim1;
+        uint256 totalAfter = FullMath.mulX64(balVictim0After, priceX64, false) + balVictim1After;
+        assertGt(
+            totalAfter,
+            (totalBefore * 99) / 100,
+            "victim total value should not decrease by more than the equiv liq slippage"
+        );
+        // Equiv liq slippage is at most 1% here because the fees in question are so hi relative to the liquidity.
+        // In practice the difference is much smaller.
     }
 
     function uniswapV3FlashCallback(uint256 fee0, uint256 fee1, bytes calldata data) external {
