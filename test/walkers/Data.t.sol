@@ -10,15 +10,19 @@ import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 import { Asset, AssetLib } from "../../src/Asset.sol";
 import { Store } from "../../src/Store.sol";
 import { TreeTickLib } from "../../src/tree/Tick.sol";
+import { FeeLib } from "../../src/Fee.sol";
+
+import { console } from "forge-std/console.sol";
 
 contract DataTest is Test, UniV3IntegrationSetup {
     function setUp() public {
+        FeeLib.init();
         setUpPool(500); // For a tick spacing of 10.
     }
 
     function testMake() public {
         Pool storage p = Store.pool(pools[0]);
-        p.timestamp = 1;
+        p.timestamp = uint128(block.timestamp);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
         // Setup done.
@@ -33,9 +37,9 @@ contract DataTest is Test, UniV3IntegrationSetup {
         assembly {
             p.slot := poolStore
         }
-        assertEq(p.timestamp, 1);
+        assertEq(p.timestamp, block.timestamp);
         assertEq(data.sqrtPriceX96, 1 << 96);
-        assertEq(data.timestamp, 1);
+        assertEq(data.timestamp, block.timestamp);
     }
 
     function testComputeBorrows() public {
@@ -64,13 +68,20 @@ contract DataTest is Test, UniV3IntegrationSetup {
 
     function testComputeBalances() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
+        console.log("pool info");
         (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        console.log("asset created");
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
+        console.log("data created");
         uint24 base = TreeTickLib.tickToTreeIndex(-640, data.fees.rootWidth, data.fees.tickSpacing);
+        console.log("base computed");
         Key key = KeyImpl.make(base, 128);
+        console.log("key made");
         // This is centered around 0, so the current balances and the borrows will match.
         (uint256 bx, uint256 by) = data.computeBorrows(key, 100e18, false);
+        console.log("borrows computed");
         (uint256 x, uint256 y) = data.computeBalances(key, 100e18, false);
+        console.log("balances computed");
         assertEq(bx, x, "bx");
         assertEq(by, y, "by");
         assertNotEq(x, 0, "x0");

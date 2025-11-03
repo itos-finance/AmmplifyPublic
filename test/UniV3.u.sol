@@ -12,8 +12,11 @@ import { TransferHelper } from "Commons/Util/TransferHelper.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 
-contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback {
+import { Test } from "forge-std/Test.sol";
+
+contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback, Test {
     uint160 public constant INIT_SQRT_PRICEX96 = 1 << 96;
+    uint16 public constant MIN_OBSERVATIONS = 32;
     UniswapV3Factory public factory;
     // NOTE: You don't need to store the return values of any of the setup functions besides idx
     // because you can retrieve the relevant information from here.
@@ -83,8 +86,10 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         poolToken1s.push(token1);
 
         UniswapV3Pool(pool).initialize(sqrtPriceX96);
+        UniswapV3Pool(pool).increaseObservationCardinalityNext(MIN_OBSERVATIONS);
         int24 spacing = UniswapV3Pool(pool).tickSpacing();
         addPoolLiq(idx, (TickMath.MIN_TICK / spacing) * spacing, (TickMath.MAX_TICK / spacing) * spacing, initLiq);
+        skip(1 days); // skip ahead so we can do our default observation durations.
     }
 
     function addPoolLiq(uint256 index, int24 low, int24 high, uint128 amount) public {
@@ -123,7 +128,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         _idx = 0;
     }
 
-    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external virtual{
+    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external virtual {
         TransferHelper.safeTransfer(poolToken0s[_idx], msg.sender, amount0Owed);
         TransferHelper.safeTransfer(poolToken1s[_idx], msg.sender, amount1Owed);
     }

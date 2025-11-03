@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
+import { IUniswapV3PoolDerivedState } from "v3-core/interfaces/pool/IUniswapV3PoolDerivedState.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
@@ -13,6 +14,7 @@ import { TreeTickLib } from "./tree/Tick.sol";
 import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientSlot.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
+import { FeeLib } from "./Fee.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -73,28 +75,52 @@ library PoolLib {
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
 
+    error PoolInsufficientObservations(uint16 observations, uint16 required);
+
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
+    uint16 private constant MIN_OBSERVATIONS = 32;
 
     function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
         pInfo.poolAddr = pool;
-        IUniswapV3PoolImmutables poolImmutables = IUniswapV3PoolImmutables(pool);
-        pInfo.token0 = poolImmutables.token0();
-        pInfo.token1 = poolImmutables.token1();
+        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
+        pInfo.token0 = poolContract.token0();
+        pInfo.token1 = poolContract.token1();
 
-        pInfo.tickSpacing = poolImmutables.tickSpacing();
-        pInfo.fee = poolImmutables.fee();
+        pInfo.tickSpacing = poolContract.tickSpacing();
+        pInfo.fee = poolContract.fee();
         // We find the first power of two that is less than the number of tree indices to be the width.
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
-
         PoolInfoImpl.refreshPrice(pInfo);
+
+        (, , , , uint16 obsCardinalityNext, , ) = poolContract.slot0();
+        require(
+            obsCardinalityNext >= MIN_OBSERVATIONS,
+            PoolInsufficientObservations(obsCardinalityNext, MIN_OBSERVATIONS)
+        );
         return pInfo;
     }
 
     function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
         (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+    }
+
+    /// Get a slower moving price metric for the given pool.
+    /// @dev This is used for taker borrow cost calculations and equivalent liq calculations.
+    function getTwapSqrtPriceX96(address pool) internal view returns (uint160 twapSqrtPriceX96) {
+        uint32 interval = FeeLib.getTwapInterval(pool);
+        IUniswapV3PoolDerivedState poolContract = IUniswapV3PoolDerivedState(pool);
+        // Get the TWAP.
+        uint32[] memory timepoints = new uint32[](2);
+        timepoints[0] = 0;
+        timepoints[1] = interval;
+        (int56[] memory tickCumulatives, ) = poolContract.observe(timepoints);
+        int56 tickCumulativeDelta = tickCumulatives[0] - tickCumulatives[1];
+        // We don't mind rounding the twapTick to 0 (price to 1).
+        int24 twapTick = int24(tickCumulativeDelta / int32(interval));
+        twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
     }
 
     /*
@@ -285,22 +311,41 @@ library PoolLib {
         }
     }
 
-    // How much liquidity is are these assets worth in the given range.
+    /// How much liquidity is are these assets worth in the given range.
+    /// We consider two prices, the current price and the twap price and use the one that produces more liquidity,
+    /// which causes an underweighting of the newly added liquidity. This slippage protects existing depositors
+    /// and new depositors can simply wait for low volatility moments to avoid slippage.
+    /// This protects us from someone manipulating the pool price to get a more favorable mint.
     function getEquivalentLiq(
         int24 lowTick,
         int24 highTick,
         uint256 x,
         uint256 y,
         uint160 sqrtPriceX96,
+        uint160 twapSqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
+        // Compute with the current price.
         (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
         uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
+        // Compute with the twap price.
+        (uint256 twapLxX96, uint256 twapLyX96) = getAmounts(twapSqrtPriceX96, lowTick, highTick, X96, roundUp);
+        uint256 twapLiqValueX96 = (FullMath.mulX64(twapLxX96, twapSqrtPriceX96, false) >> 32) +
+            (twapLyX96 << 96) /
+            twapSqrtPriceX96;
+        uint256 myTwapValue = FullMath.mulX128(x, uint256(twapSqrtPriceX96) << 32, false) +
+            (y << 96) /
+            twapSqrtPriceX96;
+
         if (roundUp) {
-            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
+            uint128 liq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
+            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myTwapValue, X96, twapLiqValueX96));
+            equivLiq = liq > twapLiq ? liq : twapLiq;
         } else {
-            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
+            uint128 liq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
+            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDiv(myTwapValue, X96, twapLiqValueX96));
+            equivLiq = liq > twapLiq ? liq : twapLiq;
         }
     }
 

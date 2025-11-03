@@ -13,10 +13,12 @@ struct FeeStore {
     mapping(address => SmoothRateCurveConfig) feeCurves;
     mapping(address => SmoothRateCurveConfig) splitCurves;
     mapping(address => uint128) compoundThresholds;
+    mapping(address => uint32) twapIntervals;
     uint128 defaultCompoundThreshold; // Below this amount of equivalent liq, it is not worth compounding.
+    uint32 defaultTwapInterval; // The default interval to use when calculating TWAPs.
     /* JIT Prevention */
     // Someone can try to use JIT to manipulate fees by supplying/removing liquidity from certain nodes
-    uint64 jitLifetime; // Positions with shorter lifetimes than this will pay a penalty.
+    uint32 jitLifetime; // Positions with shorter lifetimes than this will pay a penalty.
     uint64 jitPenaltyX64; // Fee paid by those who's positions are held too shortly.
     /* Collateral */
     mapping(address sender => mapping(address token => uint256)) collateral;
@@ -56,6 +58,7 @@ library FeeLib {
             maxUtilX64: 18631211514446647296, // 101%
             maxRateX64: 1844674407370955161600 // 100
         });
+        store.defaultTwapInterval = 300; // 5 minutes
     }
 
     /* Getters */
@@ -85,6 +88,14 @@ library FeeLib {
             return store.defaultFeeCurve;
         } else {
             return store.feeCurves[poolAddr];
+        }
+    }
+
+    function getTwapInterval(address poolAddr) internal view returns (uint32 twapInterval) {
+        FeeStore storage store = Store.fees();
+        twapInterval = store.twapIntervals[poolAddr];
+        if (twapInterval == 0) {
+            twapInterval = store.defaultTwapInterval;
         }
     }
 

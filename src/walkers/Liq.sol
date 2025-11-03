@@ -338,6 +338,7 @@ library LiqWalker {
                     node.fees.xCFees,
                     node.fees.yCFees,
                     data.sqrtPriceX96,
+                    data.twapSqrtPriceX96,
                     true
                 );
                 compoundingLiq += equivLiq;
