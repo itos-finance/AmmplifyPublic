@@ -115,12 +115,9 @@ struct LiqData {
     uint128 leftTLiqPrefix;
     uint128 rightMLiqPrefix; // The final prefix after the right walk down.
     uint128 rightTLiqPrefix;
-<<<<<<< HEAD
     // Fees collected from the underlying pool's swaps, saved across all operations.
     uint128 xFeesCollected;
     uint128 yFeesCollected;
-=======
->>>>>>> a6b4a8c (src building, need to update test)
 }
 
 library LiqDataLib {
@@ -143,13 +140,9 @@ library LiqDataLib {
                 leftMLiqPrefix: 0,
                 leftTLiqPrefix: 0,
                 rightMLiqPrefix: 0,
-<<<<<<< HEAD
                 rightTLiqPrefix: 0,
                 xFeesCollected: feeStore.standingX[pInfo.poolAddr],
                 yFeesCollected: feeStore.standingY[pInfo.poolAddr]
-=======
-                rightTLiqPrefix: 0
->>>>>>> a6b4a8c (src building, need to update test)
             });
     }
 }
