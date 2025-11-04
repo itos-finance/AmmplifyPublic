@@ -63,7 +63,6 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
 
         (uint160 slot0SqrtPriceX96, int24 slot0Tick, , , , , ) = pool.slot0();
-
         assertEq(slot0SqrtPriceX96, pInfo.sqrtPriceX96);
         assertEq(slot0Tick, pInfo.currentTick);
 
@@ -82,7 +81,6 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         // verify reported sqrt price is between ticks
         pInfo.refreshPrice();
         (slot0SqrtPriceX96, , , , , , ) = pool.slot0();
-        pInfo.refreshPrice();
         assertEq(slot0SqrtPriceX96, pInfo.sqrtPriceX96);
         assertEq(slot0SqrtPriceX96, middleSqrtPriceX96);
     }
@@ -250,6 +248,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             tickUpper
         );
         PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
+
         (, uint256 posFeeGrowthInside0X128, uint256 posFeeGrowthInside1X128, , ) = pool.positions(
             keccak256(abi.encodePacked(address(this), tickLower, tickUpper))
         );
