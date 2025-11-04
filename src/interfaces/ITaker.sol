@@ -2,9 +2,34 @@
 pragma solidity ^0.8.27;
 
 interface ITaker {
+    // Events
+    event CollateralAdded(address indexed recipient, address indexed token, uint256 amount);
+
+    event CollateralWithdrawn(address indexed recipient, address indexed token, uint256 amount);
+
+    event TakerCreated(
+        address indexed recipient,
+        address indexed poolAddr,
+        uint256 indexed assetId,
+        int24 lowTick,
+        int24 highTick,
+        uint128 liq,
+        uint8 xVaultIndex,
+        uint8 yVaultIndex
+    );
+
+    event TakerRemoved(
+        address indexed owner,
+        uint256 indexed assetId,
+        address indexed poolAddr,
+        int256 balance0,
+        int256 balance1
+    );
+
     // Errors
     error NotTakerOwner(address owner, address sender);
     error NotTaker(uint256 assetId);
+    error DeMinimusTaker(uint128 liq);
 
     /// @notice Collateralizes a taker position.
     /// @param recipient The recipient of the collateral.
@@ -28,6 +53,8 @@ interface ITaker {
     /// @param vaultIndices The vault indices for the position.
     /// @param sqrtPriceLimitsX96 The sqrt price limits for the operation.
     /// @param freezeSqrtPriceX96 The freeze sqrt price for the position.
+    ///        Use MIN_SQRT_RATIO for token0 preference (below range pricing).
+    ///        Use MAX_SQRT_RATIO for token1 preference (above range pricing).
     /// @param rftData Data passed during RFT to the payer.
     function newTaker(
         address recipient,

@@ -2,6 +2,44 @@
 pragma solidity ^0.8.27;
 
 interface IMaker {
+    // Events
+    event MakerCreated(
+        address indexed recipient,
+        address indexed poolAddr,
+        uint256 indexed assetId,
+        int24 lowTick,
+        int24 highTick,
+        uint128 liq,
+        bool isCompounding,
+        int256 balance0,
+        int256 balance1
+    );
+
+    event MakerAdjusted(
+        address indexed owner,
+        uint256 indexed assetId,
+        address indexed poolAddr,
+        uint128 targetLiq,
+        int256 delta0,
+        int256 delta1
+    );
+
+    event MakerRemoved(
+        address indexed recipient,
+        uint256 indexed assetId,
+        address indexed poolAddr,
+        uint256 removedX,
+        uint256 removedY
+    );
+
+    event FeesCollected(
+        address indexed recipient,
+        uint256 indexed assetId,
+        address indexed poolAddr,
+        uint256 fees0,
+        uint256 fees1
+    );
+
     // Errors
     error NotMakerOwner(address owner, address sender);
     error NotMaker(uint256 assetId);
@@ -72,16 +110,4 @@ interface IMaker {
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external returns (address token0, address token1, int256 delta0, int256 delta1);
-
-    /// Allow this address to open positions and give you ownership.
-    function addPermission(address opener) external;
-
-    /// Remove this address from opening positions and giving you ownership.
-    function removePermission(address opener) external;
-
-    /// Collect swap fees from and compound a specific ranges of nodes by performing a full walk
-    /// but without any liquidity modifications (though potential solves may occur).
-    /// @dev Use this when there is insufficient standing fees due to a deep borrow or simply
-    /// because you want a node compounded.
-    function compound(address poolAddr, int24 lowTick, int24 highTick) external;
 }

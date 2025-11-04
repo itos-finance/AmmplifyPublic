@@ -14,16 +14,13 @@ import { WalkerLib } from "../walkers/Lib.sol";
 import { PoolWalker } from "../walkers/Pool.sol";
 import { VaultLib } from "../vaults/Vault.sol";
 import { LiqType } from "../walkers/Liq.sol";
+import { ITaker } from "../interfaces/ITaker.sol";
 
 import { console } from "forge-std/console.sol";
 
-contract TakerFacet is ReentrancyGuardTransient {
+contract TakerFacet is ReentrancyGuardTransient, ITaker {
     // Higher requirement than makers.
     uint128 public constant MIN_TAKER_LIQUIDITY = 1e12;
-
-    error NotTakerOwner(address owner, address sender);
-    error NotTaker(uint256 assetId);
-    error DeMinimusTaker(uint128 liq);
 
     /// Our takers are permissioned, but anyone can collateralize for them.
     function collateralize(
@@ -38,6 +35,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         balances[0] = SafeCast.toInt256(amount);
         RFTLib.settle(msg.sender, tokens, balances, data);
         Store.fees().collateral[recipient][token] += amount;
+        emit CollateralAdded(recipient, token, amount);
     }
 
     function withdrawCollateral(
@@ -53,6 +51,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         int256[] memory balances = new int256[](1);
         balances[0] = -SafeCast.toInt256(amount);
         RFTLib.settle(recipient, tokens, balances, data);
+        emit CollateralWithdrawn(recipient, token, amount);
     }
 
     function newTaker(
@@ -96,6 +95,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         RFTLib.settle(msg.sender, tokens, balances, rftData);
         VaultLib.deposit(tokens[0], vaultIndices[0], assetId, xFreeze);
         VaultLib.deposit(tokens[1], vaultIndices[1], assetId, yFreeze);
+        emit TakerCreated(recipient, poolAddr, assetId, ticks[0], ticks[1], liq, vaultIndices[0], vaultIndices[1]);
         return assetId;
     }
 
@@ -127,6 +127,7 @@ contract TakerFacet is ReentrancyGuardTransient {
         // Finally we deposit the assets.
         PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
         AssetLib.removeAsset(assetId);
+        emit TakerRemoved(asset.owner, assetId, asset.poolAddr, balance0, balance1);
         // Return values
         token0 = tokens[0];
         token1 = tokens[1];

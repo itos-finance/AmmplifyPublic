@@ -143,8 +143,7 @@ contract TakerFacetTest is MultiSetupTest {
             int24 lowTick_,
             int24 highTick_,
             LiqType liqType,
-            uint128 liq,
-            uint128 timestamp
+            uint128 liq
         ) = viewFacet.getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
@@ -152,7 +151,6 @@ contract TakerFacetTest is MultiSetupTest {
         assertEq(highTick_, ticks[1]);
         assertEq(uint8(liqType), uint8(LiqType.TAKER));
         assertEq(liq, liquidity);
-        assertEq(timestamp, uint128(block.timestamp));
     }
 
     function testNewTakerInvalidTicks() public {
@@ -601,7 +599,7 @@ contract TakerFacetTest is MultiSetupTest {
         );
 
         // Verify the position was created correctly using ViewFacet
-        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq, ) = viewFacet
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
             .getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);

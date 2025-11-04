@@ -91,8 +91,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
             int24 lowTick_,
             int24 highTick_,
             LiqType liqType,
-            uint128 liq,
-            uint128 timestamp
+            uint128 liq
         ) = viewFacet.getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
@@ -100,7 +99,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         assertEq(highTick_, highTick);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
         assertEq(liq, liquidity);
-        assertEq(timestamp, uint128(block.timestamp - 1 days));
     }
 
     function testNewMakerCompounding() public {
@@ -119,7 +117,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         );
 
         // Verify asset was created with compounding type
-        (, , , , LiqType liqType, , ) = viewFacet.getAssetInfo(assetId);
+        (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
         assertEq(uint8(liqType), uint8(LiqType.MAKER));
     }
 
@@ -365,8 +363,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
             int24 lowTick_,
             int24 highTick_,
             LiqType liqType,
-            uint128 liq,
-            uint128 timestamp
+            uint128 liq
         ) = viewFacet.getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
@@ -374,7 +371,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         assertEq(highTick_, highTick);
         assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
         assertEq(liq, liquidity);
-        assertEq(timestamp, uint128(block.timestamp));
 
         // Get initial position balances
         (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);

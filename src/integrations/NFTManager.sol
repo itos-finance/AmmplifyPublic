@@ -183,8 +183,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return token1 The address of token1
      * @return removedX The amount of token0 removed
      * @return removedY The amount of token1 removed
-     * @return fees0 The amount of token0 fees collected
-     * @return fees1 The amount of token1 fees collected
      * @dev TODO: Do we need fees collected?
      */
     function burnAsset(
@@ -192,10 +190,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
-    )
-        external
-        returns (address token0, address token1, uint256 removedX, uint256 removedY, uint256 fees0, uint256 fees1)
-    {
+    ) external returns (address token0, address token1, uint256 removedX, uint256 removedY) {
         // Check if the token was actually minted by checking if it's been assigned to an asset
         if (tokenId >= _nextTokenId) {
             revert AssetNotMinted(tokenId);
@@ -302,8 +297,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 assetLowTick,
             int24 assetHighTick,
             LiqType assetLiqType,
-            uint128 assetLiq,
-
+            uint128 assetLiq
         ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
         if (assetPoolAddr == address(0)) {
@@ -378,7 +372,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function _generateSVG(uint256 tokenId) internal view returns (string memory) {
         uint256 assetId = tokenToAsset[tokenId];
-        (, address assetPoolAddr, , , LiqType assetLiqType, , ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
+        (, address assetPoolAddr, , , LiqType assetLiqType, ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
 
         string memory color = _getColorForLiqType(assetLiqType);
 
@@ -424,8 +418,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             int24 assetLowTick,
             int24 assetHighTick,
             LiqType assetLiqType,
-            uint128 assetLiq,
-            uint128 assetTimestamp
+            uint128 assetLiq
         ) = IView(address(MAKER_FACET)).getAssetInfo(assetId);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(assetPoolAddr);
 
@@ -466,9 +459,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
                     '{"trait_type":"Liquidity","value":"',
                     _uint128ToString(assetLiq),
                     '"},',
-                    '{"trait_type":"Timestamp","value":"',
-                    _uint128ToString(assetTimestamp),
-                    '"}',
                     "]}"
                 )
             );

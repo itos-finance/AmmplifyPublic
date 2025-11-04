@@ -14,6 +14,12 @@ interface IAdmin {
     event CompoundThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint64 lifetime, uint64 penaltyX64);
 
+    /* Vault related events */
+    event VaultAdded(address indexed token, uint8 indexed vaultIdx, address indexed vault, VaultType vType);
+    event VaultRemoved(address indexed vault);
+    event VaultSwapped(address indexed token, uint8 indexed vaultId, address indexed oldVault, address newVault);
+    event VaultBalanceTransferred(address indexed fromVault, address indexed toVault, uint256 amount);
+
     // Fee related functions
     function setFeeCurve(address pool, SmoothRateCurveConfig calldata feeCurve) external;
     function setDefaultFeeCurve(SmoothRateCurveConfig calldata feeCurve) external;
@@ -31,7 +37,8 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold
+            uint128 compoundThreshold,
+            uint32 twapInterval
         );
 
     function getDefaultFeeConfig()
@@ -50,7 +57,5 @@ interface IAdmin {
     function addVault(address token, uint8 vaultIdx, address vault, VaultType vType) external;
     function removeVault(address vault) external;
     function swapVault(address token, uint8 vaultId) external returns (address oldVault, address newVault);
-
-    // Internal overrides
-    function getDelay(bool add) external pure returns (uint32);
+    function transferVaultBalance(address fromVault, address toVault, uint256 amount) external;
 }
