@@ -88,7 +88,6 @@ contract DeployUniV3Decomposer is Script {
         console.log("Configuration:");
         console.log("  NFPM:", address(decomposer.NFPM()));
         console.log("  MakerFacet:", address(decomposer.MAKER()));
-        console.log("  Liquidity Offset:", decomposer.LIQUIDITY_OFFSET());
 
         console.log("\nThe UniV3Decomposer can now:");
         console.log("- Convert Uniswap V3 position NFTs to Ammplify positions");

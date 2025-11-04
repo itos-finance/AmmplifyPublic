@@ -37,7 +37,8 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold
+            uint128 compoundThreshold,
+            uint32 twapInterval
         );
 
     function getDefaultFeeConfig()

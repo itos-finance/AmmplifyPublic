@@ -50,6 +50,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         balances[1] = data.yBalance;
         RFTLib.settle(msg.sender, tokens, balances, rftData);
         PoolWalker.settle(pInfo, lowTick, highTick, data);
+        emit MakerCreated(recipient, poolAddr, assetId, lowTick, highTick, liq, isCompounding, balances[0], balances[1]);
         return assetId;
     }
 
@@ -95,6 +96,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         asset.liq = targetLiq;
         // We have to apply jit afterwards in case someone is trying to use adjust to get around that.
         AssetLib.updateTimestamp(asset);
+        emit MakerAdjusted(asset.owner, assetId, asset.poolAddr, targetLiq, balances[0], balances[1]);
         token0 = tokens[0];
         token1 = tokens[1];
         delta0 = balances[0];
@@ -129,6 +131,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         balances[0] = -int256(removedX);
         balances[1] = -int256(removedY);
         RFTLib.settle(recipient, tokens, balances, rftData);
+        emit MakerRemoved(recipient, assetId, asset.poolAddr, removedX, removedY);
         // Return values
         token0 = tokens[0];
         token1 = tokens[1];
@@ -163,6 +166,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         // But all of this is fees.
         fees0 = uint256(-balances[0]);
         fees1 = uint256(-balances[1]);
+        emit FeesCollected(recipient, assetId, asset.poolAddr, fees0, fees1);
     }
 
     /// Allow this address to open positions and give you ownership.
@@ -176,7 +180,6 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
     }
 
     // Collect fees from and compound a specific range of nodes.
-    /// @inheritdoc IMaker
     function compound(address poolAddr, int24 lowTick, int24 highTick) external nonReentrant {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         Asset storage asset = AssetLib.nullAsset();

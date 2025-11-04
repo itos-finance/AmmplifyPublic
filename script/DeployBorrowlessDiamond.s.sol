@@ -41,7 +41,8 @@ contract DeployBorrowlessDiamond is Script {
         // 2. Initialize fee library
         // 3. Deploy and register all facets (DiamondCut, DiamondLoupe, Admin, Maker, Pool, View)
         // NOTE: TakerFacet is intentionally excluded
-        diamond = new BorrowlessDiamond();
+        address univ3Factory = address(0x2); // TODO:
+        diamond = new BorrowlessDiamond(univ3Factory);
 
         vm.stopBroadcast();
 

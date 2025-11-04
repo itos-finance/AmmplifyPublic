@@ -5,7 +5,7 @@ import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { MockERC20 } from "../test/mocks/MockERC20.sol";
 import { MockERC4626 } from "../test/mocks/MockERC4626.sol";
-import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
  * @title DeployTokens
@@ -59,8 +59,8 @@ contract DeployTokens is Script {
         console.log("- WETH:", weth.balanceOf(deployer));
 
         // Deploy MockERC4626 vaults
-        usdcVault = new MockERC4626(IERC20(address(usdc)), "USDC Vault", "vUSDC");
-        wethVault = new MockERC4626(IERC20(address(weth)), "WETH Vault", "vWETH");
+        usdcVault = new MockERC4626(ERC20(address(usdc)), "USDC Vault", "vUSDC");
+        wethVault = new MockERC4626(ERC20(address(weth)), "WETH Vault", "vWETH");
 
         console.log("USDC Vault deployed at:", address(usdcVault));
         console.log("WETH Vault deployed at:", address(wethVault));

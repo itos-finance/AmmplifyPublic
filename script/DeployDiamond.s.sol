@@ -47,7 +47,7 @@ import { SimplexDiamond } from "../src/Diamond.sol";
 contract DeployDiamond is Script {
     SimplexDiamond public diamond;
 
-        function run() external {
+    function run() external {
         // Get the deployer's address and private key from environment
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -62,7 +62,8 @@ contract DeployDiamond is Script {
         // 1. Initialize the owner (msg.sender)
         // 2. Initialize fee library
         // 3. Deploy and register all facets (DiamondCut, DiamondLoupe, Admin, Maker, Taker, Pool, View)
-        diamond = new SimplexDiamond();
+        address univ3Factory = address(0x3);
+        diamond = new SimplexDiamond(univ3Factory);
 
         vm.stopBroadcast();
 

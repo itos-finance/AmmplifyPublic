@@ -11,11 +11,10 @@ import { VaultLib } from "../vaults/Vault.sol";
 import { ViewData, ViewDataImpl } from "../walkers/View.sol";
 import { ViewWalkerLib } from "../walkers/Lib.sol";
 import { FeeLib } from "../Fee.sol";
+import { IView } from "../interfaces/IView.sol";
 
 /// Query the values of internal data structures.
-contract ViewFacet {
-    error LengthMismatch(uint256 baseLength, uint256 widthLength);
-
+contract ViewFacet is IView {
     /// Get basic information about a pool.
     function getPoolInfo(address poolAddr) external view returns (PoolInfo memory pInfo) {
         pInfo = PoolLib.getPoolInfo(poolAddr);
@@ -27,18 +26,10 @@ contract ViewFacet {
     )
         external
         view
-        returns (
-            address owner,
-            address poolAddr,
-            int24 lowTick,
-            int24 highTick,
-            LiqType liqType,
-            uint128 liq,
-            uint128 timestamp
-        )
+        returns (address owner, address poolAddr, int24 lowTick, int24 highTick, LiqType liqType, uint128 liq)
     {
         Asset storage asset = AssetLib.getAsset(assetId);
-        return (asset.owner, asset.poolAddr, asset.lowTick, asset.highTick, asset.liqType, asset.liq, asset.timestamp);
+        return (asset.owner, asset.poolAddr, asset.lowTick, asset.highTick, asset.liqType, asset.liq);
     }
 
     function getAssets(address owner) external view returns (uint256[] memory assetIds) {

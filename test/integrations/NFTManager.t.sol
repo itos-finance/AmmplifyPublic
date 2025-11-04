@@ -136,14 +136,13 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq, uint128 timestamp) = viewFacet
+        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet
             .getAssetInfo(assetId);
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
         assertEq(poolAddr, address(pools[0]));
         assertEq(lowTick, LOW_TICK);
         assertEq(highTick, HIGH_TICK);
         assertEq(liq, LIQUIDITY);
-        assertEq(timestamp, uint128(block.timestamp));
     }
 
     // ============ decomposeAndMint Tests ============
@@ -193,7 +192,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq, ) = viewFacet.getAssetInfo(
+        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet.getAssetInfo(
             assetId
         );
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
