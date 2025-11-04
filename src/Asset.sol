@@ -16,6 +16,8 @@ struct Asset {
     int24 lowTick;
     int24 highTick;
     LiqType liqType;
+    /* For Takers */
+    bool takeAsX; // If the asset is a taker, are we borrowing as x or y?
     uint8 xVaultIndex;
     uint8 yVaultIndex;
     uint128 liq; // The original liquidity of the asset.
@@ -26,7 +28,7 @@ struct Asset {
 
 struct AssetNode {
     uint128 sliq; // The share/liq of the node we own.
-    // For takers, this is a checkpoint of the per liq fees owed.
+    // For takers, this is a checkpoint of the per liq token fees owed.
     // For NC makers, this is a checkpoint of the per liq fees earned.
     // For C makers, this is not used.
     // These checkpoints include both the swap fees and the reservation fees.
@@ -104,6 +106,8 @@ library AssetLib {
         asset.liq = liq;
         asset.xVaultIndex = xVaultIndex;
         asset.yVaultIndex = yVaultIndex;
+        // Takers borrow in x if its mean price is greater than the current price.
+        asset.takeAsX = lowTick + highTick > 2 * pInfo.currentTick;
         updateTimestamp(asset);
         // The Nodes are to be filled in by a walker.
         addAssetToOwner(store, assetId, recipient);

@@ -21,6 +21,7 @@ struct Data {
     uint160 sqrtPriceX96;
     int24 currentTick;
     uint160 twapSqrtPriceX96; // A more robust measure of price.
+    bool takeAsX; // cache it outside the asset for gas savings.
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
@@ -64,6 +65,7 @@ library DataImpl {
         }
         uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
         uint160 twapSqrtPriceX96 = PoolLib.getTwapSqrtPriceX96(pInfo.poolAddr);
+
         require(
             currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
             PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
@@ -77,6 +79,7 @@ library DataImpl {
                 sqrtPriceX96: currentSqrtPriceX96,
                 currentTick: pInfo.currentTick,
                 twapSqrtPriceX96: twapSqrtPriceX96,
+                takeAsX: asset.takeAsX,
                 timestamp: treeTimestamp,
                 liq: LiqDataLib.make(asset, pInfo, liq),
                 fees: FeeDataLib.make(pInfo),
@@ -92,7 +95,7 @@ library DataImpl {
             });
     }
 
-    function computeBorrows(
+    function computeBorrow(
         Data memory self,
         Key key,
         uint128 liq,
@@ -101,12 +104,17 @@ library DataImpl {
         if (liq == 0) {
             return (0, 0);
         }
-        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
 
+        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
         uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
-        xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
-        yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        if (self.takeAsX) {
+            xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+            yBorrows = 0;
+        } else {
+            xBorrows = 0;
+            yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        }
     }
 
     function computeBalances(
