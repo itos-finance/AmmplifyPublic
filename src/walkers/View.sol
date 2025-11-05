@@ -352,6 +352,7 @@ library ViewWalker {
             low,
             high
         );
+        // What we haven't claimed yet.
         uint256 fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
         uint256 fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         if (data.liq.liqType == LiqType.MAKER) {
@@ -380,15 +381,15 @@ library ViewWalker {
                 false
             );
         } else {
+            newFeeGrowthInside0X128 += node.fees.takerXFeesPerLiqX128;
+            newFeeGrowthInside1X128 += node.fees.takerYFeesPerLiqX128;
             if (data.takeAsX) {
-                fee0DiffX128 += node.fees.xTakerFeesPerLiqX128;
+                newFeeGrowthInside0X128 += node.fees.xTakerFeesPerLiqX128;
             } else {
-                fee1DiffX128 += node.fees.yTakerFeesPerLiqX128;
+                newFeeGrowthInside1X128 += node.fees.yTakerFeesPerLiqX128;
             }
-            fee0DiffX128 += node.fees.takerXFeesPerLiqX128;
-            fee1DiffX128 += node.fees.takerYFeesPerLiqX128;
-            data.earningsX += FullMath.mulX128(aNode.sliq, fee0DiffX128 - aNode.fee0CheckX128, true);
-            data.earningsY += FullMath.mulX128(aNode.sliq, fee1DiffX128 - aNode.fee1CheckX128, true);
+            data.earningsX += FullMath.mulX128(aNode.sliq, newFeeGrowthInside0X128 - aNode.fee0CheckX128, true);
+            data.earningsY += FullMath.mulX128(aNode.sliq, newFeeGrowthInside1X128 - aNode.fee1CheckX128, true);
         }
     }
 
@@ -417,8 +418,10 @@ library ViewWalker {
         uint256 colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
         uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
         if (data.liq.liqType == LiqType.TAKER) {
-            data.earningsX += FullMath.mulDivRoundingUp(colXPaid, aNode.sliq, aboveTLiq);
-            data.earningsY += FullMath.mulDivRoundingUp(colYPaid, aNode.sliq, aboveTLiq);
+            if (aboveTLiq > 0) {
+                data.earningsX += FullMath.mulDivRoundingUp(colXPaid, aNode.sliq, aboveTLiq);
+                data.earningsY += FullMath.mulDivRoundingUp(colYPaid, aNode.sliq, aboveTLiq);
+            }
             // If we're a taker we can stop here.
             return;
         }

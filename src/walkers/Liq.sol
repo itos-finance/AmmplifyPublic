@@ -14,6 +14,8 @@ import { FeeWalker } from "./Fee.sol";
 import { Store } from "../Store.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
+// import { console } from "forge-std/console.sol";
+
 enum LiqType {
     MAKER,
     MAKER_NC,
@@ -563,11 +565,16 @@ library LiqWalker {
         } else if (data.liq.liqType == LiqType.TAKER) {
             uint256 takerXFeesPerLiqX128 = node.liq.feeGrowthInside0X128 + node.fees.takerXFeesPerLiqX128;
             uint256 takerYFeesPerLiqX128 = node.liq.feeGrowthInside1X128 + node.fees.takerYFeesPerLiqX128;
+            // console.log("initial taker fees", node.fees.takerXFeesPerLiqX128, node.fees.takerYFeesPerLiqX128);
+            // console.log("feegrowthinside", node.liq.feeGrowthInside0X128, node.liq.feeGrowthInside1X128);
             if (data.takeAsX) {
                 takerXFeesPerLiqX128 += node.fees.xTakerFeesPerLiqX128;
             } else {
                 takerYFeesPerLiqX128 += node.fees.yTakerFeesPerLiqX128;
             }
+            // console.log("xytakers:", data.takeAsX, node.fees.xTakerFeesPerLiqX128, node.fees.yTakerFeesPerLiqX128);
+            // console.log("Taker Fees Per Liq X128:", takerXFeesPerLiqX128, takerYFeesPerLiqX128);
+            // console.log("Taker Fee Checks X128:", aNode.fee0CheckX128, aNode.fee1CheckX128);
             data.xFees += FullMath.mulX128(liq, takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
             data.yFees += FullMath.mulX128(liq, takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
             aNode.fee0CheckX128 = takerXFeesPerLiqX128;
