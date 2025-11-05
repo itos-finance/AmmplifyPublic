@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Imports must precede all other declarations to satisfy linters.
-// ─────────────────────────────────────────────────────────────────────────────
+import "forge-std/console2.sol";
 import { MakerFacet } from "../facets/Maker.sol";
 import { RFTPayer, RFTLib } from "../../lib/Commons/src/Util/RFT.sol";
 import { IRFTPayer } from "../../lib/Commons/src/Util/RFT.sol";
@@ -60,18 +58,34 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     /// @return liquidityOffset The calculated liquidity offset
     function calculateLiquidityOffset(int24 tickLower, int24 tickUpper, int24 tickSpacing) internal pure returns (uint128 liquidityOffset) {
         uint24 rootWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, tickSpacing);
+        console2.log("rootWidth", rootWidth);
         uint8 depth = msbBit(rootWidth);
 
         if (tickLower == tickUpper) {
             // Single node.
-            return 3 + depth; // 2 for rounding, 1 for potentially being the first deposit.
+            return 3 + (2 * depth) + 1; // 2 for rounding, 8 for potentially being the first deposit.
         }
 
         uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
         uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing);
+        console2.log("treeLow", treeLow);
+        console2.log("treeHigh", treeHigh);
         Route memory route = RouteImpl.make(rootWidth, treeLow, treeHigh);
-        uint8 lcaDepth = msbBit(route.lca.width());
-        return depth + lcaDepth - msbBit(route.left.width()) - msbBit(route.right.width()) + 3;
+        console2.log("after route");
+        uint256 lcaDepth = uint256(msbBit(route.lca.width()));
+        console2.log("after lcaDepth");
+        uint256 leftMsb = uint256(msbBit(route.left.width()));
+        console2.log("after leftMSB");
+        uint256 rightMsb = uint256(msbBit(route.right.width()));
+        console2.log("after rightMSb");
+        console2.log("after result");
+        console2.log("calculateLiquidityOffset - depth:", depth);
+        console2.log("calculateLiquidityOffset - lcaDepth:", lcaDepth);
+        console2.log("calculateLiquidityOffset - msbBit(route.left.width()):", leftMsb);
+        console2.log("calculateLiquidityOffset - msbBit(route.right.width()):", rightMsb);
+        uint128 result = uint128((2 * depth) + lcaDepth - leftMsb - rightMsb);
+        console2.log("calculateLiquidityOffset - result:", result);
+        return result + 320;
     }
 
     /// @notice Prevents reentrancy by locking the contract during the call.
@@ -131,6 +145,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
             })
         );
         NFPM.burn(positionId);
+        console2.log("liquidity", liquidity);
 
         // 3. Recompose in Ammplify
         address factory = NFPM.factory();
@@ -140,7 +155,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
         // Calculate dynamic liquidity offset based on tick range
         int24 tickSpacing = IUniswapV3PoolImmutables(poolAddr).tickSpacing();
         uint128 liquidityOffset = calculateLiquidityOffset(tickLower, tickUpper, tickSpacing);
-
+        console2.log("liquidityOffset", liquidityOffset);
         newAssetId = MAKER.newMaker(
             msg.sender,
             poolAddr,

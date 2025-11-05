@@ -65,8 +65,8 @@ struct FeeData {
     uint256 lcaLeftColTakerXEarningsPerLiqX128;
     uint256 lcaLeftColMakerYEarningsPerLiqX128;
     uint256 lcaLeftColTakerYEarningsPerLiqX128;
-    // We don't need a right rate since that can be copied from the above right rates.
 }
+// We don't need a right rate since that can be copied from the above right rates.
 
 library FeeDataLib {
     function make(PoolInfo memory pInfo) internal view returns (FeeData memory data) {
@@ -149,12 +149,10 @@ library FeeWalker {
 
         // We claim our own fees first.
         {
-            console.log("internal node claiming fees");
             uint24 width = key.width();
             // Takers
             if (node.liq.tLiq > 0) {
                 // Unlike makers, we divy via borrowed balances.
-                console.log("subtree borrowed x:", node.liq.subtreeBorrowedX, node.liq.borrowedX);
                 if (node.liq.borrowedX > 0) {
                     uint256 myUnpaidX128 = FullMath.mulDivRoundingUp(
                         uint256(node.fees.unpaidTakerXFees) << 128,
@@ -201,10 +199,8 @@ library FeeWalker {
                 node.fees.makerYFeesPerLiqX128 += nonCX128;
                 node.fees.yCFees += c;
             }
-            console.log("internal node claimed fees");
         }
 
-        console.log("internal node splitting fees");
         // Now split fees before updating prefixes.
         (Key leftChild, Key rightChild) = key.children();
         Node storage leftNode = data.node(leftChild);
@@ -231,7 +227,6 @@ library FeeWalker {
             data.liq.mLiqPrefix += node.liq.mLiq;
             data.liq.tLiqPrefix += node.liq.tLiq;
         }
-        console.log("internal node done down");
     }
 
     function up(Key key, bool visit, Data memory data) internal {

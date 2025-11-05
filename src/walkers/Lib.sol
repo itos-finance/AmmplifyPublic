@@ -27,18 +27,13 @@ library WalkerLib {
 
     function down(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        console.log("WalkerLib down called");
         FeeWalker.down(key, visit, data);
-        console.log("WalkerLib down after FeeWalker");
     }
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        console.log("WalkerLib up called");
         FeeWalker.up(key, visit, data);
-        console.log("WalkerLib up after FeeWalker");
         LiqWalker.up(key, visit, data);
-        console.log("WalkerLib up after LiqWalker");
     }
 
     function phase(Phase walkPhase, bytes memory raw) internal pure {

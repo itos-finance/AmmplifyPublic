@@ -71,7 +71,7 @@ contract UniV3DecomposerTest is MultiSetupTest {
     }
 
     function testDecomposeNFT() public {
-        uint256 pos = createPosition(address(this), 3000, -600, 600, 1e18, 1e18);
+        uint256 pos = createPosition(address(this), 3000, -60000, 60000, 1e18, 1e18);
         nfpm.setApprovalForAll(address(decomposer), true);
 
         // Set reasonable price bounds - allowing full range to avoid slippage issues
@@ -79,4 +79,18 @@ contract UniV3DecomposerTest is MultiSetupTest {
         uint160 maxSqrtPriceX96 = 1461446703485210103287273052203988822378723970341; // Very high price
         decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
     }
+
+    // For a Uniswap pool of spacing 60,
+    // int256 MIN_TICK = -491520;
+    // int256 MAX_TICK = -MIN_TICK;
+
+    // function testFuzz_DecomposeNFT() public {
+    //     uint256 pos = createPosition(address(this), 3000, -60000, 60000, 1e18, 1e18);
+    //     nfpm.setApprovalForAll(address(decomposer), true);
+
+    //     // Set reasonable price bounds - allowing full range to avoid slippage issues
+    //     uint160 minSqrtPriceX96 = 4295128739; // Very low price
+    //     uint160 maxSqrtPriceX96 = 1461446703485210103287273052203988822378723970341; // Very high price
+    //     decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
+    // }
 }
