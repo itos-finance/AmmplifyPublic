@@ -47,9 +47,9 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         // Set up recipient and basic test parameters
         recipient = address(this);
         poolAddr = _pool;
-        lowTick = -600;
-        highTick = 600;
-        liquidity = 100e18;
+        lowTick = -60000;
+        highTick = 60000;
+        liquidity = 1052403967776004679;
         addPoolLiq(0, lowTick, highTick, liquidity);
         minSqrtPriceX96 = MIN_SQRT_RATIO;
         maxSqrtPriceX96 = MAX_SQRT_RATIO;
@@ -65,7 +65,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
 
     // ============ Maker Position Creation Tests ============
 
-    function testNewMaker() public {
+    function testNewMaker1() public {
         bytes memory rftData = "";
 
         uint256 assetId = makerFacet.newMaker(
@@ -85,14 +85,40 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         assertEq(assetId, 1);
 
         // Verify asset properties using ViewFacet
-        (
-            address owner,
-            address poolAddr_,
-            int24 lowTick_,
-            int24 highTick_,
-            LiqType liqType,
-            uint128 liq
-        ) = viewFacet.getAssetInfo(assetId);
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
+        assertEq(owner, recipient);
+        assertEq(poolAddr_, poolAddr);
+        assertEq(lowTick_, lowTick);
+        assertEq(highTick_, highTick);
+        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+        assertEq(liq, liquidity);
+    }
+
+    function test_OneTick_NewMaker() public {
+        bytes memory rftData = "";
+        lowTick = -60;
+        highTick = 0;
+
+        uint256 assetId = makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            lowTick,
+            highTick,
+            liquidity,
+            false, // non-compounding
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+        skip(1 days);
+
+        // Verify asset was created
+        assertEq(assetId, 1);
+
+        // Verify asset properties using ViewFacet
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
@@ -357,14 +383,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         uint256 usedBalance1 = startingBalance1 - postCreationBalance1;
 
         // Verify the position was created correctly using ViewFacet
-        (
-            address owner,
-            address poolAddr_,
-            int24 lowTick_,
-            int24 highTick_,
-            LiqType liqType,
-            uint128 liq
-        ) = viewFacet.getAssetInfo(assetId);
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);

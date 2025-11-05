@@ -39,6 +39,7 @@ struct LiqNode {
     uint128 xTLiq; // The amount of taker liq borrowing as x.
     // Dirty flags for liquidity modifications.
     uint8 dirty;
+    bool initialized;
     // Swap fee earnings checkpointing - Also used by takers to measure swap fees owed.
     uint256 feeGrowthInside0X128;
     uint256 feeGrowthInside1X128;
@@ -363,6 +364,9 @@ library LiqWalker {
                 uint128 liqDiff = uint128(FullMath.mulDivRoundingUp(compoundingLiq, sliqDiff, nodeShares));
                 node.liq.mLiq += liqDiff;
                 node.liq.shares += sliqDiff;
+                if (!node.liq.initialized) {
+                    liqDiff += 1;
+                }
                 (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
@@ -404,6 +408,9 @@ library LiqWalker {
                 sliq = targetLiq;
                 node.liq.mLiq += liqDiff;
                 node.liq.ncLiq += liqDiff;
+                if (!node.liq.initialized) {
+                    liqDiff += 1;
+                }
                 (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xNeeded);
                 data.yBalance += int256(yNeeded);
@@ -454,6 +461,9 @@ library LiqWalker {
 
         if (dirty) {
             node.liq.setDirty(); // Mark the node as dirty after modification.
+        }
+        if (!node.liq.initialized) {
+            node.liq.initialized = true;
         }
         aNode.sliq = targetSliq;
     }
