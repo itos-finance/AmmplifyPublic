@@ -80,6 +80,7 @@ contract UniV3DecomposerTest is MultiSetupTest {
         decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
     }
 
+    // TODO
     // For a Uniswap pool of spacing 60,
     // int256 MIN_TICK = -491520;
     // int256 MAX_TICK = -MIN_TICK;
