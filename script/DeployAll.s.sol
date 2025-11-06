@@ -8,7 +8,6 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 // Import all deployment contracts
 import { DeployTokens } from "./DeployTokens.s.sol";
 import { DeployDiamond } from "./DeployDiamond.s.sol";
-import { DeployBorrowlessDiamond } from "./DeployBorrowlessDiamond.s.sol";
 import { DeployUniV3 } from "./DeployUniV3.s.sol";
 import { DeployUniV3Decomposer } from "./DeployUniV3Decomposer.s.sol";
 import { DeployNFTManager } from "./DeployNFTManager.s.sol";
@@ -19,7 +18,6 @@ import { BaseAdminFacet } from "Commons/Util/Admin.sol";
 
 // Import contracts for address extraction
 import { SimplexDiamond } from "../src/Diamond.sol";
-import { BorrowlessDiamond } from "../src/BorrowlessDiamond.sol";
 import { MockERC20 } from "../test/mocks/MockERC20.sol";
 import { MockERC4626 } from "../test/mocks/MockERC4626.sol";
 import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
@@ -34,15 +32,13 @@ import { NFTManager } from "../src/integrations/NFTManager.sol";
  * This script orchestrates the deployment of all contracts in the correct order:
  * 1. MockERC20 tokens (USDC, WETH) and MockERC4626 vaults
  * 2. SimplexDiamond (core Ammplify contract with all facets)
- * 3. BorrowlessDiamond (core Ammplify contract without Taker facet)
- * 4. Uniswap V3 infrastructure (Factory, NFPM, Pool)
- * 5. UniV3Decomposer (converts UniV3 positions to Ammplify)
- * 6. NFTManager (ERC721 wrapper for Ammplify positions)
+ * 3. Uniswap V3 infrastructure (Factory, NFPM, Pool)
+ * 4. UniV3Decomposer (converts UniV3 positions to Ammplify)
+ * 5. NFTManager (ERC721 wrapper for Ammplify positions)
  */
 contract DeployAll is Script {
     // Deployed contract addresses
     address public simplexDiamond;
-    address public borrowlessDiamond;
     address public usdcToken;
     address public wethToken;
     address public usdcVault;
@@ -67,39 +63,35 @@ contract DeployAll is Script {
         console.log("");
 
         // Step 1: Deploy tokens and vaults
-        console.log("Step 1/9: Deploying Tokens and Vaults...");
+        console.log("Step 1/8: Deploying Tokens and Vaults...");
         _deployTokens();
 
         // Step 2: Deploy SimplexDiamond
-        console.log("Step 2/9: Deploying SimplexDiamond...");
+        console.log("Step 2/8: Deploying SimplexDiamond...");
         _deployDiamond();
 
-        // Step 3: Deploy BorrowlessDiamond
-        console.log("Step 3/9: Deploying BorrowlessDiamond...");
-        _deployBorrowlessDiamond();
-
-        // Step 4: Deploy Uniswap V3 infrastructure
-        console.log("Step 4/9: Deploying Uniswap V3...");
+        // Step 3: Deploy Uniswap V3 infrastructure
+        console.log("Step 3/8: Deploying Uniswap V3...");
         _deployUniV3();
 
-        // Step 5: Deploy UniV3Decomposer
-        console.log("Step 5/9: Deploying UniV3Decomposer...");
+        // Step 4: Deploy UniV3Decomposer
+        console.log("Step 4/8: Deploying UniV3Decomposer...");
         _deployDecomposer();
 
-        // Step 6: Deploy NFTManager
-        console.log("Step 6/8: Deploying NFTManager...");
+        // Step 5: Deploy NFTManager
+        console.log("Step 5/8: Deploying NFTManager...");
         _deployNFTManager();
 
-        // Step 7: Deploy SwapRouter
-        console.log("Step 7/9: Deploying SwapRouter...");
+        // Step 6: Deploy SwapRouter
+        console.log("Step 6/8: Deploying SwapRouter...");
         _deploySwapRouter();
 
-        // Step 8: Setup Vaults
-        console.log("Step 8/9: Setting up Vaults...");
+        // Step 7: Setup Vaults
+        console.log("Step 7/8: Setting up Vaults...");
         _setupVaults(deployerPrivateKey);
 
-        // Step 9: Setup Token Approvals
-        console.log("Step 9/9: Setting up Token Approvals...");
+        // Step 8: Setup Token Approvals
+        console.log("Step 8/8: Setting up Token Approvals...");
         _setupApprovals(deployer, deployerPrivateKey);
 
         // Final summary
@@ -140,23 +132,6 @@ contract DeployAll is Script {
 
         console.log(unicode"✅ SimplexDiamond deployed:");
         console.log("   Diamond:", simplexDiamond);
-        console.log("");
-
-        // Update deployed-addresses.json
-        _updateDeployedAddressesJson();
-    }
-
-    /**
-     * @notice Deploy BorrowlessDiamond
-     */
-    function _deployBorrowlessDiamond() internal {
-        DeployBorrowlessDiamond borrowlessDiamondDeployer = new DeployBorrowlessDiamond();
-        borrowlessDiamondDeployer.run();
-
-        borrowlessDiamond = address(borrowlessDiamondDeployer.diamond());
-
-        console.log(unicode"✅ BorrowlessDiamond deployed:");
-        console.log("   Diamond:", borrowlessDiamond);
         console.log("");
 
         // Update deployed-addresses.json
@@ -310,9 +285,6 @@ contract DeployAll is Script {
                 '    "simplexDiamond": "',
                 vm.toString(simplexDiamond),
                 '",\n',
-                '    "borrowlessDiamond": "',
-                vm.toString(borrowlessDiamond),
-                '",\n',
                 '    "nftManager": "',
                 vm.toString(nftManager),
                 '"\n',
@@ -377,7 +349,6 @@ contract DeployAll is Script {
             console.log("Failed to add USDC Vault: Unknown error");
             revert("USDC Vault setup failed with unknown error");
         }
-
         // Add WETH vault (index 1)
         console.log("Adding WETH Vault:", wethVault);
         try admin.addVault(wethToken, 1, wethVault, VaultType.E4626) {
@@ -389,7 +360,6 @@ contract DeployAll is Script {
             console.log("Failed to add WETH Vault: Unknown error");
             revert("WETH Vault setup failed with unknown error");
         }
-
         // Verify vault setup
         console.log("=== Vault Verification ===");
         try admin.viewVaults(usdcToken, 0) returns (address vault, address backup) {
@@ -398,14 +368,12 @@ contract DeployAll is Script {
         } catch {
             console.log("Warning: Could not verify USDC vault setup");
         }
-
         try admin.viewVaults(wethToken, 1) returns (address vault, address backup) {
             console.log("WETH Vault (index 1):", vault);
             console.log("WETH Backup Vault:", backup);
         } catch {
             console.log("Warning: Could not verify WETH vault setup");
         }
-
         console.log(unicode"✅ Vaults setup completed:");
         console.log("   USDC Vault (index 0):", usdcVault);
         console.log("   WETH Vault (index 1):", wethVault);
@@ -454,7 +422,6 @@ contract DeployAll is Script {
 
         console.log(unicode"🏗️  CORE CONTRACTS:");
         console.log("   SimplexDiamond (Ammplify Core):", simplexDiamond);
-        console.log("   BorrowlessDiamond (Maker-Only):", borrowlessDiamond);
         console.log("   NFTManager (Position NFTs):", nftManager);
         console.log("");
 
@@ -504,9 +471,6 @@ contract DeployAll is Script {
                     "{\n",
                     '  "simplexDiamond": "',
                     vm.toString(simplexDiamond),
-                    '",\n',
-                    '  "borrowlessDiamond": "',
-                    vm.toString(borrowlessDiamond),
                     '",\n',
                     '  "nftManager": "',
                     vm.toString(nftManager),

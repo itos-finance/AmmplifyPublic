@@ -30,9 +30,8 @@ import { IUniswapV3Pool } from "lib/v3-core/contracts/interfaces/IUniswapV3Pool.
  * @title AmmplifyPositions
  * @notice Script for opening maker and taker positions in Ammplify
  * @dev Supports both direct diamond calls and NFT-wrapped positions
- * @dev Loads SimplexDiamond and BorrowlessDiamond separately from deployed-addresses.json
+ * @dev Loads SimplexDiamond from deployed-addresses.json
  * @dev SimplexDiamond: Full Ammplify system with maker and taker functionality
- * @dev BorrowlessDiamond: Maker-only system for simplified operations
  */
 contract AmmplifyPositions is Script {
     using stdJson for string;
@@ -45,7 +44,6 @@ contract AmmplifyPositions is Script {
         address usdcVault;
         address wethVault;
         address simplexDiamond;
-        address borrowlessDiamond;
         address nftManager;
         address uniswapFactory;
         address uniswapNFPM;
@@ -101,7 +99,6 @@ contract AmmplifyPositions is Script {
         env.usdcVault = json.readAddress(".vaults.USDC.address");
         env.wethVault = json.readAddress(".vaults.WETH.address");
         env.simplexDiamond = json.readAddress(".ammplify.simplexDiamond");
-        env.borrowlessDiamond = json.readAddress(".ammplify.borrowlessDiamond");
         env.nftManager = json.readAddress(".ammplify.nftManager");
         env.uniswapFactory = json.readAddress(".uniswap.factory");
         env.uniswapNFPM = json.readAddress(".uniswap.nfpm");
@@ -113,7 +110,6 @@ contract AmmplifyPositions is Script {
         console2.log("USDC Token:", env.usdcToken);
         console2.log("WETH Token:", env.wethToken);
         console2.log("SimplexDiamond:", env.simplexDiamond);
-        console2.log("BorrowlessDiamond:", env.borrowlessDiamond);
         console2.log("NFT Manager:", env.nftManager);
         console2.log("USDC/WETH Pool:", env.usdcWethPool);
     }
@@ -433,13 +429,6 @@ contract AmmplifyPositions is Script {
             console2.log("Approved SimplexDiamond contract:", env.simplexDiamond);
         }
 
-        // Approve BorrowlessDiamond contract
-        if (env.borrowlessDiamond != address(0)) {
-            IERC20(env.usdcToken).approve(env.borrowlessDiamond, amount);
-            IERC20(env.wethToken).approve(env.borrowlessDiamond, amount);
-            console2.log("Approved BorrowlessDiamond contract:", env.borrowlessDiamond);
-        }
-
         // Approve NFT manager contract
         if (env.nftManager != address(0)) {
             IERC20(env.usdcToken).approve(env.nftManager, amount);
@@ -511,19 +500,11 @@ contract AmmplifyPositions is Script {
     }
 
     /**
-     * @notice Get the BorrowlessDiamond address (maker-only system)
-     */
-    function getBorrowlessDiamond() public view returns (address) {
-        return env.borrowlessDiamond;
-    }
-
-    /**
      * @notice Get the appropriate diamond for maker operations
-     * @dev Returns SimplexDiamond for full functionality, BorrowlessDiamond for maker-only
-     * @param useBorrowless If true, returns BorrowlessDiamond; otherwise SimplexDiamond
+     * @dev Returns SimplexDiamond for all operations
      */
-    function getMakerDiamond(bool useBorrowless) public view returns (address) {
-        return useBorrowless ? env.borrowlessDiamond : env.simplexDiamond;
+    function getMakerDiamond() public view returns (address) {
+        return env.simplexDiamond;
     }
 
     /**
