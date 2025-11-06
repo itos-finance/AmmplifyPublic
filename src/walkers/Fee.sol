@@ -12,8 +12,6 @@ import { FullMath } from "../FullMath.sol";
 import { FeeLib } from "../Fee.sol";
 import { PoolInfo } from "../Pool.sol";
 
-// import { console } from "forge-std/console.sol";
-
 /// Data we need to persist for fee accounting.
 /// @dev ONLY operations in FeeWalker are modifying this data.
 /// Others can read though so they should be aware of their ordering.
@@ -435,8 +433,6 @@ library FeeWalker {
 
             uint256 timeDiff = uint128(block.timestamp) - data.timestamp; // Convert to 256 for next mult
             takerRateX64 = timeDiff * data.fees.rateConfig.calculateRateX64(uint128((totalTLiq << 64) / totalMLiq));
-            // console.log("Taker rate x64:", takerRateX64, timeDiff);
-            // console.log("total liqs", totalTLiq, totalMLiq);
         }
 
         uint256 colXPaid;
@@ -449,7 +445,6 @@ library FeeWalker {
             (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
             colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
             colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
-            // console.log("Col paid:", colXPaid, colYPaid, aboveTLiq);
             if (aboveTLiq != 0) {
                 colRatesX128[2] = FullMath.mulDiv(colXPaid, 1 << 128, aboveTLiq);
                 colRatesX128[3] = FullMath.mulDiv(colYPaid, 1 << 128, aboveTLiq);
@@ -460,20 +455,13 @@ library FeeWalker {
         // We could store subtree borrows without the node borrow to save a subtract here,
         // but let's just use one convention.
         uint256[4] memory childrenPaidEarned;
-        // console.log(
-        //     "borrow balances",
-        //     node.liq.subtreeBorrowedX - node.liq.borrowedX,
-        //     node.liq.subtreeBorrowedY - node.liq.borrowedY
-        // );
         childrenPaidEarned[0] = FullMath.mulX64(node.liq.subtreeBorrowedX - node.liq.borrowedX, takerRateX64, true);
         childrenPaidEarned[1] = FullMath.mulX64(node.liq.subtreeBorrowedY - node.liq.borrowedY, takerRateX64, true);
         colXPaid += childrenPaidEarned[0];
         colYPaid += childrenPaidEarned[1];
-        // console.log("Total col paid:", colXPaid, colYPaid);
 
         // Now divy this up among all makers above and below in the column.
         uint256 aboveMLiq = data.liq.mLiqPrefix + node.liq.mLiq;
-        // console.log("aboveMLiq", aboveMLiq);
         // Implicit is that maker liq below and maker liq above should earn the same amount which is not true
         // but is a resonable approximation that is true in the limit of a totally efficient market.
         if (aboveMLiq == 0) {
@@ -492,15 +480,12 @@ library FeeWalker {
                 childrenPaidEarned[3] = 0;
             } else {
                 uint256 aboveMLiqRatioX256 = FullMath.mulDivX256(aboveMLiqTotal, totalMLiq, false);
-                // console.log("aboveMLiqRatioX256", aboveMLiqRatioX256);
                 // X first.
                 uint256 aboveEarned = FullMath.mulX256(colXPaid, aboveMLiqRatioX256, false);
-                // console.log("aboveEarnedX", aboveEarned);
                 colRatesX128[0] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
                 childrenPaidEarned[2] = colXPaid - aboveEarned;
                 // Now Y.
                 aboveEarned = FullMath.mulX256(colYPaid, aboveMLiqRatioX256, false);
-                // console.log("aboveEarnedY", aboveEarned);
                 colRatesX128[1] = FullMath.mulDiv(aboveEarned, 1 << 128, aboveMLiq);
                 childrenPaidEarned[3] = colYPaid - aboveEarned;
             }
