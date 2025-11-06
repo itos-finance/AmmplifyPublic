@@ -85,7 +85,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     /// @return liquidityOffset The calculated liquidity offset
     function calculateLiquidityOffset(int24 tickLower, int24 tickUpper, int24 tickSpacing) internal pure returns (uint128 liquidityOffset) {
         uint24 rootWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, tickSpacing);
-        uint8 depth = msbBit(rootWidth);
+        uint8 depth = msbBit(rootWidth) + 1;
 
         uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
         uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing) - 1;
