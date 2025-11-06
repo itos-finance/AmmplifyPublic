@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import { IERC721 } from "a@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { IERC721Receiver } from "a@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
 import { NFTManager } from "../../src/integrations/NFTManager.sol";
@@ -12,6 +13,7 @@ import { LiqType } from "../../src/walkers/Liq.sol";
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { INonfungiblePositionManager } from "../mocks/nfpm/interfaces/INonfungiblePositionManager.sol";
 import { IView } from "../../src/interfaces/IView.sol";
+import { PoolLib } from "../../src/Pool.sol";
 import { console } from "forge-std/console.sol";
 
 contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
@@ -22,7 +24,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
     uint24 public constant POOL_FEE = 3000;
     int24 public constant LOW_TICK = -600;
     int24 public constant HIGH_TICK = 600;
-    uint128 public constant LIQUIDITY = 1000e18;
+    uint128 public constant LIQUIDITY = 10e18;
     uint256 public constant INIT_AMOUNT = 1e22;
     uint128 public constant MIN_SQRT_PRICE_X96 = 0;
     uint128 public constant MAX_SQRT_PRICE_X96 = type(uint128).max;
@@ -136,8 +138,9 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet
-            .getAssetInfo(assetId);
+        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet.getAssetInfo(
+            assetId
+        );
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
         assertEq(poolAddr, address(pools[0]));
         assertEq(lowTick, LOW_TICK);
@@ -146,8 +149,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
     }
 
     // ============ decomposeAndMint Tests ============
-
-    function test_decomposeAndMint() public {
+    function _test_decomposeAndMint(int24 expectedLowTick, int24 expectedHighTick) internal {
         // Fund the test account for RFT operations
         _fundAccount(address(this));
 
@@ -159,8 +161,8 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         uint256 positionId = createPosition(
             address(this), // owner
             POOL_FEE, // fee
-            LOW_TICK, // tickL
-            HIGH_TICK, // tickU
+            expectedLowTick, // tickL
+            expectedHighTick, // tickU
             LIQUIDITY // liq
         );
 
@@ -192,14 +194,25 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         assertEq(nftManager.assetToToken(assetId), tokenId);
 
         // Verify the asset exists in the maker facet
-        (address owner, address poolAddr, int24 lowTick, int24 highTick, , uint128 liq) = viewFacet.getAssetInfo(
-            assetId
-        );
+        (address owner, address poolAddr, int24 assetLowTick, int24 assetHighTick, , uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
         assertEq(owner, address(nftManager)); // NFT manager owns the asset
         assertEq(poolAddr, address(pools[0]));
-        assertEq(lowTick, LOW_TICK);
-        assertEq(highTick, HIGH_TICK);
+        assertEq(assetLowTick, expectedLowTick);
+        assertEq(assetHighTick, expectedHighTick);
         assertApproxEqAbs(liq, liquidity, 1000); // the offset is based on 42 / (sqrt(high) - sqrt(low))
+    }
+
+    function test_decomposeAndMint() public {
+        _test_decomposeAndMint(LOW_TICK, HIGH_TICK);
+    }
+
+    function test_min_decomposeAndMint() public {
+        _test_decomposeAndMint(0, 60);
+    }
+
+    function test_max_decomposeAndMint() public {
+        _test_decomposeAndMint(-491520 + 60, 491520 - 60);
     }
 
     // ============ burnAsset Tests ============
