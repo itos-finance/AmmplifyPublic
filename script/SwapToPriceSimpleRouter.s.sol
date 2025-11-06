@@ -183,7 +183,6 @@ contract SwapToPriceSimpleRouter is Script {
             console2.log("Failed to mint token0: unknown error");
             revert("Token0 mint failed: unknown error");
         }
-
         try MockERC20(token1).mint(deployer, amount) {
             console2.log("Minted token1 to deployer:", token1);
             console2.log("Token1 balance:", MockERC20(token1).balanceOf(deployer));
@@ -238,8 +237,7 @@ contract SwapToPriceSimpleRouter is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Example: Swap USDC/WETH pool to a specific price
-        // Target price of ~4100 USDC per WETH (adjust as needed)
-        uint160 targetPrice = 4927318561964346088671668; // Example sqrt price
+        uint160 targetPrice = 4636912502154384835163855; // Example sqrt price
 
         SwapParams memory params = SwapParams({
             poolAddress: env.usdcWethPool,

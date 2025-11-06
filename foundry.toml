@@ -4,6 +4,9 @@
 auto_detect_solc = false
 auto_detect_remappings=true
 bytecode_hash = "none"
+fs_permissions = [
+    { access = "read", path = "deployed-addresses.json" }
+]
 fuzz = { runs = 256 }
 gas_reports = ["*"]
 libs = ["lib"]
