@@ -13,8 +13,6 @@ import { AdminLib } from "Commons/Util/Admin.sol";
 import { FeeStore } from "../Fee.sol";
 import { Store } from "../Store.sol";
 
-import { console } from "forge-std/console.sol";
-
 library WalkerLib {
     function modify(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
         uint24 low = pInfo.treeTick(lowTick);

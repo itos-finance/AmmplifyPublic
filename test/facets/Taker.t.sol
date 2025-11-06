@@ -137,14 +137,8 @@ contract TakerFacetTest is MultiSetupTest {
         assertEq(assetId, 2);
 
         // Verify asset properties using ViewFacet
-        (
-            address owner,
-            address poolAddr_,
-            int24 lowTick_,
-            int24 highTick_,
-            LiqType liqType,
-            uint128 liq
-        ) = viewFacet.getAssetInfo(assetId);
+        (address owner, address poolAddr_, int24 lowTick_, int24 highTick_, LiqType liqType, uint128 liq) = viewFacet
+            .getAssetInfo(assetId);
         assertEq(owner, recipient);
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, ticks[0]);
@@ -667,7 +661,7 @@ contract TakerFacetTest is MultiSetupTest {
         // When price is above the range, taker should have positive net balance
         assertApproxEqAbs(queriedNetBalance0, 0, 3, "No X owed since we're above");
         assertApproxEqAbs(queriedNetBalance1, 0, 3, "Same Y now we're above range");
-        assertTrue(queriedFees0 > 0 && queriedFees1 > 0, "Taker owes fees for the swap.");
+        assertTrue(queriedFees0 > 0 || queriedFees1 > 0, "Taker owes fees for the swap.");
         console.log("fees", queriedFees0, queriedFees1);
 
         // Close the position and get actual amounts
@@ -743,7 +737,7 @@ contract TakerFacetTest is MultiSetupTest {
         assertLt(queriedNetBalance0, 0, "owe X");
         assertGt(queriedNetBalance1, 0, "have Y");
         assertGt(queriedFees0, 0, "owe fees for X");
-        assertGt(queriedFees1, 0, "owe fees for Y");
+        assertEq(queriedFees1, 0, "no fees for Y");
 
         // Close the position and verify we receive tokens
         vm.prank(recipient);
@@ -817,7 +811,7 @@ contract TakerFacetTest is MultiSetupTest {
         // With large price movement up, taker will have matched the frozen balance.
         assertApproxEqAbs(queriedNetBalance0, 0, 3, "No X owed since we're above");
         assertApproxEqAbs(queriedNetBalance1, 0, 3, "Same Y now we're above range");
-        assertTrue(queriedFees0 > 0 && queriedFees1 > 0, "Taker owes fees for the swap.");
+        assertTrue(queriedFees0 > 0 || queriedFees1 > 0, "Taker owes fees for the swap.");
         console.log("fees", queriedFees0, queriedFees1);
 
         // Close the position and verify consistency
@@ -846,6 +840,14 @@ contract TakerFacetTest is MultiSetupTest {
 
     function testTakerPositionBackInRange() public {
         bytes memory rftData = "";
+
+        // Note, I really hate it when people put specific parameters in the setup.
+        // Because as tests grow long you forget what those original parameters were and obfuscates
+        // what changes there are. In the future lets make sure test parameters are local.
+        ticks = [-600, 600];
+        liquidity = 1e18;
+        freezeSqrtPriceX96 = 3 << 95; // Above range, 1.5 = sqrt(price)
+        // We'll freeze into all Y.
 
         // Collateralize before creating taker position
         _collateralizeTaker(recipient, liquidity);
@@ -886,7 +888,8 @@ contract TakerFacetTest is MultiSetupTest {
         // Since we're above range we're actually in the freeze balances.
         assertApproxEqAbs(outOfRangeBalance0, 0, 3, "No X owed since we're above");
         assertApproxEqAbs(outOfRangeBalance1, 0, 3, "Same Y now we're above range");
-        assertTrue(fees0 > 0 && fees1 > 0, "Taker owes fees for the swap.");
+        console.log("fees", fees0, fees1);
+        assertTrue(fees0 > 0 || fees1 > 0, "Taker owes fees for the swap.");
 
         // Move price back into range
         targetTick = 0; // Back to center of range
@@ -894,11 +897,20 @@ contract TakerFacetTest is MultiSetupTest {
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value when back in range
-        (int256 inRangeBalance0, int256 inRangeBalance1, , ) = viewFacet.queryAssetBalances(assetId);
+        (int256 inRangeBalance0, int256 inRangeBalance1, uint256 newFees0, uint256 newFees1) = viewFacet
+            .queryAssetBalances(assetId);
 
         // When back in range, you'll have excess y and owe x.
         assertLt(inRangeBalance0, 0, "owe X");
         assertGt(inRangeBalance1, outOfRangeBalance1, "excess Y");
+        assertGt(newFees0, fees0, "owe more fees for X");
+        assertEq(newFees1, fees1, "owe same fees for Y");
+
+        skip(1 days);
+        // The borrow will pay fees in both.
+        (, , uint256 laterFees0, uint256 laterFees1) = viewFacet.queryAssetBalances(assetId);
+        assertGt(laterFees0, newFees0, "owe more fees for X over time");
+        assertGt(laterFees1, newFees1, "owe more fees for Y over time");
     }
 
     function testTakerFeesOverTime() public {

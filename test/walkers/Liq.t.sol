@@ -251,8 +251,9 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(n.liq.dirty, 1);
         assertEq(aNode.sliq, 90e8, "0");
         assertEq(n.liq.tLiq, 240e8, "1");
-        assertGt(n.liq.subtreeBorrowedX, 0, "3");
-        assertGt(n.liq.subtreeBorrowedY, 0, "4");
+        // Subtree values aren't modified by modify.
+        assertEq(n.liq.subtreeBorrowedX, 0, "3");
+        assertEq(n.liq.subtreeBorrowedY, 0, "4");
         assertLt(data.xBalance, 0, "5");
         assertEq(data.yBalance, 0, "6");
     }
@@ -273,6 +274,8 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         AssetNode storage aNode = data.assetNode(key);
         n.liq.tLiq = 200e8;
         aNode.sliq = 50e8;
+        n.liq.borrowedX = 500e24;
+        n.liq.borrowedY = 500e24;
         n.liq.subtreeTLiq = 1000e8;
         n.liq.subtreeBorrowedX = 500e24;
         n.liq.subtreeBorrowedY = 500e24;
@@ -282,8 +285,11 @@ contract LiqWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(aNode.sliq, 0, "0");
         assertEq(n.liq.tLiq, 150e8, "1");
         assertEq(n.liq.subtreeTLiq, 1000e8, "2"); // Unchanged since we update in up, not modify.
-        assertLt(n.liq.subtreeBorrowedX, 500e24, "3");
-        assertLt(n.liq.subtreeBorrowedY, 500e24, "4");
+        assertFalse(data.takeAsX, "takeAsX");
+        assertEq(n.liq.borrowedX, 500e24, "3");
+        assertLt(n.liq.borrowedY, 500e24, "4");
+        assertEq(n.liq.subtreeBorrowedX, 500e24, "3s"); // Subtree is unchanged in modify.
+        assertEq(n.liq.subtreeBorrowedY, 500e24, "4s");
         assertGt(data.xBalance, 0, "5");
         assertEq(data.yBalance, 0, "6");
     }

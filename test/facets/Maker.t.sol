@@ -65,7 +65,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
 
     // ============ Maker Position Creation Tests ============
 
-    function testNewMaker() public {
+    function testNewMaker1() public {
         bytes memory rftData = "";
 
         uint256 assetId = makerFacet.newMaker(

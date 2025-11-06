@@ -16,8 +16,6 @@ import { VaultLib } from "../vaults/Vault.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { ITaker } from "../interfaces/ITaker.sol";
 
-import { console } from "forge-std/console.sol";
-
 contract TakerFacet is ReentrancyGuardTransient, ITaker {
     // Higher requirement than makers.
     uint128 public constant MIN_TAKER_LIQUIDITY = 1e12;
@@ -116,8 +114,10 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance + int256(data.xFees);
         balances[1] = data.yBalance + int256(data.yFees);
-        balances[0] -= SafeCast.toInt256(VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId));
-        balances[1] -= SafeCast.toInt256(VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId));
+        uint256 vaultX = VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId);
+        uint256 vaultY = VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId);
+        balances[0] -= SafeCast.toInt256(vaultX);
+        balances[1] -= SafeCast.toInt256(vaultY);
         balance0 = -balances[0];
         balance1 = -balances[1];
         // Closing pays up the fees and leave the collateral alone. The collateral is really just there

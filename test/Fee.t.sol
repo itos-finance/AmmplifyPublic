@@ -96,14 +96,14 @@ contract FeeTest is Test {
         SmoothRateCurveConfig memory rateCurve = FeeLib.getRateCurve(address(0));
         uint256 seconds_in_year = 365 days;
         uint128 rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, 0);
-        uint256 output = uint256(2 << 64) / 100;
-        assertApproxEqRel(seconds_in_year * rateX64, output, 1e12, "defaultFeeCurve.rateAt0"); // 2%
-        rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, uint128(70 << 64) / 100); // 70%
-        assertApproxEqRel(seconds_in_year * rateX64, uint256(20 << 64) / 100, 1e12, "defaultFeeCurve.rateAt70"); // 20%
-        rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, uint128(95 << 64) / 100); // 95%
-        assertApproxEqRel(seconds_in_year * rateX64, uint256(200 << 64) / 100, 1e12, "defaultFeeCurve.rateAt95"); // 200%
+        uint256 output = uint256(2 << 64) / 1000;
+        assertApproxEqRel(seconds_in_year * rateX64, output, 1e12, "defaultFeeCurve.rateAt0"); // 0.2%
         rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, uint128(60 << 64) / 100); // 60%
-        assertApproxEqRel(seconds_in_year * rateX64, uint256(13 << 64) / 100, 2e17, "defaultFeeCurve.rateAt60"); // ~13%
+        assertApproxEqRel(seconds_in_year * rateX64, uint256(16 << 64) / 100, 1e12, "defaultFeeCurve.rateAt60"); // 12%
+        rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, uint128(90 << 64) / 100); // 90%
+        assertApproxEqRel(seconds_in_year * rateX64, uint256(5945 << 64) / 10000, 1e12, "defaultFeeCurve.rateAt90"); // 59.45%
+        rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, uint128(1 << 64)); // 100%
+        assertApproxEqRel(seconds_in_year * rateX64, uint256(131866 << 64) / 100000, 2e17, "defaultFeeCurve.rateAt100"); // ~1.31866%
     }
 
     // JIT
@@ -139,16 +139,16 @@ contract FeeTest is Test {
     // Helpers
 
     function _assertDefaultFeeCurve(SmoothRateCurveConfig memory rateCurve) internal pure {
-        assertEq(rateCurve.invAlphaX128, 658978001824224546224408100864, "defaultFeeCurve.invAlphaX128");
-        assertEq(rateCurve.betaX64, 18446744047804958848, "defaultFeeCurve.betaX64");
-        assertEq(rateCurve.maxUtilX64, 17524406870024073216, "defaultFeeCurve.maxUtilX64"); // 120%
+        assertEq(rateCurve.invAlphaX128, 1562792664755071494808317984768, "defaultFeeCurve.invAlphaX128");
+        assertEq(rateCurve.betaX64, 18446743997862018166, "defaultFeeCurve.betaX64");
+        assertEq(rateCurve.maxUtilX64, 20291418481080508416, "defaultFeeCurve.maxUtilX64"); // 120%
         assertEq(rateCurve.maxRateX64, 1169884834710, "defaultFeeCurve.maxRateX64"); // 95%
     }
 
     function _assertDefaultSplitCurve(SmoothRateCurveConfig memory splitCurve) internal pure {
-        assertEq(splitCurve.invAlphaX128, type(uint128).max, "defaultSplitCurve.invAlphaX128"); // 1
-        assertEq(splitCurve.betaX64, 36893488147419103232, "defaultSplitCurve.betaX64"); // 1 (without offset)
-        assertEq(splitCurve.maxUtilX64, 18631211514446647296, "defaultSplitCurve.maxUtilX64"); // 101%
-        assertEq(splitCurve.maxRateX64, 1844674407370955161600, "defaultSplitCurve.maxRateX64"); // 100%
+        assertEq(splitCurve.invAlphaX128, 1562792664755071494808317984768, "defaultSplitCurve.invAlphaX128"); // 1
+        assertEq(splitCurve.betaX64, 18446743997862018166, "defaultSplitCurve.betaX64"); // 1 (without offset)
+        assertEq(splitCurve.maxUtilX64, 20291418481080508416, "defaultSplitCurve.maxUtilX64"); // 101%
+        assertEq(splitCurve.maxRateX64, 1169884834710, "defaultSplitCurve.maxRateX64"); // 100%
     }
 }

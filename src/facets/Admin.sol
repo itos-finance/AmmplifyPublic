@@ -26,6 +26,7 @@ contract AdminFacet is TimedAdminFacet {
     event DefaultTwapIntervalSet(uint32 interval);
 
     error InvalidZeroInterval();
+    error FullUtilizationUnhandled(uint128 maxUtilX64);
 
     /* Taker related */
 
@@ -33,9 +34,12 @@ contract AdminFacet is TimedAdminFacet {
 
     /* Fee related */
 
+    uint256 private constant X64 = 1 << 64;
+
     function setFeeCurve(address pool, SmoothRateCurveConfig memory feeCurve) external {
         AdminLib.validateOwner();
         SmoothRateCurveLib.validate(feeCurve);
+        require(feeCurve.maxUtilX64 > X64, FullUtilizationUnhandled(feeCurve.maxUtilX64));
         Store.fees().feeCurves[pool] = feeCurve;
         emit FeeCurveSet(pool, feeCurve);
     }
@@ -43,6 +47,7 @@ contract AdminFacet is TimedAdminFacet {
     function setDefaultFeeCurve(SmoothRateCurveConfig memory feeCurve) external {
         AdminLib.validateOwner();
         SmoothRateCurveLib.validate(feeCurve);
+        require(feeCurve.maxUtilX64 > X64, FullUtilizationUnhandled(feeCurve.maxUtilX64));
         Store.fees().defaultFeeCurve = feeCurve;
         emit DefaultFeeCurveSet(feeCurve);
     }
@@ -50,6 +55,7 @@ contract AdminFacet is TimedAdminFacet {
     function setDefaultSplitCurve(SmoothRateCurveConfig memory splitCurve) external {
         AdminLib.validateOwner();
         SmoothRateCurveLib.validate(splitCurve);
+        require(splitCurve.maxUtilX64 > X64, FullUtilizationUnhandled(splitCurve.maxUtilX64));
         Store.fees().defaultSplitCurve = splitCurve;
         emit DefaultSplitCurveSet(splitCurve);
     }
@@ -57,6 +63,7 @@ contract AdminFacet is TimedAdminFacet {
     function setSplitCurve(address pool, SmoothRateCurveConfig memory splitCurve) external {
         AdminLib.validateOwner();
         SmoothRateCurveLib.validate(splitCurve);
+        require(splitCurve.maxUtilX64 > X64, FullUtilizationUnhandled(splitCurve.maxUtilX64));
         Store.fees().splitCurves[pool] = splitCurve;
         emit SplitCurveSet(pool, splitCurve);
     }

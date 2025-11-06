@@ -45,17 +45,17 @@ contract AdminFacetTest is MultiSetupTest {
 
         // // Get test configurations
         testFeeCurve = SmoothRateCurveConfig({
-            invAlphaX128: 102084710076281535261119195933814292480,
-            betaX64: 14757395258967642112,
-            maxUtilX64: 14757395258967642112,
-            maxRateX64: 14757395258967642112
+            invAlphaX128: 1562792664755071494808317984768,
+            betaX64: 18446743997862018166,
+            maxUtilX64: 20291418481080508416, // 110%
+            maxRateX64: 1169884834710 // 200%
         });
 
         testSplitCurve = SmoothRateCurveConfig({
-            invAlphaX128: type(uint128).max,
-            betaX64: 14757395258967642112,
-            maxUtilX64: 14757395258967642112,
-            maxRateX64: 14757395258967642112
+            invAlphaX128: 1562792664755071494808317984768,
+            betaX64: 18446743997862018166,
+            maxUtilX64: 20291418481080508416, // 110%
+            maxRateX64: 1169884834710 // 200%
         });
     }
 
