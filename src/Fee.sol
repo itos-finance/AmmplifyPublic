@@ -40,23 +40,20 @@ library FeeLib {
     function init() internal {
         FeeStore storage store = Store.fees();
         store.defaultCompoundThreshold = 1e12; // 1 of each if both tokens are 6 decimals.
-        // Target 20% APR at 70% util. 2% at 0%. Stored as SPR (second percentage rate).
+        // Target 16% APR at 60% util. 0.2% at 0%. Stored as SPR (second percentage rate).
         store.defaultFeeCurve = SmoothRateCurveConfig({
-            invAlphaX128: 658978001824224546224408100864,
-            betaX64: 18446744047804958848,
-            maxUtilX64: 17524406870024073216, // 95%
+            invAlphaX128: 1562792664755071494808317984768,
+            betaX64: 18446743997862018166,
+            maxUtilX64: 20291418481080508416, // 110%
             maxRateX64: 1169884834710 // 200%
         });
-        // This is just for adding a super linear weight to the the split.
-        // We base this around 1 to make a more even split when the difference is low.
-        // E.g., the weight at 0 is ~2, 0.5 is ~3, 0.76 is ~5, 0.9 is ~10, 1 is 100.
-        // @TODO The fee difference at target should be 6x that of 0% util, so
-        // SmoothRateCurves probably don't work here. We should change this.
+        // Right now, we actually use the rate curve itself to decide on the split,
+        // splitting the unclaims according to the rates they would have paid.
         store.defaultSplitCurve = SmoothRateCurveConfig({
-            invAlphaX128: type(uint128).max, // 1
-            betaX64: 36893488147419103232, // 1 (without offset)
-            maxUtilX64: 18631211514446647296, // 101%
-            maxRateX64: 1844674407370955161600 // 100
+            invAlphaX128: 1562792664755071494808317984768,
+            betaX64: 18446743997862018166,
+            maxUtilX64: 20291418481080508416, // 110%
+            maxRateX64: 1169884834710 // 200%
         });
         store.defaultTwapInterval = 300; // 5 minutes
     }
