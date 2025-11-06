@@ -162,6 +162,16 @@ library ViewWalker {
             // First we claim the existing fee earnings.
             claimCurrentFees(node, aNode, data, low, high);
 
+            uint128 liq = (data.liq.liqType == LiqType.MAKER)
+                ? uint128(
+                    FullMath.mulDiv(
+                        node.liq.mLiq - node.liq.ncLiq + LiqWalker.VIRTUAL_LIQ,
+                        aNode.sliq,
+                        node.liq.shares + LiqWalker.VIRTUAL_SHARES
+                    )
+                )
+                : aNode.sliq;
+
             // Now claim the unclaimed/unpaid fees.
             if (data.liq.liqType == LiqType.TAKER) {
                 if (data.takeAsX) {
@@ -172,7 +182,7 @@ library ViewWalker {
                     );
                     data.earningsX += FullMath.mulX128(
                         UnsafeMath.divRoundingUp(nodeUnpaidX128, node.liq.xTLiq),
-                        aNode.sliq,
+                        liq,
                         true
                     );
                 } else {
@@ -183,34 +193,23 @@ library ViewWalker {
                     );
                     data.earningsY += FullMath.mulX128(
                         UnsafeMath.divRoundingUp(nodeUnpaidX128, node.liq.tLiq - node.liq.xTLiq),
-                        aNode.sliq,
+                        liq,
                         true
                     );
                 }
             } else {
-                uint128 mLiq = (data.liq.liqType == LiqType.MAKER)
-                    ? uint128(FullMath.mulDiv(node.liq.mLiq - node.liq.ncLiq, aNode.sliq, node.liq.shares))
-                    : aNode.sliq;
-                data.earningsX += FullMath.mulDiv(unclaimedX, mLiq, node.liq.subtreeMLiq);
-                data.earningsY += FullMath.mulDiv(unclaimedY, mLiq, node.liq.subtreeMLiq);
+                // Makers just get their liq's amount.
+                data.earningsX += FullMath.mulDiv(unclaimedX, liq, node.liq.subtreeMLiq);
+                data.earningsY += FullMath.mulDiv(unclaimedY, liq, node.liq.subtreeMLiq);
             }
 
             // Now charge the true fee rate which will always be the case with visits.
             // Note that the prefix has not been added because we visit sibling before the prop
             // sibling on the way down.
-            chargeTrueFeeRate(key, node, aNode, data);
+            chargeTrueFeeRate(key, node, liq, data);
 
             // Now claim the liquidity balances.
             bool roundUp = (data.liq.liqType == LiqType.TAKER);
-            uint128 liq = (data.liq.liqType == LiqType.MAKER)
-                ? uint128(
-                    FullMath.mulDiv(
-                        node.liq.mLiq - node.liq.ncLiq,
-                        aNode.sliq,
-                        node.liq.shares + LiqWalker.VIRTUAL_SHARES
-                    )
-                )
-                : aNode.sliq;
             (uint256 x, uint256 y) = data.computeBalances(key, liq, roundUp);
             data.liqBalanceX += x;
             data.liqBalanceY += y;
@@ -396,13 +395,9 @@ library ViewWalker {
     /// @notice Called on visited nodes to charge them their exact fees.
     /// Because this is for viewing, we don't need to worry about the subtree unclaim/unpaids and just
     /// charge the rates and add it to our data earnings.
+    /// @param liq The liquidity of the position, can be taker, maker, or nc maker.
     /// @dev This assumes the prefix does not include the current node's liquidity.
-    function chargeTrueFeeRate(
-        Key key,
-        Node storage node,
-        AssetNode storage aNode,
-        ViewData memory data
-    ) internal view {
+    function chargeTrueFeeRate(Key key, Node storage node, uint128 liq, ViewData memory data) internal view {
         uint24 width = key.width();
         // We use the liq ratio to calculate the true fee rate the entire column should pay.
         uint256 totalMLiq = width * data.liq.mLiqPrefix + node.liq.subtreeMLiq;
@@ -419,8 +414,8 @@ library ViewWalker {
         uint256 colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
         if (data.liq.liqType == LiqType.TAKER) {
             if (aboveTLiq > 0) {
-                data.earningsX += FullMath.mulDivRoundingUp(colXPaid, aNode.sliq, aboveTLiq);
-                data.earningsY += FullMath.mulDivRoundingUp(colYPaid, aNode.sliq, aboveTLiq);
+                data.earningsX += FullMath.mulDivRoundingUp(colXPaid, liq, aboveTLiq);
+                data.earningsY += FullMath.mulDivRoundingUp(colYPaid, liq, aboveTLiq);
             }
             // If we're a taker we can stop here.
             return;
@@ -431,9 +426,6 @@ library ViewWalker {
         colXPaid += childrenXPaid;
         colYPaid += childrenYPaid;
 
-        uint128 liq = (data.liq.liqType == LiqType.MAKER)
-            ? uint128(FullMath.mulDiv(node.liq.mLiq - node.liq.ncLiq, aNode.sliq, node.liq.shares))
-            : aNode.sliq;
         data.earningsX += FullMath.mulDiv(colXPaid, liq, totalMLiq);
         data.earningsY += FullMath.mulDiv(colYPaid, liq, totalMLiq);
     }
