@@ -88,7 +88,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
         uint8 depth = msbBit(rootWidth);
 
         uint24 treeLow = TreeTickLib.tickToTreeIndex(tickLower, rootWidth, tickSpacing);
-        uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing);
+        uint24 treeHigh = TreeTickLib.tickToTreeIndex(tickUpper, rootWidth, tickSpacing) - 1;
 
         Route memory route = RouteImpl.make(rootWidth, treeLow, treeHigh);
         uint8 lcaDepth = msbBit(route.lca.width());
