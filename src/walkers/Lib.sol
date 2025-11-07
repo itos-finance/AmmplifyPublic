@@ -15,29 +15,29 @@ import { Store } from "../Store.sol";
 
 library WalkerLib {
     function modify(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
-        uint24 low = pInfo.treeTick(lowTick);
+        uint24 low = pInfo.treeTick(lowTick); // 130 B
         uint24 high = pInfo.treeTick(highTick) - 1;
-        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
-        route.walk(down, up, phase, toRaw(data));
+        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high); // 500 B
+        route.walk(down, up, phase, toRaw(data)); // 3.5 kB
 
-        commitFeesCollected(pInfo, data);
+        commitFeesCollected(pInfo, data); // 600 B
     }
 
     function down(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        FeeWalker.down(key, visit, data);
+        FeeWalker.down(key, visit, data); // 4 kB
     }
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        FeeWalker.up(key, visit, data);
-        LiqWalker.up(key, visit, data);
+        FeeWalker.up(key, visit, data); // 4 kB
+        LiqWalker.up(key, visit, data); // 9 kB
     }
 
     function phase(Phase walkPhase, bytes memory raw) internal pure {
         Data memory data = toData(raw);
-        FeeWalker.phase(walkPhase, data);
-        LiqWalker.phase(walkPhase, data);
+        FeeWalker.phase(walkPhase, data); // 300 B
+        LiqWalker.phase(walkPhase, data); // 600 B
     }
 
     /* Helpers */

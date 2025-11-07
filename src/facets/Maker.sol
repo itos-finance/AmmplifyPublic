@@ -29,9 +29,9 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
         require(liq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(liq));
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr); // 1 kB
         // When creating new positions, we make sure to validate the pool isn't malicious.
-        pInfo.validate();
+        pInfo.validate(); // .5 kB
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
             pInfo,
@@ -39,18 +39,28 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             highTick,
             liq,
             isCompounding
-        );
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq);
+        ); // 1.2 kB
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq); // 4.6 kb
         // This fills in the nodes in the asset.
-        WalkerLib.modify(pInfo, lowTick, highTick, data);
+        WalkerLib.modify(pInfo, lowTick, highTick, data); // 21.5 kB
         // Settle balances.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
         balances[0] = data.xBalance; // There are no fees to consider on new positions.
         balances[1] = data.yBalance;
-        RFTLib.settle(msg.sender, tokens, balances, rftData);
-        PoolWalker.settle(pInfo, lowTick, highTick, data);
-        emit MakerCreated(recipient, poolAddr, assetId, lowTick, highTick, liq, isCompounding, balances[0], balances[1]);
+        RFTLib.settle(msg.sender, tokens, balances, rftData); // 2.4 kB
+        // PoolWalker.settle(pInfo, lowTick, highTick, data); // 3.4 kB
+        emit MakerCreated(
+            recipient,
+            poolAddr,
+            assetId,
+            lowTick,
+            highTick,
+            liq,
+            isCompounding,
+            balances[0],
+            balances[1]
+        );
         return assetId;
     }
 
