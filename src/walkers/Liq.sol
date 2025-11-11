@@ -55,6 +55,8 @@ library LiqNodeImpl {
     uint128 public constant MAX_MLIQ = (1 << 127) - 1;
     uint8 public constant DIRTY_FLAG = 1;
     uint8 public constant SIB_DIRTY_FLAG = 2;
+    /// The top bit of the dirty byte is reserved for PoolWalker's use.
+    uint8 public constant RESERVED_DIRTY_FLAG = 1 << 7;
 
     function compound(LiqNode storage self, uint128 compoundedLiq) internal returns (bool compounded) {
         if (compoundedLiq == 0) {

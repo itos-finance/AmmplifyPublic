@@ -17,6 +17,8 @@ library PoolWalker {
     error InsolventLiquidityUpdate(Key key, int256 targetLiq);
     error MismatchedSettlementBalance(int256 required, int256 actual, address token);
     error StalePoolPrice(address poolAddr, uint160 expectedSqrtPriceX96, uint160 actualSqrtPriceX96);
+    /// We add this to the dirty bit when we discover the liquidity needs to increase on the walk up.
+    uint8 public constant ADD_LIQ_DIRTY_FLAG;
 
     /// This does all the balances changes because all liquidity is only changed here.
     /// Thus we verify the balances changes here.
@@ -48,57 +50,42 @@ library PoolWalker {
         verifySpend(expectedYSpend, actualYSpend, pInfo.token1);
     }
 
+    /// Remove liquidity on the way down.
     function down(Key key, bool, bytes memory raw) private {
         Data memory data = WalkerLib.toData(raw);
         Node storage node = data.node(key);
 
         // On the way down, we remove liquidity.
-        if (data.liq.liqType == LiqType.TAKER) {
-            // If we're taking, we settle liquidity on the way down because any liquidity we add due to borrowing
-            // comes from reducing liquidity in the parent which leaves us with sufficient tokens for the child.
-            (bool dirty, bool sibDirty) = node.liq.isDirty();
-            if (dirty) {
-                // We are the regularly walked nodes so we'll never need a solve here, we can just update.
-                updateLiq(key, node, data);
-                node.liq.clean();
+        (bool dirty, bool sibDirty) = node.liq.isDirty();
+        if (dirty) {
+            // We are the regularly walked nodes so we'll never need a solve here, we can just update.
+            downUpdateLiq(key, node, data);
 
-                // On the way down, we walk the visit node first and then their sibling, so a dirty sib bit
-                // will always indicate a dirty sibling and they're the only ones who might need a solve.
-                if (sibDirty) {
-                    Key sibKey = key.sibling();
-                    Node storage sib = data.node(sibKey);
-
-                    LiqWalkerLite.solveSibLiq(sib);
-                    updateLiq(sibKey, sib, data);
-                    sib.liq.clean();
-                }
-            }
-        } else {
-            // When we're making, we don't add any liq on the way down. We just visit dirty siblings which would
-            // be repaying liq or compounding (which we already have the fees for).
-            (, bool sibDirty) = node.liq.isDirty();
             if (sibDirty) {
                 Key sibKey = key.sibling();
                 Node storage sib = data.node(sibKey);
-                // There's no way they would have been visited yet so they'll definitely be dirty and need a solve.
                 LiqWalkerLite.solveSibLiq(sib);
-                updateLiq(sibKey, sib, data);
-                sib.liq.clean();
+                downUpdateLiq(sibKey, sib, data);
             }
         }
     }
 
-    /// Add maker liquidity on the way up.
+    /// Add liquidity on the way up.
     function up(Key key, bool, bytes memory raw) private {
-        // For every node we call on, we just check if its dirty and needs an update.
-        // We've already updated the siblings.
         Data memory data = WalkerLib.toData(raw);
-        if (data.liq.liqType != LiqType.TAKER) {
-            Node storage node = data.node(key);
-            (bool dirty, ) = node.liq.isDirty();
-            if (dirty) {
-                updateLiq(key, node, data);
-                node.liq.clean();
+        Node storage node = data.node(key);
+
+        (bool dirty, bool sibDirty) = node.liq.isDirty();
+        if (dirty) {
+            upUpdateLiq(key, node, data);
+            // After the up update, we are sure the node is clean.
+            node.liq.clean();
+
+            if (sibDirty) {
+                Key sibKey = key.sibling();
+                Node storage sib = data.node(sibKey);
+                upUpdateLiq(sibKey, sib, data);
+                sib.liq.clean();
             }
         }
     }
@@ -109,7 +96,9 @@ library PoolWalker {
 
     /* Helpers */
 
-    function updateLiq(Key key, Node storage node, Data memory data) internal {
+    /// On the way down, we decrease liquidity. If we see the node actually has to increase liq.
+    /// We save a flag to avoid recalculating.
+    function downUpdateLiq(Key key, Node storage node, Data memory data) internal {
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
 
         // Because we lookup the liq instead of what we think we have,
@@ -127,11 +116,27 @@ library PoolWalker {
         // all liq is borrowed out according to our own accounting.
 
         if (targetLiq > liq) {
-            PoolLib.mint(data.poolAddr, lowTick, highTick, targetLiq - liq);
+            // We need to add liquidity. So we save it. We know this will be cleared eventually anyways.
+            node.liq.dirty |= ADD_LIQ_DIRTY_FLAG;
+            // We know pre borrow is zero after solving, so we store the liq diff here to avoid requerying.
+            node.liq.preBorrow = int128(targetLiq - liq);
         } else if (targetLiq < liq) {
             PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
             PoolLib.collect(data.poolAddr, lowTick, highTick, false);
         }
+    }
+
+    function upUpdateLiq(Key key, Node storage node, Data memory data) internal {
+        if (node.liq.dirty & ADD_LIQ_DIRTY_FLAG == 0) {
+            // No need to do anything.
+            return;
+        }
+        // The liq diff is stored by downUpdateLiq when the add liq flag is set.
+        uint128 liqDiff = uint128(node.liq.preBorrow);
+        (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        PoolLib.mint(data.poolAddr, lowTick, highTick, liqDiff);
+        // Reset the temporary storage in preBorrow.
+        node.liq.preBorrow = 0;
     }
 
     function verifySpend(int256 expectedSpend, int256 actualSpend, address token) internal pure {
