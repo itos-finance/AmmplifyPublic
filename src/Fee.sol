@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
-import { AdminLib } from "Commons/Util/Admin.sol";
-import { Store } from "./Store.sol";
-import { Asset } from "./Asset.sol";
-import { FullMath } from "./FullMath.sol";
+import {SmoothRateCurveConfig} from "Commons/Math/SmoothRateCurveLib.sol";
+import {AdminLib} from "Commons/Util/Admin.sol";
+import {Store} from "./Store.sol";
+import {Asset} from "./Asset.sol";
+import {FullMath} from "./FullMath.sol";
 
 struct FeeStore {
     SmoothRateCurveConfig defaultFeeCurve;
@@ -97,13 +97,10 @@ library FeeLib {
     }
 
     /// Applies JIT penalities to balances if applicable for this asset.
-    function applyJITPenalties(
-        Asset storage asset,
-        uint256 xBalance,
-        uint256 yBalance,
-        address tokenX,
-        address tokenY
-    ) internal returns (uint256 xBalanceOut, uint256 yBalanceOut) {
+    function applyJITPenalties(Asset storage asset, uint256 xBalance, uint256 yBalance, address tokenX, address tokenY)
+        internal
+        returns (uint256 xBalanceOut, uint256 yBalanceOut)
+    {
         FeeStore storage store = Store.fees();
         uint128 duration = uint128(block.timestamp) - asset.timestamp;
         if (duration >= store.jitLifetime) {
@@ -123,11 +120,11 @@ library FeeLib {
     }
 
     /// Views what JIT pentalties would be applied.
-    function viewJITPenalties(
-        Asset storage asset,
-        uint256 xBalance,
-        uint256 yBalance
-    ) internal view returns (uint256 xBalanceOut, uint256 yBalanceOut) {
+    function viewJITPenalties(Asset storage asset, uint256 xBalance, uint256 yBalance)
+        internal
+        view
+        returns (uint256 xBalanceOut, uint256 yBalanceOut)
+    {
         FeeStore storage store = Store.fees();
         uint128 duration = uint128(block.timestamp) - asset.timestamp;
         if (duration >= store.jitLifetime) {

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { Key } from "../tree/Key.sol";
-import { Data } from "./Data.sol";
-import { LiqNode, LiqType, LiqWalkerLite } from "./Liq.sol";
-import { Node } from "./Node.sol";
-import { Route, RouteImpl, Phase } from "../tree/Route.sol";
-import { PoolLib, PoolInfo } from "../Pool.sol";
-import { WalkerLib } from "./Lib.sol";
-import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {Key} from "../tree/Key.sol";
+import {Data} from "./Data.sol";
+import {LiqNode, LiqType, LiqWalkerLite} from "./Liq.sol";
+import {Node} from "./Node.sol";
+import {Route, RouteImpl, Phase} from "../tree/Route.sol";
+import {PoolLib, PoolInfo} from "../Pool.sol";
+import {WalkerLib} from "./Lib.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /// Walk down and up the pool to settle balances with the underlying AMM.
 /// @dev When walking down, we settle all the liquidity decreases so we have balances to work with,
@@ -18,7 +18,8 @@ library PoolWalker {
     error MismatchedSettlementBalance(int256 required, int256 actual, address token);
     error StalePoolPrice(address poolAddr, uint160 expectedSqrtPriceX96, uint160 actualSqrtPriceX96);
     /// We add this to the dirty bit when we discover the liquidity needs to increase on the walk up.
-    uint8 public constant ADD_LIQ_DIRTY_FLAG;
+
+    uint8 public constant ADD_LIQ_DIRTY_FLAG = 1 << 7;
 
     /// This does all the balances changes because all liquidity is only changed here.
     /// Thus we verify the balances changes here.

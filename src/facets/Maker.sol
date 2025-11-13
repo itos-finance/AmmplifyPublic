@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { PoolInfo } from "../Pool.sol";
-import { Asset, AssetLib } from "../Asset.sol";
-import { LiqType } from "../walkers/Liq.sol";
-import { Data, DataImpl } from "../walkers/Data.sol";
-import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
-import { WalkerLib, CompoundWalkerLib } from "../walkers/Lib.sol";
-import { PoolLib } from "../Pool.sol";
-import { PoolWalker } from "../walkers/Pool.sol";
-import { RFTLib } from "Commons/Util/RFT.sol";
-import { FeeLib } from "../Fee.sol";
-import { IMaker } from "../interfaces/IMaker.sol";
+import {PoolInfo} from "../Pool.sol";
+import {Asset, AssetLib} from "../Asset.sol";
+import {LiqType} from "../walkers/Liq.sol";
+import {Data, DataImpl} from "../walkers/Data.sol";
+import {ReentrancyGuardTransient} from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
+import {WalkerLib, CompoundWalkerLib} from "../walkers/Lib.sol";
+import {PoolLib} from "../Pool.sol";
+import {PoolWalker} from "../walkers/Pool.sol";
+import {RFTLib} from "Commons/Util/RFT.sol";
+import {FeeLib} from "../Fee.sol";
+import {IMaker} from "../interfaces/IMaker.sol";
 
 contract MakerFacet is ReentrancyGuardTransient, IMaker {
     uint128 public constant MIN_MAKER_LIQUIDITY = 1e6;
@@ -32,14 +32,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr); // 1 kB
         // When creating new positions, we make sure to validate the pool isn't malicious.
         pInfo.validate(); // .5 kB
-        (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
-            recipient,
-            pInfo,
-            lowTick,
-            highTick,
-            liq,
-            isCompounding
-        ); // 1.2 kB
+        (Asset storage asset, uint256 assetId) =
+            AssetLib.newMaker(recipient, pInfo, lowTick, highTick, liq, isCompounding); // 1.2 kB
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq); // 4.6 kb
         // This fills in the nodes in the asset.
         WalkerLib.modify(pInfo, lowTick, highTick, data); // 21.5 kB
@@ -49,18 +43,8 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         balances[0] = data.xBalance; // There are no fees to consider on new positions.
         balances[1] = data.yBalance;
         RFTLib.settle(msg.sender, tokens, balances, rftData); // 2.4 kB
-        // PoolWalker.settle(pInfo, lowTick, highTick, data); // 3.4 kB
-        emit MakerCreated(
-            recipient,
-            poolAddr,
-            assetId,
-            lowTick,
-            highTick,
-            liq,
-            isCompounding,
-            balances[0],
-            balances[1]
-        );
+        PoolWalker.settle(pInfo, lowTick, highTick, data); // 3.4 kB
+        emit MakerCreated(recipient, poolAddr, assetId, lowTick, highTick, liq, isCompounding, balances[0], balances[1]);
         return assetId;
     }
 
