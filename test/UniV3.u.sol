@@ -23,6 +23,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
     address[] public pools;
     address[] public poolToken0s;
     address[] public poolToken1s;
+    int24[] public tickSpacings;
     uint256 public _idx;
 
     constructor() {
@@ -88,6 +89,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         UniswapV3Pool(pool).initialize(sqrtPriceX96);
         UniswapV3Pool(pool).increaseObservationCardinalityNext(MIN_OBSERVATIONS);
         int24 spacing = UniswapV3Pool(pool).tickSpacing();
+        tickSpacings.push(spacing);
         addPoolLiq(idx, (TickMath.MIN_TICK / spacing) * spacing, (TickMath.MAX_TICK / spacing) * spacing, initLiq);
         skip(1 days); // skip ahead so we can do our default observation durations.
     }
