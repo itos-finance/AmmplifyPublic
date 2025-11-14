@@ -73,31 +73,12 @@ struct FeeData {
 library FeeDataLib {
     function make(PoolInfo memory pInfo) internal view returns (FeeData memory data) {
         (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
-        return
-            FeeData({
-                rootWidth: pInfo.treeWidth,
-                tickSpacing: pInfo.tickSpacing,
-                feeGrowthGlobal0X128: feeGrowthGlobal0X128,
-                feeGrowthGlobal1X128: feeGrowthGlobal1X128,
-                rateConfig: FeeLib.getRateCurve(pInfo.poolAddr),
-                splitConfig: FeeLib.getSplitCurve(pInfo.poolAddr),
-                // Unused till propogation.
-                leftColMakerXEarningsPerLiqX128: 0,
-                leftColTakerXEarningsPerLiqX128: 0,
-                leftColMakerYEarningsPerLiqX128: 0,
-                leftColTakerYEarningsPerLiqX128: 0,
-                rightColMakerXEarningsPerLiqX128: 0,
-                rightColTakerXEarningsPerLiqX128: 0,
-                rightColMakerYEarningsPerLiqX128: 0,
-                rightColTakerYEarningsPerLiqX128: 0,
-                leftRated: false,
-                rightRated: false,
-                lcaRated: false,
-                lcaLeftColMakerXEarningsPerLiqX128: 0,
-                lcaLeftColTakerXEarningsPerLiqX128: 0,
-                lcaLeftColMakerYEarningsPerLiqX128: 0,
-                lcaLeftColTakerYEarningsPerLiqX128: 0
-            });
+        data.rootWidth = pInfo.treeWidth;
+        data.tickSpacing = pInfo.tickSpacing;
+        data.feeGrowthGlobal0X128 = feeGrowthGlobal0X128;
+        data.feeGrowthGlobal1X128 = feeGrowthGlobal1X128;
+        data.rateConfig = FeeLib.getRateCurve(pInfo.poolAddr);
+        data.splitConfig = FeeLib.getSplitCurve(pInfo.poolAddr);
     }
 }
 
