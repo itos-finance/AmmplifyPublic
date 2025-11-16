@@ -4,20 +4,35 @@ pragma solidity ^0.8.27;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { SimplexDiamond } from "../src/Diamond.sol";
+import { AdminFacet } from "../src/facets/Admin.sol";
+import { MakerFacet } from "../src/facets/Maker.sol";
+import { TakerFacet } from "../src/facets/Taker.sol";
+import { PoolFacet } from "../src/facets/Pool.sol";
+import { ViewFacet } from "../src/facets/View.sol";
 
 /**
  * @title DeployDiamond
  * @dev Deployment script for the SimplexDiamond contract
  *
- * This script deploys the SimplexDiamond contract, which is a diamond proxy pattern implementation
- * that automatically registers all required facets during construction:
- * - DiamondCutFacet: For managing facets
- * - DiamondLoupeFacet: For inspecting facets
+ * This script deploys application facets separately, then deploys the SimplexDiamond contract
+ * with the facet addresses. DiamondCutFacet and DiamondLoupeFacet are deployed inline
+ * by the Diamond constructor as they are core infrastructure facets.
+ *
+ * This approach:
+ * - Allows for independent application facet deployment and verification
+ * - Reduces the Diamond contract's constructor size for application facets
+ * - Makes it easier to track individual facet deployments
+ *
+ * Facets deployed separately:
  * - AdminFacet: For administrative functions
  * - MakerFacet: For maker-related operations
  * - TakerFacet: For taker-related operations
  * - PoolFacet: For pool callback functions
  * - ViewFacet: For view/query functions
+ *
+ * Facets deployed inline by Diamond:
+ * - DiamondCutFacet: For managing facets
+ * - DiamondLoupeFacet: For inspecting facets
  *
  * Usage Examples:
  *
@@ -47,6 +62,13 @@ import { SimplexDiamond } from "../src/Diamond.sol";
 contract DeployDiamond is Script {
     SimplexDiamond public diamond;
 
+    // Facet addresses
+    AdminFacet public adminFacet;
+    MakerFacet public makerFacet;
+    TakerFacet public takerFacet;
+    PoolFacet public poolFacet;
+    ViewFacet public viewFacet;
+
     function run() external {
         // Get the deployer's address and private key from environment
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
@@ -57,17 +79,54 @@ contract DeployDiamond is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy the SimplexDiamond contract
-        // The constructor will automatically:
-        // 1. Initialize the owner (msg.sender)
-        // 2. Initialize fee library
-        // 3. Deploy and register all facets (DiamondCut, DiamondLoupe, Admin, Maker, Taker, Pool, View)
-        address univ3Factory = address(0x3);
-        diamond = new SimplexDiamond(univ3Factory);
+        // Deploy application facets first
+        // Note: DiamondCutFacet and DiamondLoupeFacet are deployed inline by the Diamond constructor
+        console.log("\n=== Deploying Application Facets ===");
+
+        console.log("Deploying AdminFacet...");
+        adminFacet = new AdminFacet();
+        console.log("AdminFacet deployed at:", address(adminFacet));
+
+        console.log("Deploying MakerFacet...");
+        makerFacet = new MakerFacet();
+        console.log("MakerFacet deployed at:", address(makerFacet));
+
+        console.log("Deploying TakerFacet...");
+        takerFacet = new TakerFacet();
+        console.log("TakerFacet deployed at:", address(takerFacet));
+
+        console.log("Deploying PoolFacet...");
+        poolFacet = new PoolFacet();
+        console.log("PoolFacet deployed at:", address(poolFacet));
+
+        console.log("Deploying ViewFacet...");
+        viewFacet = new ViewFacet();
+        console.log("ViewFacet deployed at:", address(viewFacet));
+
+        // Deploy the SimplexDiamond contract with application facet addresses
+        // The constructor will:
+        // 1. Deploy DiamondCutFacet and DiamondLoupeFacet inline
+        // 2. Initialize the owner (msg.sender)
+        // 3. Initialize fee library
+        // 4. Register all facets (including inline-deployed ones)
+        console.log("\n=== Deploying Diamond ===");
+        console.log("(DiamondCutFacet and DiamondLoupeFacet will be deployed inline)");
+        address univ3Factory = address(0xDEADDEADDEAD);
+
+        SimplexDiamond.FacetAddresses memory facetAddresses = SimplexDiamond.FacetAddresses({
+            adminFacet: address(adminFacet),
+            makerFacet: address(makerFacet),
+            takerFacet: address(takerFacet),
+            poolFacet: address(poolFacet),
+            viewFacet: address(viewFacet)
+        });
+
+        diamond = new SimplexDiamond(univ3Factory, facetAddresses);
 
         vm.stopBroadcast();
 
         // Log deployment information
+        console.log("\n=== Deployment Summary ===");
         console.log("SimplexDiamond deployed at:", address(diamond));
 
         // Cast diamond to access owner function

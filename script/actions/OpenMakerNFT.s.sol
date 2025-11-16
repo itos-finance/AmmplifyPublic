@@ -27,7 +27,6 @@ contract OpenMakerNFT is AmmplifyPositions {
         printPoolState(env.usdcWethPool);
 
         // Fund the account with tokens (if using mock tokens)
-        // Note: Deployer should already have tokens from DeployTokens.s.sol
         fundAccount(deployer, 1000e6, 1e18); // 1000 USDC, 1 WETH
 
         // Set up token approvals for diamond and NFT manager contracts

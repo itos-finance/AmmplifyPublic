@@ -208,22 +208,11 @@ contract AmmplifyPositions is Script {
         console2.log("Token0:", token0);
         console2.log("Token1:", token1);
 
-        // Check if we already have max approval, if not, approve the calculated amount with buffer
-        // Use msg.sender (the deployer) instead of address(this) for allowance checks
-        uint256 currentAllowance0 = IERC20(token0).allowance(msg.sender, env.simplexDiamond);
-        uint256 currentAllowance1 = IERC20(token1).allowance(msg.sender, env.simplexDiamond);
-
-        if (currentAllowance0 < amount0) {
-            // Add a small buffer to avoid precision issues during transfer
-            uint256 buffer0 = amount0 / 1000 + 1; // 0.1% buffer + 1
-            IERC20(token0).approve(env.simplexDiamond, amount0 + buffer0);
-        }
-
-        if (currentAllowance1 < amount1) {
-            // Add a small buffer to avoid precision issues during transfer
-            uint256 buffer1 = amount1 / 1000 + 1; // 0.1% buffer + 1
-            IERC20(token1).approve(env.simplexDiamond, amount1 + buffer1);
-        }
+        // Since we're broadcasting as the deployer (via vm.startBroadcast), 
+        // and approvals should already be set up by the calling script,
+        // we can skip the allowance check and approval here.
+        // If approvals are needed, they should be set up before calling this function.
+        // The calling script (SetupPoolPositions) already sets up max approvals for all tokens.
 
         // Open the maker position
         assetId = maker.newMaker(

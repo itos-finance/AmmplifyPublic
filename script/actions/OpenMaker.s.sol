@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/console2.sol";
 
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { IUniswapV3Pool } from "lib/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 import { AmmplifyPositions } from "../AmmplifyPositions.s.sol";
 
@@ -25,6 +26,10 @@ contract OpenMaker is AmmplifyPositions {
         // Get current pool state
         printPoolState(env.usdcWethPool);
 
+        // Query slot0 to get current tick
+        (, int24 currentTick, , , , , ) = IUniswapV3Pool(env.usdcWethPool).slot0();
+        console2.log("Current tick from slot0:", currentTick);
+
         // Fund the account with tokens (if using mock tokens)
         fundAccount(deployer, 1000000000e6, 10000e18);
 
@@ -35,15 +40,13 @@ contract OpenMaker is AmmplifyPositions {
         MakerParams memory params = getDefaultMakerParams(deployer);
 
         // Adjust liquidity based on available tokens
-        params.liquidity = 1e18;
+        params.liquidity = 64861280439056 - 10_000;
+        // params.liquidity = 1e18;
 
-        // Use valid ticks for 3000 fee tier (tick spacing = 60)
-        // Create a smaller range around current price (tick 0) to avoid extreme values
-        params.lowTick = -491460; // getValidTick(-14787 * 60, 3000) + 360000;
-        params.highTick = 491460; // getValidTick(14787 * 60, 3000) - 360000;
-        // params.lowTick = -195720;
-        // params.highTick = -191700;
-        params.liquidity = 64861280439056;
+        // Calculate ticks ±300 around current tick, ensuring they're valid for 3000 fee tier (tick spacing = 60)
+        int24 tickRange = 300;
+        params.lowTick = getValidTick(currentTick - tickRange, 3000);
+        params.highTick = getValidTick(currentTick + tickRange, 3000);
 
         console2.log("=== Maker Parameters ===");
         console2.log("Recipient:", params.recipient);
@@ -52,6 +55,8 @@ contract OpenMaker is AmmplifyPositions {
         console2.log("High Tick:", params.highTick);
         console2.log("Liquidity:", params.liquidity);
         console2.log("Is Compounding:", params.isCompounding);
+
+        params.recipient = 0xbe7dC5cC7977ac378ead410869D6c96f1E6C773e;
 
         // Open the position directly (no NFT wrapper)
         uint256 assetId = openMakerDirect(params);

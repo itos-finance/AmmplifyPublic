@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { UniV3Decomposer } from "../src/integrations/UniV3Decomposer.sol";
+import { AdminFacet } from "../src/facets/Admin.sol";
 
 /**
  * @title DeployUniV3Decomposer
@@ -38,6 +39,8 @@ contract DeployUniV3Decomposer is Script {
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
+        address diamond = address(0x05567622F4246b4372E3963CF5a0d435354a467d);
+
         console.log("Deploying UniV3Decomposer with deployer:", deployer);
 
         // Load required addresses
@@ -47,6 +50,9 @@ contract DeployUniV3Decomposer is Script {
 
         // Deploy UniV3Decomposer
         decomposer = new UniV3Decomposer(nfpmAddress, makerFacetAddress);
+
+        // add it as a generically usable opener
+        AdminFacet(diamond).addPermissionedOpener(address(decomposer));
 
         vm.stopBroadcast();
 
@@ -64,14 +70,12 @@ contract DeployUniV3Decomposer is Script {
             console.log("MAKER_FACET not set in environment, using zero address");
             makerFacetAddress = address(0);
         }
-
         try vm.envAddress("NFPM") returns (address nfpm) {
             nfpmAddress = nfpm;
         } catch {
             console.log("NFPM not set in environment, using zero address");
             nfpmAddress = address(0);
         }
-
         require(makerFacetAddress != address(0), "MAKER_FACET address required");
         require(nfpmAddress != address(0), "NFPM address required");
 

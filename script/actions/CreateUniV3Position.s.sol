@@ -72,9 +72,11 @@ contract CreateUniV3Position is AmmplifyPositions {
         // Set up token approvals for Uniswap NFPM
         setupUniswapApprovals(type(uint256).max);
 
+        address recipient = address(0xbe7dC5cC7977ac378ead410869D6c96f1E6C773e);
+
         // Create a basic position around current price
         uint256 tokenId = createBasicPosition(
-            deployer,
+            recipient,
             env.usdcToken,
             env.wethToken,
             3000, // 0.3% fee tier
