@@ -25,18 +25,30 @@ import { PoolValidation } from "./Pool.sol";
 error FunctionNotFound(bytes4 _functionSelector);
 
 contract SimplexDiamond is IDiamond {
-    constructor(address uniV3factory) {
+    struct FacetAddresses {
+        address adminFacet;
+        address makerFacet;
+        address takerFacet;
+        address poolFacet;
+        address viewFacet;
+    }
+
+    constructor(address uniV3factory, FacetAddresses memory facetAddresses) {
         AdminLib.initOwner(msg.sender);
         FeeLib.init();
         PoolValidation.initFactory(uniV3factory);
         FacetCut[] memory cuts = new FacetCut[](7);
+
+        // Deploy DiamondCutFacet and DiamondLoupeFacet inline
+        DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
+        DiamondLoupeFacet diamondLoupeFacet = new DiamondLoupeFacet();
 
         {
             bytes4[] memory cutFunctionSelectors = new bytes4[](1);
             cutFunctionSelectors[0] = DiamondCutFacet.diamondCut.selector;
 
             cuts[0] = FacetCut({
-                facetAddress: address(new DiamondCutFacet()),
+                facetAddress: address(diamondCutFacet),
                 action: FacetCutAction.Add,
                 functionSelectors: cutFunctionSelectors
             });
@@ -50,7 +62,7 @@ contract SimplexDiamond is IDiamond {
             loupeFacetSelectors[3] = DiamondLoupeFacet.facetAddress.selector;
             loupeFacetSelectors[4] = DiamondLoupeFacet.supportsInterface.selector;
             cuts[1] = FacetCut({
-                facetAddress: address(new DiamondLoupeFacet()),
+                facetAddress: address(diamondLoupeFacet),
                 action: FacetCutAction.Add,
                 functionSelectors: loupeFacetSelectors
             });
@@ -85,7 +97,7 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[24] = AdminFacet.addPermissionedOpener.selector;
             adminSelectors[25] = AdminFacet.removePermissionedOpener.selector;
             cuts[2] = FacetCut({
-                facetAddress: address(new AdminFacet()),
+                facetAddress: facetAddresses.adminFacet,
                 action: FacetCutAction.Add,
                 functionSelectors: adminSelectors
             });
@@ -102,7 +114,7 @@ contract SimplexDiamond is IDiamond {
             selectors[6] = MakerFacet.removePermission.selector;
 
             cuts[3] = IDiamond.FacetCut({
-                facetAddress: address(new MakerFacet()),
+                facetAddress: facetAddresses.makerFacet,
                 action: IDiamond.FacetCutAction.Add,
                 functionSelectors: selectors
             });
@@ -115,7 +127,7 @@ contract SimplexDiamond is IDiamond {
             selectors[2] = TakerFacet.newTaker.selector;
             selectors[3] = TakerFacet.removeTaker.selector;
             cuts[4] = IDiamond.FacetCut({
-                facetAddress: address(new TakerFacet()),
+                facetAddress: facetAddresses.takerFacet,
                 action: IDiamond.FacetCutAction.Add,
                 functionSelectors: selectors
             });
@@ -123,9 +135,9 @@ contract SimplexDiamond is IDiamond {
 
         {
             bytes4[] memory selectors = new bytes4[](1);
-            selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
+            selectors[0] = PoolFacet.capricornCLMintCallback.selector;
             cuts[5] = IDiamond.FacetCut({
-                facetAddress: address(new PoolFacet()),
+                facetAddress: facetAddresses.poolFacet,
                 action: IDiamond.FacetCutAction.Add,
                 functionSelectors: selectors
             });
@@ -142,7 +154,7 @@ contract SimplexDiamond is IDiamond {
             selectors[6] = ViewFacet.getCollateralBalances.selector;
             selectors[7] = ViewFacet.queryPermission.selector;
             cuts[6] = IDiamond.FacetCut({
-                facetAddress: address(new ViewFacet()),
+                facetAddress: facetAddresses.viewFacet,
                 action: IDiamond.FacetCutAction.Add,
                 functionSelectors: selectors
             });

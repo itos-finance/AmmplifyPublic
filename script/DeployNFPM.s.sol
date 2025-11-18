@@ -4,8 +4,8 @@ pragma solidity ^0.8.27;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
-import { NonfungiblePositionManager } from "../../test/mocks/nfpm/NonfungiblePositionManager.sol";
-import { NonfungibleTokenPositionDescriptor } from "../../test/mocks/nfpm/NonfungibleTokenPositionDescriptor.sol";
+import { NonfungiblePositionManager } from "../test/mocks/nfpm/NonfungiblePositionManager.sol";
+import { NonfungibleTokenPositionDescriptor } from "../test/mocks/nfpm/NonfungibleTokenPositionDescriptor.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 
 /**

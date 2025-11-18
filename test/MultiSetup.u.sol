@@ -50,8 +50,26 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
 
     /// Deploy the diamond and facets
     function _newDiamond() internal {
-        diamond = address(new SimplexDiamond(address(factory)));
+        // Deploy facets first
+        adminFacet = new AdminFacet();
+        makerFacet = new MakerFacet();
+        takerFacet = new TakerFacet();
+        poolFacet = new PoolFacet();
+        viewFacet = new ViewFacet();
 
+        // Create facet addresses struct
+        SimplexDiamond.FacetAddresses memory facetAddresses = SimplexDiamond.FacetAddresses({
+            adminFacet: address(adminFacet),
+            makerFacet: address(makerFacet),
+            takerFacet: address(takerFacet),
+            poolFacet: address(poolFacet),
+            viewFacet: address(viewFacet)
+        });
+
+        // Deploy diamond with factory and facet addresses
+        diamond = address(new SimplexDiamond(address(factory), facetAddresses));
+
+        // Cast facets to diamond address for interface access
         adminFacet = AdminFacet(diamond);
         makerFacet = MakerFacet(diamond);
         takerFacet = TakerFacet(diamond);

@@ -90,7 +90,7 @@ contract AmmplifyPositions is Script {
      */
     function loadEnvironment() public {
         string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/deployed-addresses.json");
+        string memory path = string.concat(root, "/deployed-capricorn.json");
         string memory json = vm.readFile(path);
 
         env.deployer = json.readAddress(".deployer");
@@ -208,7 +208,7 @@ contract AmmplifyPositions is Script {
         console2.log("Token0:", token0);
         console2.log("Token1:", token1);
 
-        // Since we're broadcasting as the deployer (via vm.startBroadcast), 
+        // Since we're broadcasting as the deployer (via vm.startBroadcast),
         // and approvals should already be set up by the calling script,
         // we can skip the allowance check and approval here.
         // If approvals are needed, they should be set up before calling this function.
