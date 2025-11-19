@@ -92,7 +92,7 @@ contract FeeTest is Test {
         _assertDefaultFeeCurve(FeeLib.getRateCurve(address(0)));
     }
 
-    function testDefaultFeeCurve() public {
+    function testDefaultFeeCurve() public view {
         SmoothRateCurveConfig memory rateCurve = FeeLib.getRateCurve(address(0));
         uint256 seconds_in_year = 365 days;
         uint128 rateX64 = SmoothRateCurveLib.calculateRateX64(rateCurve, 0);

@@ -13,11 +13,13 @@ import { MockERC20 } from "./mocks/MockERC20.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 
 import { Test } from "forge-std/Test.sol";
+import { console } from "forge-std/console.sol";
 
 contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback, Test {
     uint160 public constant INIT_SQRT_PRICEX96 = 1 << 96;
     uint16 public constant MIN_OBSERVATIONS = 32;
     UniswapV3Factory public factory;
+    ExternalUniV3Caller public extCaller;
     // NOTE: You don't need to store the return values of any of the setup functions besides idx
     // because you can retrieve the relevant information from here.
     address[] public pools;
@@ -28,6 +30,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
 
     constructor() {
         factory = new UniswapV3Factory();
+        extCaller = new ExternalUniV3Caller();
     }
 
     function setUpPool() public returns (uint256 idx, address pool, address token0, address token1) {
@@ -109,7 +112,8 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         _idx = 0;
     }
 
-    // Swap an amount in the pool.
+    /// Swap an amount in the pool.
+    /// @dev You should prank from this contract for the callback to work.
     function swap(uint256 index, int256 amount, bool zeroForOne) public {
         _idx = index;
         address pool = pools[index];
@@ -118,6 +122,7 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
     }
 
     // Swap the pool to a certain price.
+    /// @dev You should prank from this contract for the callback to work.
     function swapTo(uint256 index, uint160 targetPriceX96) public {
         _idx = index;
         address pool = pools[index];
@@ -130,6 +135,43 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
         _idx = 0;
     }
 
+    /// Swap an amount via the external caller.
+    function extSwap(
+        uint256 index,
+        bool zeroForOne,
+        int256 amountSpecified
+    ) public {
+        IERC20 token0 = IERC20(poolToken0s[index]);
+        IERC20 token1 = IERC20(poolToken1s[index]);
+        token0.approve(address(extCaller), type(uint256).max);
+        token1.approve(address(extCaller), type(uint256).max);
+
+        extCaller.swap(pools[index], address(this), zeroForOne, amountSpecified, zeroForOne ? 0 : type(uint160).max);
+
+        token0.approve(address(extCaller), 0);
+        token1.approve(address(extCaller), 0);
+    }
+
+    /// Swap the pool to a certain price using your own balances.
+    /// @dev This can be called from any prank.
+    function extSwapTo(uint256 index, uint160 targetPriceX96) public {
+        address pool = pools[index];
+        IERC20 token0 = IERC20(poolToken0s[index]);
+        IERC20 token1 = IERC20(poolToken1s[index]);
+        token0.approve(address(extCaller), type(uint256).max);
+        token1.approve(address(extCaller), type(uint256).max);
+
+        (uint160 currentPX96, , , , , , ) = UniswapV3Pool(pool).slot0();
+        if (currentPX96 < targetPriceX96) {
+            extCaller.swap(pool, address(this), false, type(int256).max, targetPriceX96);
+        } else {
+            extCaller.swap(pool, address(this), true, type(int256).max, targetPriceX96);
+        }
+
+        token0.approve(address(extCaller), 0);
+        token1.approve(address(extCaller), 0);
+    }
+
     function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external virtual {
         TransferHelper.safeTransfer(poolToken0s[_idx], msg.sender, amount0Owed);
         TransferHelper.safeTransfer(poolToken1s[_idx], msg.sender, amount1Owed);
@@ -140,6 +182,85 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
             TransferHelper.safeTransfer(poolToken0s[_idx], msg.sender, uint256(amount0Delta));
         } else if (amount1Delta > 0) {
             TransferHelper.safeTransfer(poolToken1s[_idx], msg.sender, uint256(amount1Delta));
+        }
+    }
+}
+
+contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
+    address transient public caller;
+    address transient public recipient;
+
+    function swap(
+        address pool,
+        address to,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96
+    ) external {
+        caller = msg.sender;
+        recipient = to;
+        UniswapV3Pool(pool).swap(address(this), zeroForOne, amountSpecified, sqrtPriceLimitX96, "");
+    }
+
+    function mint(
+        address pool,
+        address to,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 amount
+    ) external {
+        caller = msg.sender;
+        recipient = to;
+        UniswapV3Pool(pool).mint(address(this), tickLower, tickUpper, amount, "");
+    }
+
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external {
+        if (amount0Delta > 0) {
+            TransferHelper.safeTransferFrom(
+                UniswapV3Pool(msg.sender).token0(),
+                caller,
+                msg.sender,
+                uint256(amount0Delta)
+            );
+        } else {
+            TransferHelper.safeTransfer(
+                UniswapV3Pool(msg.sender).token0(),
+                recipient,
+                uint256(-amount0Delta)
+            );
+        }
+        if (amount1Delta > 0) {
+            TransferHelper.safeTransferFrom(
+                UniswapV3Pool(msg.sender).token1(),
+                caller,
+                msg.sender,
+                uint256(amount1Delta)
+            );
+        } else {
+            TransferHelper.safeTransfer(
+                UniswapV3Pool(msg.sender).token1(),
+                recipient,
+                uint256(-amount1Delta)
+            );
+        }
+    }
+
+    function uniswapV3MintCallback(uint256 amount0Owed, uint256 amount1Owed, bytes calldata) external {
+        if (amount0Owed > 0) {
+            TransferHelper.safeTransferFrom(
+                UniswapV3Pool(msg.sender).token0(),
+                caller,
+                msg.sender,
+                amount0Owed
+            );
+        }
+        if (amount1Owed > 0) {
+            TransferHelper.safeTransferFrom(
+                UniswapV3Pool(msg.sender).token1(),
+                caller,
+                msg.sender,
+                amount1Owed
+            );
         }
     }
 }

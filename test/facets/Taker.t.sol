@@ -1265,6 +1265,71 @@ contract TakerFacetTest is MultiSetupTest {
         );
     }
 
+    /// Test that takers can borrow from maker liq immediately without issue even without collateral
+    /// since no fees have been accrued yet.
+    function testTakerBorrowing() public {
+        bytes memory rftData = "";
+
+        // Even if we don't collateralize we should be able to deposit + withdraw.
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            -491520,
+            491520,
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            [int24(60), int24(120)],
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+    }
+
+    /// Test we can open and close a taker without collateralization.
+    function testTakerBorrowingClose() public {
+        bytes memory rftData = "";
+
+        // Even if we don't collateralize we should be able to deposit + withdraw.
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            -491520,
+            491520,
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        uint256 takerId = takerFacet.newTaker(
+            recipient,
+            poolAddr,
+            [int24(60), int24(120)],
+            liquidity,
+            vaultIndices,
+            sqrtPriceLimitsX96,
+            freezeSqrtPriceX96,
+            rftData
+        );
+
+        takerFacet.removeTaker(takerId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+    }
+
     /* TODO tests.
     Test vault earnings for taker
     */
