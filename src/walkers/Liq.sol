@@ -256,8 +256,12 @@ library LiqWalker {
             iter.lowTick,
             iter.highTick
         );
-        uint256 feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
-        uint256 feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
+        uint256 feeDiffInside0X128;
+        uint256 feeDiffInside1X128;
+        unchecked {
+            feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
+            feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
+        }
         // This raw fee growth is what's owed by Takers.
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
@@ -307,6 +311,7 @@ library LiqWalker {
             availableCompoundY,
             data.sqrtPriceX96
         );
+
         if (assignableLiq < data.liq.compoundThreshold) {
             // Not worth compounding right now.
             return;
