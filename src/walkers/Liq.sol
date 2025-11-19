@@ -283,7 +283,7 @@ library LiqWalker {
 
         // With no taker fees, we can only earn from the net liq, not the maker liq.
         int128 netLiq = node.liq.net();
-        if (netLiq <= 0) return;
+        if (node.liq.mLiq == 0 || netLiq <= 0) return;
 
         // Otherwise, the fees should have been collected (or are available from collateral)
         // and we can compound.
