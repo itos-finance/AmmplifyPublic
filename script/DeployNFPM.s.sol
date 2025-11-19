@@ -4,8 +4,8 @@ pragma solidity ^0.8.27;
 import { Script } from "forge-std/Script.sol";
 import { console } from "forge-std/console.sol";
 import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
-import { NonfungiblePositionManager } from "../../test/mocks/nfpm/NonfungiblePositionManager.sol";
-import { NonfungibleTokenPositionDescriptor } from "../../test/mocks/nfpm/NonfungibleTokenPositionDescriptor.sol";
+import { NonfungiblePositionManager } from "../test/mocks/nfpm/NonfungiblePositionManager.sol";
+import { NonfungibleTokenPositionDescriptor } from "../test/mocks/nfpm/NonfungibleTokenPositionDescriptor.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 
 /**
@@ -85,7 +85,6 @@ contract DeployNFPM is Script {
             console.log("WETH9 not set in environment, using zero address");
             weth9 = address(0);
         }
-
         // Load factory address from deployed-addresses.json
         try vm.readFile("./deployed-addresses.json") returns (string memory jsonData) {
             // Parse the JSON to get the factory address directly
@@ -101,7 +100,6 @@ contract DeployNFPM is Script {
                 factoryAddress = address(0);
             }
         }
-
         // require(weth9 != address(0), "WETH9 address required");
 
         console.log("Configuration:");

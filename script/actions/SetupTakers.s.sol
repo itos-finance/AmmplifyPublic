@@ -192,14 +192,20 @@ contract SetupTakers is AmmplifyPositions {
                     // Minimum taker liquidity
                     // Each taker spans one tick spacing: from startTick to startTick + tickSpacing
                     int24 tickLower = getValidTick(startTick, fee);
-                    int24 tickUpper = getValidTick(startTick + int24(int256(tickSpacing)), fee);
+                    int24 takerTickUpper = getValidTick(startTick + int24(int256(tickSpacing)), fee);
 
                     console2.log("\n--- Taker at start tick (tick", vm.toString(startTick), ") ---");
                     console2.log("Percentage:", percentage, "%");
                     console2.log("Liquidity to take:", liquidityToTake);
-                    console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(tickUpper));
+                    console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(takerTickUpper));
 
-                    uint256 assetId = _createTaker(deployer, poolAddress, [tickLower, tickUpper], liquidityToTake, fee);
+                    uint256 assetId = _createTaker(
+                        deployer,
+                        poolAddress,
+                        [tickLower, takerTickUpper],
+                        liquidityToTake,
+                        fee
+                    );
 
                     takerAssetIds[assetIdIndex] = assetId;
                     assetIdIndex++;
@@ -227,16 +233,22 @@ contract SetupTakers is AmmplifyPositions {
 
                 // Each taker spans one tick spacing: from targetTick to targetTick + tickSpacing
                 int24 tickLower = getValidTick(targetTick, fee);
-                int24 tickUpper = getValidTick(targetTick + int24(int256(tickSpacing)), fee);
+                int24 takerTickUpper = getValidTick(targetTick + int24(int256(tickSpacing)), fee);
 
                 console2.log("\n--- Taker at tick", vm.toString(targetTick), "---");
                 console2.log("Steps away from start tick:", step);
                 console2.log("Tick offset:", vm.toString(tickOffset));
                 console2.log("Percentage:", percentage, "%");
                 console2.log("Liquidity to take:", liquidityToTake);
-                console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(tickUpper));
+                console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(takerTickUpper));
 
-                uint256 assetId = _createTaker(deployer, poolAddress, [tickLower, tickUpper], liquidityToTake, fee);
+                uint256 assetId = _createTaker(
+                    deployer,
+                    poolAddress,
+                    [tickLower, takerTickUpper],
+                    liquidityToTake,
+                    fee
+                );
 
                 takerAssetIds[assetIdIndex] = assetId;
                 assetIdIndex++;
@@ -260,16 +272,22 @@ contract SetupTakers is AmmplifyPositions {
 
                 // Each taker spans one tick spacing: from targetTick to targetTick + tickSpacing
                 int24 tickLower = getValidTick(targetTick, fee);
-                int24 tickUpper = getValidTick(targetTick + int24(int256(tickSpacing)), fee);
+                int24 takerTickUpper = getValidTick(targetTick + int24(int256(tickSpacing)), fee);
 
                 console2.log("\n--- Taker at tick", vm.toString(targetTick), "---");
                 console2.log("Steps away from start tick:", step);
                 console2.log("Tick offset:", vm.toString(tickOffset));
                 console2.log("Percentage:", percentage, "%");
                 console2.log("Liquidity to take:", liquidityToTake);
-                console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(tickUpper));
+                console2.log("Tick range:", vm.toString(tickLower), "to", vm.toString(takerTickUpper));
 
-                uint256 assetId = _createTaker(deployer, poolAddress, [tickLower, tickUpper], liquidityToTake, fee);
+                uint256 assetId = _createTaker(
+                    deployer,
+                    poolAddress,
+                    [tickLower, takerTickUpper],
+                    liquidityToTake,
+                    fee
+                );
 
                 takerAssetIds[assetIdIndex] = assetId;
                 assetIdIndex++;
