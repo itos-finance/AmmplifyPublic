@@ -388,7 +388,7 @@ contract CapricornFork is AmmplifyForkBase {
         console2.log("\n=== Adding Liquidity to Pool ===");
 
         // Get pool info
-        (uint24 fee, int24 tickSpacing, uint160 sqrtPriceX96, int24 currentTick, ) = getPoolInfo();
+        (uint24 fee, , , , ) = getPoolInfo();
 
         // Calculate a wide tick range around current price for maximum liquidity coverage
         int24 tickLower = getValidTick(-887272, fee);

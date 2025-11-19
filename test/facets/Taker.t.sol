@@ -1060,7 +1060,7 @@ contract TakerFacetTest is MultiSetupTest {
         viewFacet.queryAssetBalances(assetId0);
 
         // Now we have another taker take the rest of the avilable liquidity.
-        uint256 assetId1 = takerFacet.newTaker(
+        takerFacet.newTaker(
             recipient,
             poolAddr,
             ticks,

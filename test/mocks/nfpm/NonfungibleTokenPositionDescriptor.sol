@@ -16,9 +16,9 @@ contract NonfungibleTokenPositionDescriptor is INonfungibleTokenPositionDescript
 
     /// @inheritdoc INonfungibleTokenPositionDescriptor
     function tokenURI(
-        INonfungiblePositionManager positionManager,
+        INonfungiblePositionManager /* positionManager */,
         uint256 tokenId
-    ) external view override returns (string memory) {
+    ) external pure override returns (string memory) {
         // Simple mock implementation that returns a basic JSON metadata
         return string(
             abi.encodePacked(

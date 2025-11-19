@@ -48,9 +48,9 @@ contract UpdateFeeCurve is AmmplifyPositions {
         console2.log("=== Current Fee Configuration ===");
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory currentFeeCurve,
-            SmoothRateCurveConfig memory currentSplitCurve,
+            SmoothRateCurveConfig memory /* currentSplitCurve */,
             uint128 currentCompoundThreshold,
-            uint32 currentTwapInterval
+            uint32 /* currentTwapInterval */
         ) {
             console2.log("Current Fee Curve - invAlphaX128:", currentFeeCurve.invAlphaX128);
             console2.log("Current Fee Curve - betaX64:", currentFeeCurve.betaX64);
@@ -75,9 +75,9 @@ contract UpdateFeeCurve is AmmplifyPositions {
         console2.log("=== Verifying Fee Curve Update ===");
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory updatedFeeCurve,
-            SmoothRateCurveConfig memory updatedSplitCurve,
+            SmoothRateCurveConfig memory /* updatedSplitCurve */,
             uint128 updatedCompoundThreshold,
-            uint32 updatedTwapInterval
+            uint32 /* updatedTwapInterval */
         ) {
             console2.log("Updated Fee Curve - invAlphaX128:", updatedFeeCurve.invAlphaX128);
             console2.log("Updated Fee Curve - betaX64:", updatedFeeCurve.betaX64);

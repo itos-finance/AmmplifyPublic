@@ -179,7 +179,7 @@ contract SetupPoolPositions is AmmplifyPositions {
     /**
      * @notice Fund deployer with all tokens needed for all pools
      */
-    function _fundDeployerWithAllTokens(address deployer, PoolConfig[] memory pools) internal {
+    function _fundDeployerWithAllTokens(address deployer, PoolConfig[] memory /* pools */) internal {
         // Load token addresses from JSON
         string memory root = vm.projectRoot();
         string memory path = string.concat(root, "/deployed-addresses.json");
@@ -229,7 +229,7 @@ contract SetupPoolPositions is AmmplifyPositions {
     /**
      * @notice Setup approvals for all tokens to diamond and NFT manager
      */
-    function _setupAllTokenApprovals(address deployer, PoolConfig[] memory pools) internal {
+    function _setupAllTokenApprovals(address /* deployer */, PoolConfig[] memory pools) internal {
         uint256 maxApproval = type(uint256).max;
 
         // Approve SimplexDiamond

@@ -35,7 +35,7 @@ contract SimpleSwapRouter is ISwapRouter {
     }
 
     /// @dev Returns the hardcoded pool for USDC/WETH swaps
-    function getPool(address tokenA, address tokenB, uint24 fee) public pure returns (IUniswapV3Pool) {
+    function getPool(address /* tokenA */, address /* tokenB */, uint24 /* fee */) public pure returns (IUniswapV3Pool) {
         // Hardcoded pool address for USDC/WETH 0.3% fee
         // This simplifies testing by always using the same pool
         return IUniswapV3Pool(USDC_WETH_POOL);
@@ -194,9 +194,9 @@ contract SimpleSwapRouter is ISwapRouter {
 
     /// @dev Helper function to get pool state for debugging
     function getPoolState(
-        address tokenA,
-        address tokenB,
-        uint24 fee
+        address /* tokenA */,
+        address /* tokenB */,
+        uint24 /* fee */
     )
         external
         view
@@ -216,7 +216,7 @@ contract SimpleSwapRouter is ISwapRouter {
     }
 
     /// @dev Helper function to check if a pool exists
-    function poolExists(address tokenA, address tokenB, uint24 fee) external view returns (bool) {
+    function poolExists(address /* tokenA */, address /* tokenB */, uint24 /* fee */) external pure returns (bool) {
         // Always return true since we're using a hardcoded pool
         return true;
     }

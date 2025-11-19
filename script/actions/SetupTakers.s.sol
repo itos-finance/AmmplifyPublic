@@ -366,7 +366,7 @@ contract SetupTakers is AmmplifyPositions {
         address poolAddress,
         int24[2] memory ticks,
         uint128 liquidity,
-        uint24 fee
+        uint24 /* fee */
     ) internal returns (uint256 assetId) {
         // Determine freeze price based on position relative to current price
         IUniswapV3Pool pool = IUniswapV3Pool(poolAddress);
@@ -422,7 +422,7 @@ contract SetupTakers is AmmplifyPositions {
         int24 tickLower,
         int24 tickUpper,
         int24 currentTick,
-        uint24 fee
+        uint24 /* fee */
     ) internal view returns (uint128) {
         IUniswapV3Pool pool = IUniswapV3Pool(poolAddress);
 

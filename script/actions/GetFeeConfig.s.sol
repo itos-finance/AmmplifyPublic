@@ -14,7 +14,7 @@ import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
  * @dev This is a view-only script, no broadcast needed
  */
 contract GetFeeConfig is AmmplifyPositions {
-    function run() public override {
+    function run() public view override {
         console2.log("=== Querying Fee Configuration ===");
         console2.log("SimplexDiamond address:", env.simplexDiamond);
 
@@ -67,7 +67,7 @@ contract GetFeeConfig is AmmplifyPositions {
      * @notice Query fee config for a specific pool address
      * @param poolAddress The pool address to query
      */
-    function run(address poolAddress) public {
+    function run(address poolAddress) public view {
         console2.log("=== Querying Fee Configuration ===");
         console2.log("SimplexDiamond address:", env.simplexDiamond);
         console2.log("Pool Address:", poolAddress);

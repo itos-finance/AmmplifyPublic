@@ -731,7 +731,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
         // In practice the difference is much smaller.
     }
 
-    function uniswapV3FlashCallback(uint256 fee0, uint256 fee1, bytes calldata data) external {
+    function uniswapV3FlashCallback(uint256 /* fee0 */, uint256 /* fee1 */, bytes calldata /* data */) external {
         token0.transfer(msg.sender, 1e18 + 1);
         token1.transfer(msg.sender, 1e18 + 1);
     }

@@ -195,7 +195,7 @@ contract AmmplifyForkBase is ForkableTest {
                     sqrtPriceLimitX96: 0 // No price limit
                 })
             )
-        returns (uint256 amountOut) {
+        returns (uint256 /* amountOut */) {
             // Swap succeeded
             // amountOut is the amount of token1 received
         } catch (bytes memory reason) {
@@ -217,7 +217,7 @@ contract AmmplifyForkBase is ForkableTest {
                         sqrtPriceLimitX96: 0
                     })
                 )
-            returns (uint256 amountOut) {
+            returns (uint256 /* amountOut */) {
                 // Swap succeeded in reverse direction
             } catch (bytes memory reason2) {
                 // If both directions fail, revert with error message
@@ -305,7 +305,7 @@ contract AmmplifyForkBase is ForkableTest {
      * @param key The JSON key path
      * @return addr The address, or address(0) if not found or invalid
      */
-    function _tryParseJsonAddress(string memory json, string memory key) internal view returns (address addr) {
+    function _tryParseJsonAddress(string memory json, string memory key) internal pure returns (address addr) {
         try vm.parseJsonAddress(json, key) returns (address a) {
             return a;
         } catch {
