@@ -160,8 +160,8 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         settle(msg.sender, pInfo, settlementX, settlementY, rftData);
         // Now we do our mints (if borrowing) and burn.
         PoolWalker.settle(pInfo, ticks[0], ticks[1], data);
-        settlementX = data.xBalance < 0 ? data.xBalance : int256(0);
-        settlementY = data.yBalance < 0 ? data.yBalance : int256(0);
+        settlementX = totalX < 0 ? totalX : int256(0);
+        settlementY = totalY < 0 ? totalY : int256(0);
         // And lastly give any owed balances to the caller.
         settle(msg.sender, pInfo, settlementX, settlementY, rftData);
     }
