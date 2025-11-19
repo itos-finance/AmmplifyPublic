@@ -264,6 +264,8 @@ library LiqWalker {
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
 
+        /*
+        // When not charging taker fees we just earn fees from net liq
         // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
         data.liq.xFeesCollected = FeeWalker.add128Fees(
             data.liq.xFeesCollected,
@@ -277,14 +279,17 @@ library LiqWalker {
             data,
             false
         );
+        */
 
-        // If we have no maker liq in this node, then there is nothing to compound.
-        if (node.liq.mLiq == 0) return;
+        // With no taker fees, we can only earn from the net liq, not the maker liq.
+        int128 netLiq = node.liq.net();
+        if (netLiq <= 0) return;
 
         // Otherwise, the fees should have been collected (or are available from collateral)
         // and we can compound.
-        uint256 x = FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false);
-        uint256 y = FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false);
+        uint128 liq = uint128(netLiq);
+        uint256 x = FullMath.mulX128(liq, feeDiffInside0X128, false);
+        uint256 y = FullMath.mulX128(liq, feeDiffInside1X128, false);
 
         uint256 nonCX128;
         (x, nonCX128) = node.liq.splitMakerFees(x);
@@ -635,8 +640,10 @@ library LiqWalker {
             } else {
                 takerYFeesPerLiqX128 += node.fees.yTakerFeesPerLiqX128;
             }
-            data.xFees += FullMath.mulX128(liq, takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
-            data.yFees += FullMath.mulX128(liq, takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
+
+            // When not charging taker fees, we don't write to the checkpoint or charge to data.
+            // data.xFees += FullMath.mulX128(liq, takerXFeesPerLiqX128 - aNode.fee0CheckX128, true);
+            // data.yFees += FullMath.mulX128(liq, takerYFeesPerLiqX128 - aNode.fee1CheckX128, true);
             aNode.fee0CheckX128 = takerXFeesPerLiqX128;
             aNode.fee1CheckX128 = takerYFeesPerLiqX128;
         }
