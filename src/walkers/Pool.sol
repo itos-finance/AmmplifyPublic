@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import {Key} from "../tree/Key.sol";
-import {Data} from "./Data.sol";
-import {LiqNode, LiqType, LiqWalkerLite} from "./Liq.sol";
-import {Node} from "./Node.sol";
-import {Route, RouteImpl, Phase} from "../tree/Route.sol";
-import {PoolLib, PoolInfo} from "../Pool.sol";
-import {WalkerLib} from "./Lib.sol";
-import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { Key } from "../tree/Key.sol";
+import { Data } from "./Data.sol";
+import { LiqNode, LiqType, LiqWalkerLite } from "./Liq.sol";
+import { Node } from "./Node.sol";
+import { Route, RouteImpl, Phase } from "../tree/Route.sol";
+import { PoolLib, PoolInfo } from "../Pool.sol";
+import { WalkerLib } from "./Lib.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /// Walk down and up the pool to settle balances with the underlying AMM.
 /// @dev When walking down, we settle all the liquidity decreases so we have balances to work with,
@@ -109,6 +109,7 @@ library PoolWalker {
 
         int256 _targetLiq = node.liq.net(); // This is what the liq accounting wants.
         require(_targetLiq >= 0, InsolventLiquidityUpdate(key, _targetLiq));
+
         // We know this cast fits.
         uint128 targetLiq = uint128(uint256(_targetLiq)) + 1;
         // We add 1 which will cause the first liq deposit into this node to pay a little dust.
@@ -119,11 +120,16 @@ library PoolWalker {
         if (targetLiq > liq) {
             // We need to add liquidity. So we save it. We know this will be cleared eventually anyways.
             node.liq.dirty |= ADD_LIQ_DIRTY_FLAG;
-            // We know pre borrow is zero after solving, so we store the liq diff here to avoid requerying.
-            node.liq.preBorrow = int128(targetLiq - liq);
-        } else if (targetLiq < liq) {
-            PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
-            PoolLib.collect(data.poolAddr, lowTick, highTick, false);
+            // We know pre lend is zero after solving, so we store the liq diff here to avoid requerying.
+            node.liq.preLend = int128(targetLiq - liq);
+        } else {
+            if (targetLiq < liq) {
+                PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
+                PoolLib.collect(data.poolAddr, lowTick, highTick, false);
+            }
+            // A revisit (due to sib solving) might have changed our intended mint, so we have to clear those.
+            node.liq.preLend = 0;
+            node.liq.dirty &= ~ADD_LIQ_DIRTY_FLAG;
         }
     }
 
@@ -133,11 +139,11 @@ library PoolWalker {
             return;
         }
         // The liq diff is stored by downUpdateLiq when the add liq flag is set.
-        uint128 liqDiff = uint128(node.liq.preBorrow);
+        uint128 liqDiff = uint128(node.liq.preLend);
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         PoolLib.mint(data.poolAddr, lowTick, highTick, liqDiff);
-        // Reset the temporary storage in preBorrow.
-        node.liq.preBorrow = 0;
+        // Reset the temporary storage in preLend.
+        node.liq.preLend = 0;
     }
 
     function verifySpend(int256 expectedSpend, int256 actualSpend, address token) internal pure {

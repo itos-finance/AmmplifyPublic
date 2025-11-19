@@ -474,7 +474,7 @@ library LiqWalker {
         // First settle our borrows and lends from siblings and children.
         if (node.liq.preBorrow > 0) {
             node.liq.borrowed += uint128(node.liq.preBorrow);
-        } else {
+        } else if (node.liq.preBorrow < 0) {
             node.liq.borrowed -= uint128(-node.liq.preBorrow);
         }
         node.liq.preBorrow = 0;
@@ -498,7 +498,8 @@ library LiqWalker {
         } else if (netLiq > 0 && node.liq.borrowed > 0) {
             // Check if we can repay liquidity.
             uint128 repayable = min(uint128(netLiq), node.liq.borrowed);
-            Node storage sibling = data.node(key.sibling());
+            Key sibKey = key.sibling();
+            Node storage sibling = data.node(sibKey);
             int128 sibLiq = sibling.liq.net();
             if (sibLiq <= 0 || sibling.liq.borrowed == 0) {
                 // We cannot repay any borrowed liquidity.
@@ -510,7 +511,8 @@ library LiqWalker {
                 // Below the compound threshold it's too small to worth repaying.
                 return;
             }
-            Node storage parent = data.node(key.parent());
+            Key parentKey = key.parent();
+            Node storage parent = data.node(parentKey);
             int128 iRepayable = SafeCast.toInt128(repayable);
             parent.liq.preLend -= iRepayable;
             parent.liq.setDirty();
@@ -518,14 +520,26 @@ library LiqWalker {
             node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow -= iRepayable;
             sibling.liq.setDirty();
-            // Every time we repay, we're removing one additional position and opening another.
-            // This could lose two units of dust so we make sure the user needs to add that as well.
-            data.xBalance += 2;
-            data.yBalance += 2;
+            // Every time we repay, we're removing two positions and adding back one which
+            // will cost dust. We charge that as fees.
+            {
+                // When repaying all 3 nodes are already initialized.
+                (uint256 reqX, uint256 reqY) = data.computeBalances(parentKey, repayable, true);
+                (uint256 myX, uint256 myY) = data.computeBalances(key, repayable, false);
+                (uint256 sibX, uint256 sibY) = data.computeBalances(sibKey, repayable, false);
+                if (reqX > myX + sibX) {
+                    data.xBalance += int256(reqX - myX - sibX);
+                }
+                if (reqY > myY + sibY) {
+                    data.yBalance += int256(reqY - myY - sibY);
+                }
+            }
         } else if (netLiq < 0) {
             // We need to borrow liquidity from our parent node.
-            Node storage sibling = data.node(key.sibling());
-            Node storage parent = data.node(key.parent());
+            Key sibKey = key.sibling();
+            Key parentKey = key.parent();
+            Node storage sibling = data.node(sibKey);
+            Node storage parent = data.node(parentKey);
             int128 borrow = -netLiq;
             if (borrow < int128(data.liq.compoundThreshold)) {
                 // We borrow at least this amount.
@@ -533,14 +547,39 @@ library LiqWalker {
             }
             parent.liq.preLend += borrow;
             parent.liq.setDirty();
-            node.liq.borrowed += uint128(borrow);
+            uint128 uBorrow = uint128(borrow);
+            node.liq.borrowed += uBorrow;
             node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
             sibling.liq.preBorrow += borrow;
             sibling.liq.setDirty();
-            // Every time we borrow, we're removing one additional position and opening another.
-            // This could lose two units of dust so we make sure the user needs to add that as well.
-            data.xBalance += 2;
-            data.yBalance += 2;
+            // Every time we borrow, we're removing one positions and adding two. This could
+            // charge us dust so we charge that as fees.
+            {
+                (uint256 givenX, uint256 givenY) = data.computeBalances(parentKey, uBorrow, false);
+                // The two children nodes might not be initialized yet.
+                uint256 myX;
+                uint256 myY;
+                if (node.liq.initialized) {
+                    (myX, myY) = data.computeBalances(key, uBorrow, true);
+                } else {
+                    node.liq.initialized = true;
+                    (myX, myY) = data.computeBalances(key, uBorrow + 1, true);
+                }
+                uint256 sibX;
+                uint256 sibY;
+                if (sibling.liq.initialized) {
+                    (sibX, sibY) = data.computeBalances(sibKey, uBorrow, true);
+                } else {
+                    sibling.liq.initialized = true;
+                    (sibX, sibY) = data.computeBalances(sibKey, uBorrow + 1, true);
+                }
+                if (givenX < myX + sibX) {
+                    data.xBalance += int256(myX + sibX - givenX);
+                }
+                if (givenY < myY + sibY) {
+                    data.yBalance += int256(myY + sibY - givenY);
+                }
+            }
         }
     }
 
@@ -593,8 +632,6 @@ library LiqWalker {
 }
 
 library LiqWalkerLite {
-    error WarningUnwalkedParent();
-
     /// Used to solve liq for a sibling node during the POOL WALK. Not used by liq walking itself.
     function solveSibLiq(Node storage node) internal {
         // Settle our borrows and from siblings
@@ -605,8 +642,6 @@ library LiqWalkerLite {
         }
         node.liq.preBorrow = 0;
 
-        // No lends should be unresolved because we always liq walk to parent.
-        // TODO: Switch to warning in production.
-        require(node.liq.preLend == 0, WarningUnwalkedParent());
+        // No lends will be unresolved because we always walk up to parent after solving a node.
     }
 }

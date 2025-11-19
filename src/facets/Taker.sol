@@ -31,6 +31,7 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         tokens[0] = token;
         int256[] memory balances = new int256[](1);
         balances[0] = SafeCast.toInt256(amount);
+        // We do a raw RFT call since this doesn't burn/mint.
         RFTLib.settle(msg.sender, tokens, balances, data);
         Store.fees().collateral[recipient][token] += amount;
         emit CollateralAdded(recipient, token, amount);
@@ -48,6 +49,7 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         tokens[0] = token;
         int256[] memory balances = new int256[](1);
         balances[0] = -SafeCast.toInt256(amount);
+        // We do a raw RFT call since this doesn't burn/mint.
         RFTLib.settle(recipient, tokens, balances, data);
         emit CollateralWithdrawn(recipient, token, amount);
     }
@@ -76,23 +78,19 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
             vaultIndices[0],
             vaultIndices[1]
         );
-        Data memory data = DataImpl.make(pInfo, asset, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], liq);
-        // This fills in the nodes in the asset.
-        WalkerLib.modify(pInfo, ticks[0], ticks[1], data);
-        // First we withdraw the liquidity.
-        PoolWalker.settle(pInfo, ticks[0], ticks[1], data);
-        // The walked balances are the borrowed balances, we swap them to either amount.
-        // The walked balances will be negative since they're giving it to the user.
-        address[] memory tokens = pInfo.tokens();
-        int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance; // No fees on a new position.
-        balances[1] = data.yBalance;
         (uint256 xFreeze, uint256 yFreeze) = PoolLib.getAmounts(freezeSqrtPriceX96, ticks[0], ticks[1], liq, true);
-        balances[0] += SafeCast.toInt256(xFreeze);
-        balances[1] += SafeCast.toInt256(yFreeze);
-        RFTLib.settle(msg.sender, tokens, balances, rftData);
-        VaultLib.deposit(tokens[0], vaultIndices[0], assetId, xFreeze);
-        VaultLib.deposit(tokens[1], vaultIndices[1], assetId, yFreeze);
+        settleTakerBalances(
+            pInfo,
+            asset,
+            sqrtPriceLimitsX96,
+            ticks,
+            liq,
+            SafeCast.toInt256(xFreeze),
+            SafeCast.toInt256(yFreeze),
+            rftData
+        );
+        VaultLib.deposit(pInfo.token0, vaultIndices[0], assetId, xFreeze);
+        VaultLib.deposit(pInfo.token1, vaultIndices[1], assetId, yFreeze);
         emit TakerCreated(recipient, poolAddr, assetId, ticks[0], ticks[1], liq, vaultIndices[0], vaultIndices[1]);
         return assetId;
     }
@@ -108,28 +106,78 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         require(asset.owner == msg.sender, NotTakerOwner(asset.owner, msg.sender));
         require(asset.liqType == LiqType.TAKER, NotTaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
-        WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
-        address[] memory tokens = pInfo.tokens();
-        int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance + int256(data.xFees);
-        balances[1] = data.yBalance + int256(data.yFees);
-        uint256 vaultX = VaultLib.withdraw(tokens[0], asset.xVaultIndex, assetId);
-        uint256 vaultY = VaultLib.withdraw(tokens[1], asset.yVaultIndex, assetId);
-        balances[0] -= SafeCast.toInt256(vaultX);
-        balances[1] -= SafeCast.toInt256(vaultY);
-        balance0 = -balances[0];
-        balance1 = -balances[1];
+        token0 = pInfo.token0;
+        token1 = pInfo.token1;
+
+        uint256 vaultX = VaultLib.withdraw(pInfo.token0, asset.xVaultIndex, assetId);
+        uint256 vaultY = VaultLib.withdraw(pInfo.token1, asset.yVaultIndex, assetId);
+
+        uint160[2] memory sqrtPriceLimitsX96 = [minSqrtPriceX96, maxSqrtPriceX96];
+        int24[2] memory ticks = [asset.lowTick, asset.highTick];
+
         // Closing pays up the fees and leave the collateral alone. The collateral is really just there
         // to make sure while the position is open you can cover the fees. So there's really no need to keep
         // depositing and withdrawing collateral if your opened size stays roughly the same.
-        RFTLib.settle(msg.sender, tokens, balances, rftData);
-        // Finally we deposit the assets.
-        PoolWalker.settle(pInfo, asset.lowTick, asset.highTick, data);
+        (balance0, balance1) = settleTakerBalances(
+            pInfo,
+            asset,
+            sqrtPriceLimitsX96,
+            ticks,
+            0,
+            -SafeCast.toInt256(vaultX),
+            -SafeCast.toInt256(vaultY),
+            rftData
+        );
+        // We return balances from the perspective of the caller.
+        balance0 = -balance0;
+        balance1 = -balance1;
+
         AssetLib.removeAsset(assetId);
         emit TakerRemoved(asset.owner, assetId, asset.poolAddr, balance0, balance1);
-        // Return values
-        token0 = tokens[0];
-        token1 = tokens[1];
+    }
+
+    /* Helpers */
+
+    function settleTakerBalances(
+        PoolInfo memory pInfo,
+        Asset storage asset,
+        uint160[2] memory sqrtPriceLimitsX96,
+        int24[2] memory ticks,
+        uint128 liq,
+        int256 vaultDiffX,
+        int256 vaultDiffY,
+        bytes calldata rftData
+    ) internal returns (int256 totalX, int256 totalY) {
+        Data memory data = DataImpl.make(pInfo, asset, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], liq);
+        // This fills in the nodes in the asset.
+        WalkerLib.modify(pInfo, ticks[0], ticks[1], data);
+
+        totalX = data.xBalance + vaultDiffX + int256(data.xFees);
+        totalY = data.yBalance + vaultDiffY + int256(data.yFees);
+        int256 settlementX = totalX > 0 ? totalX : int256(0);
+        int256 settlementY = totalY > 0 ? totalY : int256(0);
+        // We first take the balances we need from the user.
+        settle(msg.sender, pInfo, settlementX, settlementY, rftData);
+        // Now we do our mints (if borrowing) and burn.
+        PoolWalker.settle(pInfo, ticks[0], ticks[1], data);
+        settlementX = data.xBalance < 0 ? data.xBalance : int256(0);
+        settlementY = data.yBalance < 0 ? data.yBalance : int256(0);
+        // And lastly give any owed balances to the caller.
+        settle(msg.sender, pInfo, settlementX, settlementY, rftData);
+    }
+
+    /// Settlement helper that wastes some memory allocation just to save on stack space.
+    function settle(
+        address recipient,
+        PoolInfo memory pInfo,
+        int256 xBalance,
+        int256 yBalance,
+        bytes calldata rftData
+    ) internal {
+        address[] memory tokens = pInfo.tokens();
+        int256[] memory balances = new int256[](2);
+        balances[0] = xBalance;
+        balances[1] = yBalance;
+        RFTLib.settle(recipient, tokens, balances, rftData);
     }
 }

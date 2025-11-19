@@ -1093,7 +1093,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         );
     }
 
-    function testEquivalentLiqWithTwap() public {
+    function testEquivalentLiqWithTwap() public pure {
         uint128 liq = PoolLib.getEquivalentLiq(
             -300,
             20,
