@@ -1,0 +1,48 @@
+{
+  "network": "Chain 10143",
+  "deployer": "0x2a42bE604948c0cce8a1FCFC781089611E2a1ea0",
+  "tokens": {
+    "USDC": {
+      "address": "0x75a6952A5a263B960F0c07B5391D3537f5B35aE4",
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "decimals": 18
+    },
+    "WETH": {
+      "address": "0xE9A9d13cB2deBd3dA91549cE7E462f181B58D13d",
+      "name": "Wrapped Ether",
+      "symbol": "WETH",
+      "decimals": 18
+    }
+  },
+  "vaults": {
+    "USDC": {
+      "address": "0xD94c134E2fE0D1c9052471660336157089AfB20D",
+      "name": "USDC Vault",
+      "symbol": "vUSDC",
+      "asset": "0xcB7111fc3E88C7d238dbd6759a07a5cB7ddeff08"
+    },
+    "WETH": {
+      "address": "0x99C00E01ef09e1EF1A1302031Fd03837C433a6Fd",
+      "name": "WETH Vault",
+      "symbol": "vWETH",
+      "asset": "0x8B4920F7cb6051Ae0428DF309A7F8D65e8AA9085"
+    }
+  },
+  "ammplify": {
+    "simplexDiamond": "0x67C78CbE8eF94D14A8519572b8AEEcad4bb9319B",
+    "borrowlessDiamond": "0xc94545f827C8c8b47F7694225C3871D8e64aC23D",
+    "nftManager": "0xbE330fE44Ac7f80dC875212afC57CA7e9FAb7a07"
+  },
+  "uniswap": {
+    "factory": "0xB5FC84346E8dFf79cbD08C19d7eC27c740664a57",
+    "nfpm": "0xEE4440ba6Bb02E0B453994918C24299D37bf0b8E",
+    "simpleSwapRouter": "0xEa3a615b4A600CcE858C13c13c614Fc96C775E55",
+    "pools": {
+      "USDC_WETH_3000": "0x9dCc8bF525c2E171C5Be111B37e0649969A1C157"
+    }
+  },
+  "integrations": {
+    "decomposer": "0xF78b3d625394Ba5A3f0D13d227e08c4FCc0cB12F"
+  }
+}

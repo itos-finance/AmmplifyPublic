@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity ^0.8.27;
+
+import { Key } from "../tree/Key.sol";
+import { Node } from "./Node.sol";
+import { LiqData } from "./Liq.sol";
+import { FeeData } from "./Fee.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
+import { PoolInfo, Pool, PoolLib } from "../Pool.sol";
+import { Asset, AssetNode } from "../Asset.sol";
+import { Store } from "../Store.sol";
+import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
+import { LiqDataLib } from "./Liq.sol";
+import { FeeDataLib } from "./Fee.sol";
+
+struct Data {
+    // Inputs
+    address poolAddr;
+    bytes32 poolStore;
+    bytes32 assetStore;
+    uint160 sqrtPriceX96;
+    int24 currentTick;
+    uint160 twapSqrtPriceX96; // A more robust measure of price.
+    bool takeAsX; // cache it outside the asset for gas savings.
+    uint128 timestamp; // The last time the pool was modified.
+    LiqData liq;
+    FeeData fees;
+    // Outputs
+    int256 xBalance;
+    int256 yBalance;
+    uint256 xFees;
+    uint256 yFees;
+    uint256 compoundSpendX;
+    uint256 compoundSpendY;
+    // Unlikely to EVER be used, but in some extreme fee cases, we have to limit fee collection sizes
+    // to fit in integer limits. In the unbelievable case where this actually gets used, those fees go to the owner.
+    uint256 escapedX;
+    uint256 escapedY;
+}
+
+using DataImpl for Data global;
+
+library DataImpl {
+    error PriceSlippageExceeded(uint160 currentSqrtPriceX96, uint160 minSqrtPriceX96, uint160 maxSqrtPriceX96);
+
+    /* Factory */
+    function make(
+        PoolInfo memory pInfo,
+        Asset storage asset,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
+        uint128 liq
+    ) internal returns (Data memory) {
+        Pool storage pool = Store.pool(pInfo.poolAddr);
+        uint128 treeTimestamp = pool.timestamp;
+        pool.timestamp = uint128(block.timestamp); // Update the pool's timestamp.
+
+        bytes32 poolSlot;
+        assembly {
+            poolSlot := pool.slot
+        }
+        bytes32 assetSlot;
+        assembly {
+            assetSlot := asset.slot
+        }
+        uint160 currentSqrtPriceX96 = pInfo.sqrtPriceX96;
+        uint160 twapSqrtPriceX96 = PoolLib.getTwapSqrtPriceX96(pInfo.poolAddr);
+
+        require(
+            currentSqrtPriceX96 >= minSqrtPriceX96 && currentSqrtPriceX96 <= maxSqrtPriceX96,
+            PriceSlippageExceeded(currentSqrtPriceX96, minSqrtPriceX96, maxSqrtPriceX96)
+        );
+
+        return
+            Data({
+                poolAddr: pInfo.poolAddr,
+                poolStore: poolSlot,
+                assetStore: assetSlot,
+                sqrtPriceX96: currentSqrtPriceX96,
+                currentTick: pInfo.currentTick,
+                twapSqrtPriceX96: twapSqrtPriceX96,
+                takeAsX: asset.takeAsX,
+                timestamp: treeTimestamp,
+                liq: LiqDataLib.make(asset, pInfo, liq),
+                fees: FeeDataLib.make(pInfo),
+                // Outputs
+                xBalance: 0,
+                yBalance: 0,
+                xFees: 0,
+                yFees: 0,
+                compoundSpendX: 0,
+                compoundSpendY: 0,
+                escapedX: 0,
+                escapedY: 0
+            });
+    }
+
+    function computeBorrow(
+        Data memory self,
+        Key key,
+        uint128 liq,
+        bool roundUp
+    ) internal pure returns (uint256 xBorrows, uint256 yBorrows) {
+        if (liq == 0) {
+            return (0, 0);
+        }
+
+        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
+        uint160 lowSqrtPriceX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
+        if (self.takeAsX) {
+            xBorrows = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+            yBorrows = 0;
+        } else {
+            xBorrows = 0;
+            yBorrows = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
+        }
+    }
+
+    function computeBalances(
+        Data memory self,
+        Key key,
+        uint128 liq,
+        bool roundUp
+    ) internal pure returns (uint256 xBalance, uint256 yBalance) {
+        if (liq == 0) {
+            return (0, 0);
+        }
+        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
+        (xBalance, yBalance) = PoolLib.getAmounts(self.sqrtPriceX96, lowTick, highTick, liq, roundUp);
+    }
+
+    /* Helpers */
+
+    function isRoot(Data memory self, Key key) internal pure returns (bool) {
+        return key.width() == self.fees.rootWidth;
+    }
+
+    function node(Data memory self, Key key) internal view returns (Node storage) {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        return pool.nodes[key];
+    }
+
+    function assetNode(Data memory self, Key key) internal view returns (AssetNode storage) {
+        Asset storage asset;
+        bytes32 assetSlot = self.assetStore;
+        assembly {
+            asset.slot := assetSlot
+        }
+        return asset.nodes[key];
+    }
+}
