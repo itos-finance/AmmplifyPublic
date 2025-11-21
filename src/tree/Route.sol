@@ -4,8 +4,6 @@ pragma solidity ^0.8.27;
 import { Key, KeyImpl } from "./Key.sol";
 import { msb, lsb } from "./BitMath.sol";
 
-uint8 constant MAX_WIDTH_LENGTH = 21; // Given uniswap ticks, 2 raised to this is the maximum width of the tree.
-
 enum Phase {
     NONE,
     PRE_DOWN,
