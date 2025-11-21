@@ -497,16 +497,16 @@ library FeeWalker {
         node.fees.makerXFeesPerLiqX128 += colRatesX128[0];
         node.fees.makerYFeesPerLiqX128 += colRatesX128[1];
 
-        uint256 compoundingLiq = width * (node.liq.mLiq - node.liq.ncLiq);
+        uint256 nodeCompoundingLiq = node.liq.mLiq - node.liq.ncLiq;
         node.fees.xCFees = add128Fees(
             node.fees.xCFees,
-            FullMath.mulX128(colRatesX128[0], compoundingLiq, false),
+            FullMath.mulX128(colRatesX128[0], nodeCompoundingLiq, false),
             data,
             true
         );
         node.fees.yCFees = add128Fees(
             node.fees.yCFees,
-            FullMath.mulX128(colRatesX128[1], compoundingLiq, false),
+            FullMath.mulX128(colRatesX128[1], nodeCompoundingLiq, false),
             data,
             false
         );
