@@ -45,10 +45,7 @@ struct AssetStore {
 }
 
 library AssetLib {
-    uint256 public constant MAX_ASSETS_PER_OWNER = type(uint96).max;
-
     error NoRecipient();
-    error ExcessiveAssetsPerOwner(uint256 count);
     error AssetNotFound(uint256 assetId);
     error NotPermissioned(address owner, address attemptedOpener);
 
@@ -184,10 +181,6 @@ library AssetLib {
     }
 
     function addAssetToOwner(AssetStore storage store, uint256 assetId, address owner) private {
-        require(
-            store.ownerAssets[owner].length < MAX_ASSETS_PER_OWNER,
-            ExcessiveAssetsPerOwner(store.ownerAssets[owner].length)
-        );
         address opener = msg.sender;
         require(viewPermission(owner, opener), NotPermissioned(owner, opener));
         store.assets[assetId].assetIdx = uint96(store.ownerAssets[owner].length);
