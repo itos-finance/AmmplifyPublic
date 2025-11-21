@@ -130,6 +130,19 @@ library DataImpl {
         (xBalance, yBalance) = PoolLib.getAmounts(self.sqrtPriceX96, lowTick, highTick, liq, roundUp);
     }
 
+    function computeTWAPBalances(
+        Data memory self,
+        Key key,
+        uint128 liq,
+        bool roundUp
+    ) internal pure returns (uint256 xBalance, uint256 yBalance) {
+        if (liq == 0) {
+            return (0, 0);
+        }
+        (int24 lowTick, int24 highTick) = key.ticks(self.fees.rootWidth, self.fees.tickSpacing);
+        (xBalance, yBalance) = PoolLib.getAmounts(self.twapSqrtPriceX96, lowTick, highTick, liq, roundUp);
+    }
+
     /* Helpers */
 
     function isRoot(Data memory self, Key key) internal pure returns (bool) {

@@ -423,7 +423,7 @@ library FeeWalker {
             // And we calculate the payment made by the takers below the current node to set the unpaids.
             // And we use the total balances to set the maker rates and unclaimeds.
             uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
-            (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
+            (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeTWAPBalances(key, aboveTLiq, true);
             colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
             colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
             if (aboveTLiq != 0) {
