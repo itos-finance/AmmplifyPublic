@@ -1330,6 +1330,64 @@ contract TakerFacetTest is MultiSetupTest {
         takerFacet.removeTaker(takerId, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
     }
 
+    /// Test we can open and close a taker without collateralization.
+    /// @dev Will encounter overflow issue if inside fee update calc is not unchecked.
+    function testTakerMakerMix() public {
+        bytes memory rftData = "";
+
+        // Create a maker large enough to borrow from.
+        makerFacet.newMaker(
+            recipient,
+            poolAddr,
+            -491520,
+            491520,
+            liquidity,
+            true,
+            sqrtPriceLimitsX96[0],
+            sqrtPriceLimitsX96[1],
+            rftData
+        );
+
+        uint256[3] memory takerIds;
+        uint256[3] memory makerIds;
+        for (uint i = 0; i < 3; i++) {
+            takerIds[i] = takerFacet.newTaker(
+                recipient,
+                poolAddr,
+                [int24(1200), int24(1800)],
+                liquidity / 8,
+                vaultIndices,
+                sqrtPriceLimitsX96,
+                freezeSqrtPriceX96,
+                rftData
+            );
+
+            makerIds[i] = makerFacet.newMaker(
+                recipient,
+                poolAddr,
+                4200,
+                4800,
+                liquidity / 8,
+                true,
+                sqrtPriceLimitsX96[0],
+                sqrtPriceLimitsX96[1],
+                rftData
+            );
+        }
+
+        swapTo(0, TickMath.getSqrtRatioAtTick(4260));
+        makerFacet.removeMaker(address(this), makerIds[0], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        takerFacet.removeTaker(takerIds[0], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+
+        swapTo(0, TickMath.getSqrtRatioAtTick(4800));
+        makerFacet.removeMaker(address(this), makerIds[1], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        takerFacet.removeTaker(takerIds[1], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+
+        swapTo(0, TickMath.getSqrtRatioAtTick(6000));
+        makerFacet.removeMaker(address(this), makerIds[2], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+        takerFacet.removeTaker(takerIds[2], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
+    }
+
     /* TODO tests.
     Test vault earnings for taker
     */
