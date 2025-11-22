@@ -352,8 +352,12 @@ library ViewWalker {
             high
         );
         // What we haven't claimed yet.
-        uint256 fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
-        uint256 fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
+        uint256 fee0DiffX128;
+        uint256 fee1DiffX128;
+        unchecked {
+            fee0DiffX128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
+            fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
+        }
         if (data.liq.liqType == LiqType.MAKER) {
             // We just claim our shares.
             // If the sliq and shares are zero, you should fail anyways.
