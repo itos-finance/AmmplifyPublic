@@ -168,7 +168,7 @@ contract AdminFacet is TimedAdminFacet {
 
     /* Vault related */
 
-    function viewVaults(address token, uint8 vaultIdx) external view returns (address vault, address backup) {
+    function viewVaults(address token, uint8 vaultIdx) external returns (address vault, address backup) {
         (vault, backup) = VaultLib.getVaultAddresses(token, vaultIdx);
     }
 
@@ -185,6 +185,11 @@ contract AdminFacet is TimedAdminFacet {
     function swapVault(address token, uint8 vaultId) external returns (address oldVault, address newVault) {
         AdminLib.validateOwner();
         (oldVault, newVault) = VaultLib.hotSwap(token, vaultId);
+    }
+
+    function setDefaultBorrower(address borrower) external {
+        AdminLib.validateOwner();
+        Store.vaults().defaultBorrower = borrower;
     }
 
     // Internal overrides
