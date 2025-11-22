@@ -5,6 +5,11 @@ import { VaultType, VaultPointer } from "./VaultPointer.sol";
 import { VaultE4626 } from "./E4626.sol";
 import { VaultProxy } from "./VaultProxy.sol";
 import { Store } from "../Store.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { TakerVault } from "../integrations/TakerVault.sol";
+import { AdminLib } from "Commons/Util/Admin.sol";
+
+import { console } from "forge-std/console.sol";
 
 // Holds overall vault information.
 struct VaultStore {
@@ -17,6 +22,8 @@ struct VaultStore {
     mapping(address vault => VaultE4626) e4626s;
     mapping(address vault => address) usedBy;
     mapping(address vault => uint8) index;
+    // Used for creating TakerVaults by default.
+    address defaultBorrower;
 }
 
 /// Each index has a primary vault and a backup vault it may be migrating to.
@@ -152,26 +159,46 @@ library VaultLib {
         uint256 assetId,
         bool roundUp
     ) internal view returns (uint256 amount) {
-        VaultProxy memory vProxy = getProxy(token, index);
+        VaultProxy memory vProxy = getViewProxy(token, index);
         amount = vProxy.balance(assetId, roundUp);
     }
 
     /* Getters */
 
     /// Get the active and backup addresses for a vault.
-    function getVaultAddresses(address token, uint8 index) internal view returns (address active, address backup) {
+    function getVaultAddresses(address token, uint8 index) internal returns (address active, address backup) {
         VaultStore storage vStore = Store.vaults();
         active = vStore.vaults[token][index];
         backup = vStore.backups[token][index];
+        console.log("Active vault:", index, active);
+
+        // Specifically for the default Taker vault version
+        if (index == 0 && active == address(0)) {
+            active = tryInstallDefaultVault(token);
+        }
     }
 
     /// Fetch a VaultProxy for the vertex's active vaults.
-    function getProxy(address token, uint8 index) internal view returns (VaultProxy memory vProxy) {
+    function getProxy(address token, uint8 index) internal returns (VaultProxy memory vProxy) {
         VaultStore storage vStore = Store.vaults();
-        vProxy.active = getVault(vStore.vaults[token][index]);
+        address active = vStore.vaults[token][index];
+        if (active == address(0) && index == 0) {
+            active = tryInstallDefaultVault(token);
+        }
+        vProxy.active = getVault(active);
         address backup = vStore.backups[token][index];
         if (backup != address(0)) vProxy.backup = getVault(backup);
     }
+
+    /// Fetch a VaultProxy for the vertex's active vaults.
+    function getViewProxy(address token, uint8 index) internal view returns (VaultProxy memory vProxy) {
+        VaultStore storage vStore = Store.vaults();
+        address active = vStore.vaults[token][index];
+        vProxy.active = getVault(active);
+        address backup = vStore.backups[token][index];
+        if (backup != address(0)) vProxy.backup = getVault(backup);
+    }
+
 
     /// Fetch a Vault
     function getVault(address vault) internal view returns (VaultPointer memory vPtr) {
@@ -185,6 +212,17 @@ library VaultLib {
             v.fetch(vPtr.temp);
         } else {
             revert VaultNotFound(vault);
+        }
+    }
+
+    function tryInstallDefaultVault(address token) internal returns (address vault) {
+        VaultStore storage vStore = Store.vaults();
+        address defaultBorrower = vStore.defaultBorrower;
+        console.log("Default borrower:", defaultBorrower);
+        if (defaultBorrower != address(0)) {
+            address takerVault = address(new TakerVault(AdminLib.getOwner(), IERC20(token), defaultBorrower));
+            add(token, 0, takerVault, VaultType.E4626);
+            return takerVault;
         }
     }
 }
