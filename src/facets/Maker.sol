@@ -136,12 +136,12 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         // Fees are removed but don't get JIT penalized.
         removedX += data.xFees;
         removedY += data.yFees;
+        emit MakerRemoved(recipient, assetId, asset.poolAddr, removedX, removedY);
         AssetLib.removeAsset(assetId);
         int256[] memory balances = new int256[](2);
         balances[0] = -int256(removedX);
         balances[1] = -int256(removedY);
         RFTLib.settle(recipient, tokens, balances, rftData);
-        emit MakerRemoved(recipient, assetId, asset.poolAddr, removedX, removedY);
         // Return values
         token0 = tokens[0];
         token1 = tokens[1];
