@@ -7,6 +7,7 @@ bytecode_hash = "none"
 fs_permissions = [
     { access = "read", path = "deployed-addresses.json" },
     { access = "read", path = "deployed-capricorn.json" },
+    { access = "read", path = "deployed-univ3.json" },
     { access = "read", path = "capricorn-mainnet.json" },
     { access = "read", path = "capricorn.json" },
     { access = "read", path = "uniswap.json" }

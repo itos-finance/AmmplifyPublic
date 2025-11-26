@@ -16,6 +16,8 @@ import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
 import { FeeLib } from "./Fee.sol";
 
+import {tuint256} from "transient-goodies/TransientPrimitives.sol";
+
 // In memory struct derived from a pool
 struct PoolInfo {
     // Immutables
@@ -64,6 +66,9 @@ library PoolInfoImpl {
 /// Internal persistent storage bookkeeping for pools.
 struct Pool {
     mapping(Key key => Node) nodes;
+    mapping(int24 tick => tuint256) tickInitialized;
+    mapping(int24 tick => tuint256) feeGrowthsOutside0X128;
+    mapping(int24 tick => tuint256) feeGrowthsOutside1X128;
     // The last time the pool was modified.
     // This is ONLY updated when a new Data struct is created.
     uint128 timestamp;
@@ -166,37 +171,9 @@ library PoolLib {
         uint256 feeGrowthGlobal1X128,
         int24 lowerTick,
         int24 upperTick
-    ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        (
-            ,
-            ,
-            uint256 lowerFeeGrowthOutside0X128,
-            uint256 lowerFeeGrowthOutside1X128,
-            ,
-            ,
-            ,
-            bool lowerInit
-        ) = poolContract.ticks(lowerTick);
-        if (!lowerInit && currentTick >= lowerTick) {
-            lowerFeeGrowthOutside0X128 = feeGrowthGlobal0X128;
-            lowerFeeGrowthOutside1X128 = feeGrowthGlobal1X128;
-        }
-        (
-            ,
-            ,
-            uint256 upperFeeGrowthOutside0X128,
-            uint256 upperFeeGrowthOutside1X128,
-            ,
-            ,
-            ,
-            bool upperInit
-        ) = poolContract.ticks(upperTick);
-        if (!upperInit && currentTick >= upperTick) {
-            upperFeeGrowthOutside0X128 = feeGrowthGlobal0X128;
-            upperFeeGrowthOutside1X128 = feeGrowthGlobal1X128;
-        }
-
+    ) internal returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        (uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, lowerTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
+        (uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, upperTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
         unchecked {
             if (currentTick < lowerTick) {
                 feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
@@ -208,6 +185,35 @@ library PoolLib {
                 feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
                 feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
             }
+        }
+    }
+
+    function getTickGrowthsOutside(address pool, int24 tick, int24 currentTick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) internal returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128) {
+        Pool storage pStore = Store.load().pools[pool];
+        if (pStore.tickInitialized[tick].get() > 0) {
+            feeGrowthOutside0X128 = pStore.feeGrowthsOutside0X128[tick].get();
+            feeGrowthOutside1X128 = pStore.feeGrowthsOutside1X128[tick].get();
+        } else {
+            bool init;
+            IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
+            (
+                ,
+                ,
+                feeGrowthOutside0X128,
+                feeGrowthOutside1X128,
+            ,
+            ,
+            ,
+            init
+            ) = poolContract.ticks(tick);
+
+            if (!init && currentTick >= tick) {
+                feeGrowthOutside0X128 = feeGrowthGlobal0X128;
+                feeGrowthOutside1X128 = feeGrowthGlobal1X128;
+            }
+            pStore.tickInitialized[tick].set(1);
+            pStore.feeGrowthsOutside0X128[tick].set(feeGrowthOutside0X128);
+            pStore.feeGrowthsOutside1X128[tick].set(feeGrowthOutside1X128);
         }
     }
 
@@ -402,5 +408,52 @@ library PoolValidation {
             obsCardinalityNext >= PoolLib.MIN_OBSERVATIONS,
             PoolInsufficientObservations(obsCardinalityNext, PoolLib.MIN_OBSERVATIONS)
         );
+    }
+}
+
+library PoolViewLib {
+    /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
+    function getInsideFees(
+        address pool,
+        int24 currentTick,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128,
+        int24 lowerTick,
+        int24 upperTick
+    ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        (uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, lowerTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
+        (uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, upperTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
+        unchecked {
+            if (currentTick < lowerTick) {
+                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+            } else if (currentTick >= upperTick) {
+                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
+            } else {
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+            }
+        }
+    }
+
+    function getTickGrowthsOutside(address pool, int24 tick, int24 currentTick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) internal view returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128) {
+        bool init;
+        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
+            (
+                ,
+                ,
+                feeGrowthOutside0X128,
+                feeGrowthOutside1X128,
+            ,
+            ,
+            ,
+            init
+            ) = poolContract.ticks(tick);
+
+            if (!init && currentTick >= tick) {
+                feeGrowthOutside0X128 = feeGrowthGlobal0X128;
+                feeGrowthOutside1X128 = feeGrowthGlobal1X128;
+            }
     }
 }

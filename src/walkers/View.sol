@@ -11,7 +11,7 @@ import { LiqType, LiqData, LiqDataLib, LiqWalker } from "./Liq.sol";
 import { FullMath } from "../FullMath.sol";
 import { FeeData, FeeDataLib, FeeWalker } from "./Fee.sol";
 import { Asset, AssetNode } from "../Asset.sol";
-import { PoolInfo, Pool, PoolLib } from "../Pool.sol";
+import { PoolInfo, Pool, PoolLib, PoolViewLib } from "../Pool.sol";
 import { Store } from "../Store.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
@@ -343,7 +343,7 @@ library ViewWalker {
         int24 low,
         int24 high
     ) internal view {
-        (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
+        (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolViewLib.getInsideFees(
             data.poolAddr,
             data.currentTick,
             data.fees.feeGrowthGlobal0X128,
