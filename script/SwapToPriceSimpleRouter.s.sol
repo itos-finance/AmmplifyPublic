@@ -51,7 +51,7 @@ contract SwapToPriceSimpleRouter is Script {
      */
     function loadEnvironment() public {
         string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/deployed-addresses.json");
+        string memory path = string.concat(root, "/deployed-capricorn.json");
         string memory json = vm.readFile(path);
 
         env.deployer = json.readAddress(".deployer");
@@ -122,7 +122,7 @@ contract SwapToPriceSimpleRouter is Script {
         console2.log("Token1:", token1);
 
         // Mint tokens for the swap
-        mintTokensForSwap(token0, token1, params.maxTokensToMint);
+        // mintTokensForSwap(token0, token1, params.maxTokensToMint);
         console2.log("Finished minting");
 
         // Approve the swap router to spend deployer's tokens
@@ -279,15 +279,9 @@ contract SwapToPriceSimpleRouter is Script {
         console2.log("Pool Address:", poolAddress);
 
         // Get target price from environment (optional)
-        uint160 targetPrice;
-        try vm.envUint("TARGET_PRICE") returns (uint256 price) {
-            targetPrice = uint160(price);
-        } catch {
-            // If not provided, use current price * 1.1 (10% increase)
-            (uint160 currentPrice, , , , , , ) = IUniswapV3Pool(poolAddress).slot0();
-            targetPrice = uint160((uint256(currentPrice) * 110) / 100);
-            console2.log("No TARGET_PRICE provided, using current price * 1.1");
-        }
+        // (uint160 currentPrice, , , , , , ) = IUniswapV3Pool(poolAddress).slot0();
+        // uint160 targetPrice = uint160((uint256(currentPrice) * 110) / 100);
+        uint160 targetPrice = 15845632502852867518708;
         // Get max tokens from environment (optional)
         uint256 maxTokens = vm.envOr("MAX_TOKENS", uint256(1e30));
 

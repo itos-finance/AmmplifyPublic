@@ -194,6 +194,6 @@ contract AdminFacet is TimedAdminFacet {
     }
 
     function getDelay(bool add) public pure override returns (uint32) {
-        return add ? 3 days : 1 days;
+        return add ? 1 days : 0;
     }
 }

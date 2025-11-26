@@ -7,7 +7,8 @@ import { SimplexDiamond } from "../src/Diamond.sol";
 import { AdminFacet } from "../src/facets/Admin.sol";
 import { MakerFacet } from "../src/facets/Maker.sol";
 import { TakerFacet } from "../src/facets/Taker.sol";
-import { PoolFacet } from "../src/facets/Pool.sol";
+// import { PoolFacet } from "../src/facets/Pool.sol";
+import { PoolFacet } from "../src/facets/CapricornPool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
 
 /**
@@ -81,27 +82,35 @@ contract DeployDiamond is Script {
 
         // Deploy application facets first
         // Note: DiamondCutFacet and DiamondLoupeFacet are deployed inline by the Diamond constructor
-        console.log("\n=== Deploying Application Facets ===");
+        // console.log("\n=== Deploying Application Facets ===");
 
-        console.log("Deploying AdminFacet...");
-        adminFacet = new AdminFacet();
-        console.log("AdminFacet deployed at:", address(adminFacet));
+        // console.log("Deploying AdminFacet...");
+        // adminFacet = new AdminFacet();
+        // console.log("AdminFacet deployed at:", address(adminFacet));
 
-        console.log("Deploying MakerFacet...");
-        makerFacet = new MakerFacet();
-        console.log("MakerFacet deployed at:", address(makerFacet));
+        // console.log("Deploying MakerFacet...");
+        // makerFacet = new MakerFacet();
+        // console.log("MakerFacet deployed at:", address(makerFacet));
 
-        console.log("Deploying TakerFacet...");
-        takerFacet = new TakerFacet();
-        console.log("TakerFacet deployed at:", address(takerFacet));
+        // console.log("Deploying TakerFacet...");
+        // takerFacet = new TakerFacet();
+        // console.log("TakerFacet deployed at:", address(takerFacet));
 
-        console.log("Deploying PoolFacet...");
-        poolFacet = new PoolFacet();
-        console.log("PoolFacet deployed at:", address(poolFacet));
+        // console.log("Deploying ViewFacet...");
+        // viewFacet = new ViewFacet();
+        // console.log("ViewFacet deployed at:", address(viewFacet));
 
-        console.log("Deploying ViewFacet...");
-        viewFacet = new ViewFacet();
-        console.log("ViewFacet deployed at:", address(viewFacet));
+        // Deploy the Pool facet for the amm we are integrating with
+        // console.log("Deploying PoolFacet...");
+        // poolFacet = new PoolFacet();
+        // console.log("PoolFacet deployed at:", address(poolFacet));
+
+        // Re-use already deployed facets
+        address adminFacetAddress = address(0x6E36dD75A4eb1b2A6F18C95812f8A060F17Ee2bf);
+        address makerFacetAddress = address(0x04e970c764378DaC3DF29Fd6EFe062b05C6492D7);
+        address takerFacetAddress = address(0x9e45Fe7A52aD9c45b6B154FafD36c8C08453583d);
+        address viewFacetAddress = address(0x7bd548e7e488f103db9A15daDa73c89718AC146a);
+        address poolFacetAddress = address(0x712850D636de7f0472567A2462407465fCB9661C);
 
         // Deploy the SimplexDiamond contract with application facet addresses
         // The constructor will:
@@ -111,14 +120,14 @@ contract DeployDiamond is Script {
         // 4. Register all facets (including inline-deployed ones)
         console.log("\n=== Deploying Diamond ===");
         console.log("(DiamondCutFacet and DiamondLoupeFacet will be deployed inline)");
-        address univ3Factory = address(0xDEADDEADDEAD);
+        address univ3Factory = address(0x204FAca1764B154221e35c0d20aBb3c525710498);
 
         SimplexDiamond.FacetAddresses memory facetAddresses = SimplexDiamond.FacetAddresses({
-            adminFacet: address(adminFacet),
-            makerFacet: address(makerFacet),
-            takerFacet: address(takerFacet),
-            poolFacet: address(poolFacet),
-            viewFacet: address(viewFacet)
+            adminFacet: adminFacetAddress,
+            makerFacet: makerFacetAddress,
+            takerFacet: takerFacetAddress,
+            poolFacet: poolFacetAddress,
+            viewFacet: viewFacetAddress
         });
 
         diamond = new SimplexDiamond(univ3Factory, facetAddresses);

@@ -30,16 +30,16 @@
     }
   },
   "ammplify": {
-    "simplexDiamond": "0xEca6d8973238B71180327C0376c6495A2a29fDE9",
+    "simplexDiamond": "0x5B5e9d616fAFCCC4865a6C29b6F89Ff3aAE7c892",
     "borrowlessDiamond": "0xc94545f827C8c8b47F7694225C3871D8e64aC23D",
     "nftManager": "0xbE330fE44Ac7f80dC875212afC57CA7e9FAb7a07"
   },
   "uniswap": {
-    "factory": "0x6B5F564339DbAD6b780249827f2198a841FEB7F3",
-    "nfpm": "0x4C02af995BB1f574c9bf31F43ddc112414aE0Ac7",
-    "simpleSwapRouter": "0xdac97b6a3951641B177283028A8f428332333071",
+    "factory": "0x204faca1764b154221e35c0d20abb3c525710498",
+    "nfpm": "0x7197e214c0b767cfb76fb734ab638e2c192f4e53",
+    "simpleSwapRouter": "0xd6145b2d3f379919e8cdeda7b97e37c4b2ca9c40",
     "pools": {
-      "USDC_WETH_3000": "0x878750488f613e043d016f99913e639e58bc1e52"
+      "USDC_WETH_3000": "0x659bd0bc4167ba25c62e05656f78043e7ed4a9da"
     }
   },
   "integrations": {

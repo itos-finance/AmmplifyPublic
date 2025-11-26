@@ -17,7 +17,7 @@ contract IncreaseCardinality is Script {
     using stdJson for string;
 
     // Constants
-    uint16 public constant MIN_OBSERVATIONS = 32;
+    uint16 public constant MIN_OBSERVATIONS = 1000; // 65535;
 
     // Environment configuration
     struct Environment {
@@ -80,6 +80,6 @@ contract IncreaseCardinality is Script {
      * @notice Default run function with default pool
      */
     function run() public {
-        run(address(0x999Acd737b1EB0b545eeaab8fc0096626D49f0Fb));
+        run(address(0x659bD0BC4167BA25c62E05656F78043E7eD4a9da));
     }
 }

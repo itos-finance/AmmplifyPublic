@@ -13,10 +13,11 @@ import { IERC165 } from "Commons/ERC/interfaces/IERC165.sol";
 import { BaseAdminFacet, AdminLib } from "Commons/Util/Admin.sol";
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 
-import { AdminFacet } from "./facets/Admin.sol";
+import { AdminFacet, AmmplifyAdminRights } from "./facets/Admin.sol";
 import { MakerFacet } from "./facets/Maker.sol";
 import { TakerFacet } from "./facets/Taker.sol";
 import { PoolFacet } from "./facets/Pool.sol";
+// import { PoolFacet } from "./facets/CapricornPool.sol";
 import { ViewFacet } from "./facets/View.sol";
 
 import { FeeLib } from "./Fee.sol";
@@ -35,6 +36,10 @@ contract SimplexDiamond is IDiamond {
 
     constructor(address uniV3factory, FacetAddresses memory facetAddresses) {
         AdminLib.initOwner(msg.sender);
+        // Terence Hardware
+        AdminLib.register(0x6e7465acBaa3217Bdcc4C17CDbE1DaDbb4356377, AmmplifyAdminRights.TAKER);
+        // Brian Hardware
+        AdminLib.register(0x81785e00055159FCae25703D06422aBF5603f8A8, AmmplifyAdminRights.TAKER);
         FeeLib.init();
         PoolValidation.initFactory(uniV3factory);
         FacetCut[] memory cuts = new FacetCut[](7);
@@ -133,6 +138,7 @@ contract SimplexDiamond is IDiamond {
             });
         }
 
+        // We use this one for Uniswap
         {
             bytes4[] memory selectors = new bytes4[](1);
             selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
@@ -146,7 +152,7 @@ contract SimplexDiamond is IDiamond {
         // We use this one for Capricorn
         // {
         //     bytes4[] memory selectors = new bytes4[](1);
-        //     selectors[0] = CapricornPoolFacet.capricornCLMintCallback.selector;
+        //     selectors[0] = PoolFacet.capricornCLMintCallback.selector;
         //     cuts[5] = IDiamond.FacetCut({
         //         facetAddress: facetAddresses.poolFacet,
         //         action: IDiamond.FacetCutAction.Add,
