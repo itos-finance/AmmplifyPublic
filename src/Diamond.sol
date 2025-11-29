@@ -10,10 +10,10 @@ import { IDiamondLoupe } from "Commons/Diamond/interfaces/IDiamondLoupe.sol";
 import { IERC173 } from "Commons/ERC/interfaces/IERC173.sol";
 import { IERC165 } from "Commons/ERC/interfaces/IERC165.sol";
 
-import { BaseAdminFacet, AdminLib, AmmplifyAdminRights } from "Commons/Util/Admin.sol";
+import { BaseAdminFacet, AdminLib } from "Commons/Util/Admin.sol";
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 
-import { AdminFacet } from "./facets/Admin.sol";
+import { AdminFacet, AmmplifyAdminRights } from "./facets/Admin.sol";
 import { MakerFacet } from "./facets/Maker.sol";
 import { TakerFacet } from "./facets/Taker.sol";
 import { PoolFacet } from "./facets/Pool.sol";
