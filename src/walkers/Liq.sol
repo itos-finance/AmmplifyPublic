@@ -44,8 +44,6 @@ struct LiqNode {
     // Liq Redistribution
     uint128 borrowed;
     uint128 lent;
-    int128 preBorrow;
-    int128 preLend;
 }
 
 using LiqNodeImpl for LiqNode global;
@@ -477,18 +475,23 @@ library LiqWalker {
     /// @dev Call this after modifying liquidity.
     function solveLiq(Key key, Node storage node, Data memory data) internal {
         // First settle our borrows and lends from siblings and children.
-        if (node.liq.preBorrow > 0) {
-            node.liq.borrowed += uint128(node.liq.preBorrow);
-        } else if (node.liq.preBorrow < 0) {
-            node.liq.borrowed -= uint128(-node.liq.preBorrow);
+        {
+            int128 preBorrow = data.clearPreBorrow(key);
+            if (preBorrow > 0) {
+                node.liq.borrowed += uint128(preBorrow);
+            } else if (preBorrow < 0) {
+                node.liq.borrowed -= uint128(-preBorrow);
+            }
         }
-        node.liq.preBorrow = 0;
-        if (node.liq.preLend > 0) {
-            node.liq.lent += uint128(node.liq.preLend);
-        } else {
-            node.liq.lent -= uint128(-node.liq.preLend);
+
+        {
+            int128 preLend = data.clearPreLend(key);
+            if (preLend > 0) {
+                node.liq.lent += uint128(preLend);
+            } else {
+                node.liq.lent -= uint128(-preLend);
+            }
         }
-        node.liq.preLend = 0;
 
         int128 netLiq = node.liq.net();
 
@@ -519,11 +522,11 @@ library LiqWalker {
             Key parentKey = key.parent();
             Node storage parent = data.node(parentKey);
             int128 iRepayable = SafeCast.toInt128(repayable);
-            parent.liq.preLend -= iRepayable;
+            data.modifyPreLend(parentKey, -iRepayable);
             parent.liq.setDirty();
-            node.liq.borrowed -= uint128(iRepayable);
+            node.liq.borrowed -= repayable;
             node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
-            sibling.liq.preBorrow -= iRepayable;
+            data.modifyPreBorrow(sibKey, -iRepayable);
             sibling.liq.setDirty();
             // Every time we repay, we're removing two positions and adding back one which
             // will cost dust. We charge that as fees.
@@ -550,12 +553,12 @@ library LiqWalker {
                 // We borrow at least this amount.
                 borrow = int128(data.liq.compoundThreshold);
             }
-            parent.liq.preLend += borrow;
+            data.modifyPreLend(parentKey, borrow);
             parent.liq.setDirty();
             uint128 uBorrow = uint128(borrow);
             node.liq.borrowed += uBorrow;
             node.liq.setDirtyWithSib(); // Tells the pool walker to visit our sibling.
-            sibling.liq.preBorrow += borrow;
+            data.modifyPreBorrow(sibKey, borrow);
             sibling.liq.setDirty();
             // Every time we borrow, we're removing one positions and adding two. This could
             // charge us dust so we charge that as fees.
@@ -638,14 +641,14 @@ library LiqWalker {
 
 library LiqWalkerLite {
     /// Used to solve liq for a sibling node during the POOL WALK. Not used by liq walking itself.
-    function solveSibLiq(Node storage node) internal {
+    function solveSibLiq(Key key, Node storage node, Data memory data) internal {
         // Settle our borrows and from siblings
-        if (node.liq.preBorrow > 0) {
-            node.liq.borrowed += uint128(node.liq.preBorrow);
-        } else if (node.liq.preBorrow < 0) {
-            node.liq.borrowed -= uint128(-node.liq.preBorrow);
+        int128 preBorrow = data.clearPreBorrow(key);
+        if (preBorrow > 0) {
+            node.liq.borrowed += uint128(preBorrow);
+        } else if (preBorrow < 0) {
+            node.liq.borrowed -= uint128(-preBorrow);
         }
-        node.liq.preBorrow = 0;
 
         // No lends will be unresolved because we always walk up to parent after solving a node.
     }

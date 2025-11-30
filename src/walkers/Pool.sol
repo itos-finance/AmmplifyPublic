@@ -65,7 +65,7 @@ library PoolWalker {
             if (sibDirty) {
                 Key sibKey = key.sibling();
                 Node storage sib = data.node(sibKey);
-                LiqWalkerLite.solveSibLiq(sib);
+                LiqWalkerLite.solveSibLiq(sibKey, sib, data);
                 downUpdateLiq(sibKey, sib, data);
             }
         }
@@ -121,16 +121,20 @@ library PoolWalker {
             // We need to add liquidity. So we save it. We know this will be cleared eventually anyways.
             node.liq.dirty |= ADD_LIQ_DIRTY_FLAG;
             // We know pre lend is zero after solving, so we store the liq diff here to avoid requerying.
-            node.liq.preLend = int128(targetLiq - liq);
+            data.modifyPreLend(key, int128(targetLiq - liq));
         } else {
             if (targetLiq < liq) {
                 PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
                 PoolLib.collect(data.poolAddr, lowTick, highTick, false);
             }
             // A revisit (due to sib solving) might have changed our intended mint, so we have to clear those.
-            node.liq.preLend = 0;
+            data.clearPreLend(key);
             node.liq.dirty &= ~ADD_LIQ_DIRTY_FLAG;
         }
+        // On the second walk down, we no longer need any of the fees so we can clear the growths in case
+        // there is another action in this same transaction.
+        PoolLib.clearTickGrowths(data.poolAddr, lowTick);
+        PoolLib.clearTickGrowths(data.poolAddr, highTick);
     }
 
     function upUpdateLiq(Key key, Node storage node, Data memory data) internal {
@@ -139,11 +143,10 @@ library PoolWalker {
             return;
         }
         // The liq diff is stored by downUpdateLiq when the add liq flag is set.
-        uint128 liqDiff = uint128(node.liq.preLend);
+
+        uint128 liqDiff = uint128(data.clearPreLend(key));
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
         PoolLib.mint(data.poolAddr, lowTick, highTick, liqDiff);
-        // Reset the temporary storage in preLend.
-        node.liq.preLend = 0;
     }
 
     function verifySpend(int256 expectedSpend, int256 actualSpend, address token) internal pure {

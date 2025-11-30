@@ -46,12 +46,11 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
         // We need to add liq so nothing changes on the down.
         assertEq(liq, 0, "1");
         assertEq(node.liq.dirty, PoolWalker.ADD_LIQ_DIRTY_FLAG, "2");
-        assertEq(node.liq.preLend, 100e8 + 1, "3");
         PoolWalker.upUpdateLiq(key, node, data);
+
         (liq, , , , ) = IUniswapV3Pool(pools[0]).positions(posKey);
         // There should always be 1 extra liq so the ticks never clear.
         assertEq(liq, 100e8 + 1, "4");
-        assertEq(node.liq.preLend, 0, "5");
 
         // Check that the pool's liquidity has decreased.
         node.liq.mLiq = 50e8;
@@ -61,7 +60,7 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
         // Still just one extra liq.
         assertEq(liq, 50e8 + 1, "6");
         assertEq(node.liq.dirty, 0, "7");
-        assertEq(node.liq.preLend, 0, "8");
+        assertEq(data.clearPreLend(key), 0, "8");
 
         node.liq.borrowed = 200e8;
         PoolWalker.downUpdateLiq(key, node, data);

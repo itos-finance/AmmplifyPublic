@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import { Test } from "forge-std/Test.sol";
 import { console } from "forge-std/console.sol";
 
+import { Store } from "../src/Store.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 import { IUniswapV3MintCallback } from "v3-core/interfaces/callback/IUniswapV3MintCallback.sol";
 import { TransferHelper } from "Commons/Util/TransferHelper.sol";
@@ -239,6 +240,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertLt(currentTick, tickLower, "currentTick.lt.tickLower");
 
         (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        // First test that we cache inside fees.
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -247,6 +249,25 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             tickLower,
             tickUpper
         );
+        assertEq(feeGrowthInside0X128, 0, "feeGrowthInside0X128.cached");
+        assertEq(feeGrowthInside1X128, 0, "feeGrowthInside1X128.cached");
+
+        // Recalc inside fees
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
+            tickLower,
+            tickUpper
+        );
+        console.log("feeGrowthInside0X128.belowRange", feeGrowthInside0X128);
+        console.log("feeGrowthInside1X128.belowRange", feeGrowthInside1X128);
+        console.log("lowerTick", tickLower);
+        console.log("upperTick", tickUpper);
+        console.log("currentTick", currentTick);
         PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
 
         (, uint256 posFeeGrowthInside0X128, uint256 posFeeGrowthInside1X128, , ) = pool.positions(
@@ -267,10 +288,25 @@ contract PoolTest is Test, UniV3IntegrationSetup {
 
         // move price above range
         swapTo(0, TickMath.getSqrtPriceAtTick(tickUpper + (tickSpacing * 10)));
+        // After swap the fees are still cached.
+        (uint256 cachedFeeGrowthInside0X128, uint256 cachedFeeGrowthInside1X128) = PoolLib.getInsideFees(
+            poolAddr,
+            currentTick,
+            feeGrowthGlobal0X128,
+            feeGrowthGlobal1X128,
+            tickLower,
+            tickUpper
+        );
+        // Now we actually update to the new tick, which requires recomputing everything.
         (, currentTick, , , , , ) = pool.slot0();
         assertGt(currentTick, tickUpper, "currentTick.gt.tickUpper");
 
+        assertEq(cachedFeeGrowthInside0X128, feeGrowthInside0X128, "feeGrowthInside0X128.cached.aboveRange");
+        assertEq(cachedFeeGrowthInside1X128, feeGrowthInside1X128, "feeGrowthInside1X128.cached.aboveRange");
+
         (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -279,6 +315,9 @@ contract PoolTest is Test, UniV3IntegrationSetup {
             tickLower,
             tickUpper
         );
+        // We swapped up so the x stays the same but the y fees increase.
+        assertEq(feeGrowthInside0X128, cachedFeeGrowthInside0X128, "feeGrowthInside0X128.recalc.aboveRange");
+        assertNotEq(feeGrowthInside1X128, cachedFeeGrowthInside1X128, "feeGrowthInside1X128.recalc.aboveRange");
         PoolLib.burn(poolAddr, tickLower, tickUpper, 0); // accumulate fees
 
         (, posFeeGrowthInside0X128, posFeeGrowthInside1X128, , ) = pool.positions(
@@ -304,6 +343,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertGt(currentTick, tickLower, "currentTick.gt.tickLower");
 
         (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -370,6 +411,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (, currentTick, , , , , ) = pool.slot0();
         assertGt(global11, global01, "y goes up");
         assertEq(global01, global00, "x stays same");
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -388,6 +431,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (, currentTick, , , , , ) = pool.slot0();
         assertEq(global12, global11, "y stays same");
         assertGt(global02, global10, "x goes up");
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -404,6 +449,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         // Still zero.
         (global02, global12) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -421,6 +468,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (uint256 global03, uint256 global13) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
         assertGt(global03 + global13, global02 + global12, "global goes up");
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -437,6 +486,8 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         swapTo(0, TickMath.getSqrtPriceAtTick(tickLower));
         (global03, global13) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
+        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
+        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,

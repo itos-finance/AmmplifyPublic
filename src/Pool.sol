@@ -16,7 +16,7 @@ import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
 import { FeeLib } from "./Fee.sol";
 
-import {tuint256} from "transient-goodies/TransientPrimitives.sol";
+import { tuint256, tint256 } from "transient-goodies/TransientPrimitives.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
@@ -66,12 +66,16 @@ library PoolInfoImpl {
 /// Internal persistent storage bookkeeping for pools.
 struct Pool {
     mapping(Key key => Node) nodes;
-    mapping(int24 tick => tuint256) tickInitialized;
-    mapping(int24 tick => tuint256) feeGrowthsOutside0X128;
-    mapping(int24 tick => tuint256) feeGrowthsOutside1X128;
     // The last time the pool was modified.
     // This is ONLY updated when a new Data struct is created.
     uint128 timestamp;
+    // Temporary liq storage
+    mapping(Key key => tint256) preBorrows;
+    mapping(Key key => tint256) preLends;
+    // For tick fee caching.
+    mapping(int24 tick => tuint256) tickInitialized;
+    mapping(int24 tick => tuint256) feeGrowthsOutside0X128;
+    mapping(int24 tick => tuint256) feeGrowthsOutside1X128;
 }
 
 /// A helper library for accessing the underlying pool's ABI.
@@ -215,6 +219,11 @@ library PoolLib {
             pStore.feeGrowthsOutside0X128[tick].set(feeGrowthOutside0X128);
             pStore.feeGrowthsOutside1X128[tick].set(feeGrowthOutside1X128);
         }
+    }
+
+    function clearTickGrowths(address pool, int24 tick) internal {
+        Pool storage pStore = Store.load().pools[pool];
+        pStore.tickInitialized[tick].set(0);
     }
 
     /// Get the liquidity specific to a particular range.

@@ -166,4 +166,44 @@ library DataImpl {
         }
         return asset.nodes[key];
     }
+
+    function clearPreBorrow(Data memory self, Key key) internal returns (int128 preBorrow) {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        preBorrow = int128(pool.preBorrows[key].get());
+        pool.preBorrows[key].set(0);
+    }
+
+    function modifyPreBorrow(Data memory self, Key key, int128 diff) internal {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        int256 preBorrow = pool.preBorrows[key].get();
+        pool.preBorrows[key].set(preBorrow + diff);
+    }
+
+    function clearPreLend(Data memory self, Key key) internal returns (int128 preLend) {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        preLend = int128(pool.preLends[key].get());
+        pool.preLends[key].set(0);
+    }
+
+    function modifyPreLend(Data memory self, Key key, int128 diff) internal {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        int256 preLend = pool.preLends[key].get();
+        pool.preLends[key].set(preLend + diff);
+    }
 }
