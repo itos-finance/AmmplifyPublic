@@ -384,7 +384,7 @@ library ViewWalker {
                 false
             );
         } else {
-            newFeeGrowthInside0X128 += node.fees.takerXFeesPerLiqX128;
+            /* newFeeGrowthInside0X128 += node.fees.takerXFeesPerLiqX128;
             newFeeGrowthInside1X128 += node.fees.takerYFeesPerLiqX128;
             if (data.takeAsX) {
                 newFeeGrowthInside0X128 += node.fees.xTakerFeesPerLiqX128;
@@ -392,7 +392,7 @@ library ViewWalker {
                 newFeeGrowthInside1X128 += node.fees.yTakerFeesPerLiqX128;
             }
             data.earningsX += FullMath.mulX128(aNode.sliq, newFeeGrowthInside0X128 - aNode.fee0CheckX128, true);
-            data.earningsY += FullMath.mulX128(aNode.sliq, newFeeGrowthInside1X128 - aNode.fee1CheckX128, true);
+            data.earningsY += FullMath.mulX128(aNode.sliq, newFeeGrowthInside1X128 - aNode.fee1CheckX128, true); */
         }
     }
 
