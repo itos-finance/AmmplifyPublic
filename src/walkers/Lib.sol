@@ -30,13 +30,13 @@ library WalkerLib {
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
-        FeeWalker.up(key, visit, data); // 4 kB
+        // FeeWalker.up(key, visit, data); // 4 kB
         LiqWalker.up(key, visit, data); // 9 kB
     }
 
     function phase(Phase walkPhase, bytes memory raw) internal pure {
         Data memory data = toData(raw);
-        FeeWalker.phase(walkPhase, data); // 300 B
+        // FeeWalker.phase(walkPhase, data); // 300 B
         LiqWalker.phase(walkPhase, data); // 600 B
     }
 
