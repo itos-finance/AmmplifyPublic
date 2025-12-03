@@ -75,7 +75,7 @@ contract TakerVault is ERC4626 {
 
     function maxRedeem(address _owner) public view override returns (uint256) {
         uint256 available = IERC20(asset()).balanceOf(address(this));
-        available = _convertToShares(available, Math.Rounding.Floor);
+        available = _convertToShares(available, Math.Rounding.Ceil);
         uint256 balance = balanceOf(_owner);
         return balance < available ? balance : available;
     }
