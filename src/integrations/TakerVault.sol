@@ -6,8 +6,9 @@ import { ERC4626 } from "openzeppelin-contracts/contracts/token/ERC20/extensions
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { ERC20 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { Math } from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
-import { RFTLib } from "Commons/Util/RFT.sol";
+import { TransferHelper } from "./libraries/TransferHelper.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
 /// A basic vault for holding the given token from taker positions.
@@ -47,12 +48,7 @@ contract TakerVault is ERC4626 {
             amount = outstanding;
         }
 
-        address[] memory tokens = new address[](1);
-        tokens[0] = asset();
-        int256[] memory balances = new int256[](1);
-        balances[0] = SafeCast.toInt256(amount);
-        RFTLib.settle(msg.sender, tokens, balances, "");
-
+        TransferHelper.safeTransferFrom(asset(), msg.sender, address(this), amount);
         outstanding -= amount;
     }
 
@@ -75,6 +71,13 @@ contract TakerVault is ERC4626 {
 
     function totalAssets() public view override returns (uint256) {
         return IERC20(asset()).balanceOf(address(this)) + outstanding;
+    }
+
+    function maxRedeem(address _owner) public view override returns (uint256) {
+        uint256 available = IERC20(asset()).balanceOf(address(this));
+        available = _convertToShares(available, Math.Rounding.Floor);
+        uint256 balance = balanceOf(_owner);
+        return balance < available ? balance : available;
     }
 
     function _decimalsOffset() internal pure override returns (uint8) {
