@@ -8,7 +8,7 @@ import { ERC20 } from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import { Math } from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 
-import { TransferHelper } from "./libraries/TransferHelper.sol";
+import { TransferHelper } from "Commons/util/TransferHelper.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
 /// A basic vault for holding the given token from taker positions.
