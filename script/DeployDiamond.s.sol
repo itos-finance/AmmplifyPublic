@@ -111,7 +111,7 @@ contract DeployDiamond is Script {
         // 4. Register all facets (including inline-deployed ones)
         console.log("\n=== Deploying Diamond ===");
         console.log("(DiamondCutFacet and DiamondLoupeFacet will be deployed inline)");
-        address univ3Factory = address(0x6B5F564339DbAD6b780249827f2198a841FEB7F3);
+        address univ3Factory = address(0x204FAca1764B154221e35c0d20aBb3c525710498);
 
         SimplexDiamond.FacetAddresses memory facetAddresses = SimplexDiamond.FacetAddresses({
             adminFacet: address(adminFacet),
