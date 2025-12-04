@@ -7,7 +7,7 @@ import { SimplexDiamond } from "../src/Diamond.sol";
 import { AdminFacet } from "../src/facets/Admin.sol";
 import { MakerFacet } from "../src/facets/Maker.sol";
 import { TakerFacet } from "../src/facets/Taker.sol";
-import { PoolFacet } from "../src/facets/Pool.sol";
+import { PoolFacet } from "../src/facets/CapricornPool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
 
 /**
@@ -83,25 +83,25 @@ contract DeployDiamond is Script {
         // Note: DiamondCutFacet and DiamondLoupeFacet are deployed inline by the Diamond constructor
         console.log("\n=== Deploying Application Facets ===");
 
-        console.log("Deploying AdminFacet...");
-        adminFacet = new AdminFacet();
-        console.log("AdminFacet deployed at:", address(adminFacet));
+        console.log("Using AdminFacet from deployed-nad.json...");
+        adminFacet = AdminFacet(0xdcCb4DbB69da836907B46634dD76302fE558E723);
+        console.log("AdminFacet address:", address(adminFacet));
 
-        console.log("Deploying MakerFacet...");
-        makerFacet = new MakerFacet();
-        console.log("MakerFacet deployed at:", address(makerFacet));
+        console.log("Using MakerFacet from deployed-nad.json...");
+        makerFacet = MakerFacet(0x362BFD02CF08FBE0E6f9f8deCcccD36c39Bf4e52);
+        console.log("MakerFacet address:", address(makerFacet));
 
-        console.log("Deploying TakerFacet...");
-        takerFacet = new TakerFacet();
-        console.log("TakerFacet deployed at:", address(takerFacet));
+        console.log("Using TakerFacet from deployed-nad.json...");
+        takerFacet = TakerFacet(0xEd4cbfb713CF7894DBcC275D72c8C1FcBbE2089B);
+        console.log("TakerFacet address:", address(takerFacet));
 
-        console.log("Deploying PoolFacet...");
-        poolFacet = new PoolFacet();
-        console.log("PoolFacet deployed at:", address(poolFacet));
+        console.log("Using PoolFacet from deployed-nad.json...");
+        poolFacet = PoolFacet(0x70d98339B1837b28bf4eCAFe010A1197491a7AB5);
+        console.log("PoolFacet address:", address(poolFacet));
 
-        console.log("Deploying ViewFacet...");
-        viewFacet = new ViewFacet();
-        console.log("ViewFacet deployed at:", address(viewFacet));
+        console.log("Using ViewFacet from deployed-nad.json...");
+        viewFacet = ViewFacet(0xd485f9B426bA636403b89Ef520CD0beB4F1109b7);
+        console.log("ViewFacet address:", address(viewFacet));
 
         // Deploy the SimplexDiamond contract with application facet addresses
         // The constructor will:
@@ -111,7 +111,7 @@ contract DeployDiamond is Script {
         // 4. Register all facets (including inline-deployed ones)
         console.log("\n=== Deploying Diamond ===");
         console.log("(DiamondCutFacet and DiamondLoupeFacet will be deployed inline)");
-        address univ3Factory = address(0xDEADDEADDEAD);
+        address univ3Factory = address(0x6B5F564339DbAD6b780249827f2198a841FEB7F3);
 
         SimplexDiamond.FacetAddresses memory facetAddresses = SimplexDiamond.FacetAddresses({
             adminFacet: address(adminFacet),
