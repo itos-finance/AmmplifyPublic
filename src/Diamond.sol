@@ -137,20 +137,10 @@ contract SimplexDiamond is IDiamond {
             });
         }
 
-        // {
-        //     bytes4[] memory selectors = new bytes4[](1);
-        //     selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
-        //     cuts[5] = IDiamond.FacetCut({
-        //         facetAddress: facetAddresses.poolFacet,
-        //         action: IDiamond.FacetCutAction.Add,
-        //         functionSelectors: selectors
-        //     });
-        // }
-
-        // We use this one for Capricorn
         {
-            bytes4[] memory selectors = new bytes4[](1);
-            selectors[0] = PoolFacet.capricornCLMintCallback.selector;
+            bytes4[] memory selectors = new bytes4[](2);
+            selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
+            selectors[1] = PoolFacet.capricornCLMintCallback.selector;
             cuts[5] = IDiamond.FacetCut({
                 facetAddress: facetAddresses.poolFacet,
                 action: IDiamond.FacetCutAction.Add,
