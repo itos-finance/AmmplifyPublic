@@ -6,13 +6,14 @@ import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { MockERC4626 } from "../mocks/MockERC4626.sol";
 import { VaultType } from "../../src/vaults/Vault.sol";
 import { VaultLib } from "../../src/vaults/Vault.sol";
 
-contract AdminFacetTest is MultiSetupTest {
+contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
     uint256 constant TAKER_VAULT_ID = 80085;
 
     MockERC20 public mockToken;
@@ -36,7 +37,7 @@ contract AdminFacetTest is MultiSetupTest {
     event DefaultTwapIntervalSet(uint32 interval);
 
     function setUp() public {
-        _newDiamond();
+        _newDiamond(factory);
         nonOwner = address(0x1337);
         testPool = address(0xFFF);
 

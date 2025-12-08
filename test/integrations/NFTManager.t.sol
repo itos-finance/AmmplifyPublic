@@ -7,6 +7,7 @@ import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { NFTManager } from "../../src/integrations/NFTManager.sol";
 import { UniV3Decomposer } from "../../src/integrations/UniV3Decomposer.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";
@@ -16,7 +17,7 @@ import { IView } from "../../src/interfaces/IView.sol";
 import { PoolLib } from "../../src/Pool.sol";
 import { console } from "forge-std/console.sol";
 
-contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
+contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV3IntegrationSetup {
     NFTManager public nftManager;
     UniV3Decomposer public decomposer;
 
@@ -35,8 +36,8 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
 
     function setUp() public {
         // Setup the diamond and facets
-        _newDiamond();
-        _deployNFPM();
+        _newDiamond(factory);
+        _deployNFPM(factory);
 
         // Setup a pool
         (, address poolAddr, address token0Addr, address token1Addr) = setUpPool(POOL_FEE);
@@ -45,7 +46,7 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver {
         token1 = MockERC20(token1Addr);
 
         // Deploy NFPM
-        _deployNFPM();
+        _deployNFPM(factory);
 
         // Setup decomposer
         decomposer = new UniV3Decomposer(address(nfpm), address(makerFacet));

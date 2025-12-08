@@ -8,6 +8,7 @@ import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console } from "forge-std/console.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
@@ -23,7 +24,7 @@ uint160 constant MIN_SQRT_RATIO = 4295128739;
 /// @dev The maximum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MAX_TICK)
 uint160 constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
-contract TakerFacetTest is MultiSetupTest {
+contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
     UniswapV3Pool public pool;
 
     address public recipient;
@@ -57,7 +58,7 @@ contract TakerFacetTest is MultiSetupTest {
     }
 
     function setUp() public {
-        _newDiamond();
+        _newDiamond(factory);
         // Grant TAKER rights to this test contract using the TimedAdmin system
         // Since this is a test, we'll submit rights and then time travel to accept them
         adminFacet.submitRights(address(this), AmmplifyAdminRights.TAKER, true);

@@ -5,6 +5,7 @@ import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console2 } from "forge-std/console2.sol";
 import { MultiSetupTest } from "../MultiSetup.u.sol";
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { PoolInfo } from "../../src/Pool.sol";
 import { LiqType, LiqWalker } from "../../src/walkers/Liq.sol";
 import { MakerFacet } from "../../src/facets/Maker.sol";
@@ -23,7 +24,7 @@ uint160 constant MIN_SQRT_RATIO = 4295128739;
 /// @dev The maximum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MAX_TICK)
 uint160 constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
-contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
+contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3IntegrationSetup {
     UniswapV3Pool public pool;
 
     address public recipient;
@@ -37,7 +38,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback {
     PoolInfo public poolInfo;
 
     function setUp() public {
-        _newDiamond();
+        _newDiamond(factory);
         (, address _pool, address _token0, address _token1) = setUpPool();
 
         token0 = MockERC20(_token0);

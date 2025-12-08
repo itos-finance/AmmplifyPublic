@@ -22,7 +22,7 @@ import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { NonfungiblePositionManager } from "./mocks/nfpm/NonfungiblePositionManager.sol";
 
-contract MultiSetupTest is Test, UniV3IntegrationSetup {
+contract MultiSetupTest is Test {
     // Note: removed the constant tag so we can override INITAL_VALUE in interiting tests
     uint256 public INITIAL_MINT_AMOUNT = 1e30;
     uint128 public INITIAL_VALUE = 1_000_000e18;
@@ -49,7 +49,7 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
     address public bob = makeAddr("bob");
 
     /// Deploy the diamond and facets
-    function _newDiamond() internal {
+    function _newDiamond(address factory) internal {
         // Deploy facets first
         adminFacet = new AdminFacet();
         makerFacet = new MakerFacet();
@@ -67,7 +67,7 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
         });
 
         // Deploy diamond with factory and facet addresses
-        diamond = address(new SimplexDiamond(address(factory), facetAddresses));
+        diamond = address(new SimplexDiamond(factory, facetAddresses));
 
         // Cast facets to diamond address for interface access
         adminFacet = AdminFacet(diamond);
@@ -77,8 +77,8 @@ contract MultiSetupTest is Test, UniV3IntegrationSetup {
         viewFacet = ViewFacet(diamond);
     }
 
-    function _deployNFPM() internal {
-        nfpm = new NonfungiblePositionManager(address(factory), address(0), address(0));
+    function _deployNFPM(address factory) internal {
+        nfpm = new NonfungiblePositionManager(factory, address(0), address(0));
     }
 
     /// Call this last since it messes with prank.

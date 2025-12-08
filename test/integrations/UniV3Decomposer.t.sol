@@ -7,15 +7,16 @@ import { console2 } from "forge-std/console2.sol";
 import { NonfungiblePositionManager } from "../mocks/nfpm/NonfungiblePositionManager.sol";
 import { UniV3Decomposer } from "../../src/integrations/UniV3Decomposer.sol";
 import { MultiSetupTest } from "../MultiSetup.u.sol";
+import { UniV3IntegrationSetup } from "./UniV3.u.sol";
 import { MockERC20 } from "./../mocks/MockERC20.sol";
 import { INonfungiblePositionManager } from "../mocks/nfpm/interfaces/INonfungiblePositionManager.sol";
 
-contract UniV3DecomposerTest is MultiSetupTest {
+contract UniV3DecomposerTest is MultiSetupTest, UniV3IntegrationSetup {
     UniV3Decomposer private decomposer;
 
     function setUp() public {
-        _newDiamond();
-        _deployNFPM();
+        _newDiamond(factory);
+        _deployNFPM(factory);
 
         (, , address _token0, address _token1) = setUpPool();
         token0 = MockERC20(_token0);
