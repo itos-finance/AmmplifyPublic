@@ -16,8 +16,7 @@ import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 import { AdminFacet, AmmplifyAdminRights } from "./facets/Admin.sol";
 import { MakerFacet } from "./facets/Maker.sol";
 import { TakerFacet } from "./facets/Taker.sol";
-// import { PoolFacet } from "./facets/Pool.sol";
-import { PoolFacet } from "./facets/CapricornPool.sol";
+import { PoolFacet } from "./facets/Pool.sol";
 import { ViewFacet } from "./facets/View.sol";
 
 import { FeeLib } from "./Fee.sol";
