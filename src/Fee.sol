@@ -55,7 +55,7 @@ library FeeLib {
             maxUtilX64: 20291418481080508416, // 110%
             maxRateX64: 1169884834710 // 200%
         });
-        store.defaultTwapInterval = 300; // 5 minutes
+        store.defaultTwapInterval = 180; // 3 minutes
     }
 
     /* Getters */
