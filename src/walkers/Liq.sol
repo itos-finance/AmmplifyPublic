@@ -441,6 +441,10 @@ library LiqWalker {
                 node.liq.borrowedX += xBorrow;
                 node.liq.borrowedY += yBorrow;
                 // But the actual balances they get are based on the current price.
+                if (!node.liq.initialized) {
+                    // And reduced if we need to leave one liq for initialization.
+                    liqDiff -= 1;
+                }
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xBalance);
                 data.yBalance -= int256(yBalance);
@@ -563,7 +567,16 @@ library LiqWalker {
             // Every time we borrow, we're removing one positions and adding two. This could
             // charge us dust so we charge that as fees.
             {
-                (uint256 givenX, uint256 givenY) = data.computeBalances(parentKey, uBorrow, false);
+                uint256 givenX;
+                uint256 givenY;
+                if (parent.liq.initialized) {
+                    (givenX, givenY) = data.computeBalances(parentKey, uBorrow, false);
+                } else {
+                    // If the parent is not initialized, we actually have to pay one more unit of liquidity.
+                    parent.liq.initialized = true;
+                    (givenX, givenY) = data.computeBalances(parentKey, uBorrow - 1, false);
+                }
+
                 // The two children nodes might not be initialized yet.
                 uint256 myX;
                 uint256 myY;
@@ -573,6 +586,7 @@ library LiqWalker {
                     node.liq.initialized = true;
                     (myX, myY) = data.computeBalances(key, uBorrow + 1, true);
                 }
+
                 uint256 sibX;
                 uint256 sibY;
                 if (sibling.liq.initialized) {
@@ -581,6 +595,7 @@ library LiqWalker {
                     sibling.liq.initialized = true;
                     (sibX, sibY) = data.computeBalances(sibKey, uBorrow + 1, true);
                 }
+
                 if (givenX < myX + sibX) {
                     data.xBalance += int256(myX + sibX - givenX);
                 }
