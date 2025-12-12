@@ -7,6 +7,7 @@ import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
 import { IDiamond } from "Commons/Diamond/interfaces/IDiamond.sol";
 import { DiamondCutFacet } from "Commons/Diamond/facets/DiamondCutFacet.sol";
+import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
 import { VaultType } from "../src/vaults/Vault.sol";
 
 import { SimplexDiamond } from "../src/Diamond.sol";
@@ -48,6 +49,10 @@ contract MultiSetupTest is Test {
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
 
+    function _newDiamond(UniswapV3Factory factory) internal {
+        _newDiamond(address(factory));
+    }
+
     /// Deploy the diamond and facets
     function _newDiamond(address factory) internal {
         // Deploy facets first
@@ -75,6 +80,10 @@ contract MultiSetupTest is Test {
         takerFacet = TakerFacet(diamond);
         poolFacet = PoolFacet(diamond);
         viewFacet = ViewFacet(diamond);
+    }
+
+    function _deployNFPM(UniswapV3Factory factory) internal {
+        _deployNFPM(address(factory));
     }
 
     function _deployNFPM(address factory) internal {

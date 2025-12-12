@@ -5,7 +5,7 @@ import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console2 } from "forge-std/console2.sol";
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "./UniV3.u.sol";
+import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 import { PoolInfo } from "../../src/Pool.sol";
 import { LiqType, LiqWalker } from "../../src/walkers/Liq.sol";
 import { MakerFacet } from "../../src/facets/Maker.sol";

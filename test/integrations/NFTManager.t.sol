@@ -7,7 +7,7 @@ import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "./UniV3.u.sol";
+import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 import { NFTManager } from "../../src/integrations/NFTManager.sol";
 import { UniV3Decomposer } from "../../src/integrations/UniV3Decomposer.sol";
 import { LiqType } from "../../src/walkers/Liq.sol";

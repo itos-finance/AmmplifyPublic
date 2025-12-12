@@ -6,7 +6,7 @@ import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "./UniV3.u.sol";
+import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { MockERC4626 } from "../mocks/MockERC4626.sol";

@@ -8,7 +8,7 @@ import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { console } from "forge-std/console.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "./UniV3.u.sol";
+import { UniV3IntegrationSetup } from "../UniV3.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
