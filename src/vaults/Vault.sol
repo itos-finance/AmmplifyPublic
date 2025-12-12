@@ -9,8 +9,6 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 import { TakerVault } from "../integrations/TakerVault.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 
-import { console } from "forge-std/console.sol";
-
 // Holds overall vault information.
 struct VaultStore {
     // Vaults in use.
@@ -170,7 +168,6 @@ library VaultLib {
         VaultStore storage vStore = Store.vaults();
         active = vStore.vaults[token][index];
         backup = vStore.backups[token][index];
-        console.log("Active vault:", index, active);
 
         // Specifically for the default Taker vault version
         if (index == 0 && active == address(0)) {
@@ -218,7 +215,6 @@ library VaultLib {
     function tryInstallDefaultVault(address token) internal returns (address vault) {
         VaultStore storage vStore = Store.vaults();
         address defaultBorrower = vStore.defaultBorrower;
-        console.log("Default borrower:", defaultBorrower);
         if (defaultBorrower != address(0)) {
             address takerVault = address(new TakerVault(AdminLib.getOwner(), IERC20(token), defaultBorrower));
             add(token, 0, takerVault, VaultType.E4626);
