@@ -18,15 +18,16 @@ library WalkerLib {
         uint24 low = pInfo.treeTick(lowTick); // 130 B
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high); // 500 B
-        route.walk(down, up, phase, toRaw(data)); // 3.5 kB
+        route.walkUp(up, phase, toRaw(data)); // 3.5 kB
 
         commitFeesCollected(pInfo, data); // 600 B
     }
 
+    /*
     function down(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
         FeeWalker.down(key, visit, data); // 4 kB
-    }
+    } */
 
     function up(Key key, bool visit, bytes memory raw) internal {
         Data memory data = toData(raw);
@@ -80,7 +81,7 @@ library CompoundWalkerLib {
         uint24 low = pInfo.treeTick(lowTick);
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
-        route.walk(WalkerLib.down, up, WalkerLib.phase, WalkerLib.toRaw(data));
+        route.walkUp(up, WalkerLib.phase, WalkerLib.toRaw(data));
 
         WalkerLib.commitFeesCollected(pInfo, data);
     }
