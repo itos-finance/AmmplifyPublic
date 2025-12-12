@@ -206,4 +206,13 @@ library DataImpl {
         int256 preLend = pool.preLends[key].get();
         pool.preLends[key].set(preLend + diff);
     }
+
+    function setPreLend(Data memory self, Key key, int128 value) internal {
+        Pool storage pool;
+        bytes32 poolSlot = self.poolStore;
+        assembly {
+            pool.slot := poolSlot
+        }
+        pool.preLends[key].set(value);
+    }
 }

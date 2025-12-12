@@ -99,12 +99,9 @@ library PoolWalker {
 
     /// On the way down, we decrease liquidity. If we see the node actually has to increase liq.
     /// We save a flag to avoid recalculating.
+    /// @dev We need to allow a double visit because sib solving can change the result. So make sure
+    /// operations are idempotent.
     function downUpdateLiq(Key key, Node storage node, Data memory data) internal {
-        if (node.liq.dirty & ADD_LIQ_DIRTY_FLAG != 0) {
-            // We already queued up the modify on the way up, so we can skip this.
-            // Otherwise, all the other operations are idempotent so we can just rerun them.
-            return;
-        }
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
 
         // Because we lookup the liq instead of what we think we have,
@@ -127,7 +124,7 @@ library PoolWalker {
             node.liq.dirty |= ADD_LIQ_DIRTY_FLAG;
             // We know pre lend is zero after solving, so we store the liq diff here to avoid requerying.
             // Also LiqWalkerLite.solve doesn't touch prelend.
-            data.modifyPreLend(key, int128(targetLiq - liq));
+            data.setPreLend(key, int128(targetLiq - liq));
         } else {
             if (targetLiq < liq) {
                 PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);

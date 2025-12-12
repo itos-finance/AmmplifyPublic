@@ -567,15 +567,8 @@ library LiqWalker {
             // Every time we borrow, we're removing one positions and adding two. This could
             // charge us dust so we charge that as fees.
             {
-                uint256 givenX;
-                uint256 givenY;
-                if (parent.liq.initialized) {
-                    (givenX, givenY) = data.computeBalances(parentKey, uBorrow, false);
-                } else {
-                    // If the parent is not initialized, we actually have to pay one more unit of liquidity.
-                    parent.liq.initialized = true;
-                    (givenX, givenY) = data.computeBalances(parentKey, uBorrow - 1, false);
-                }
+                // We don't have to handle parent initialization because we'll walk there next.
+                (uint256 givenX, uint256 givenY) = data.computeBalances(parentKey, uBorrow, false);
 
                 // The two children nodes might not be initialized yet.
                 uint256 myX;
