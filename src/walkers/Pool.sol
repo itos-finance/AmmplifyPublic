@@ -49,6 +49,10 @@ library PoolWalker {
         int256 expectedYSpend = data.yBalance + int256(data.compoundSpendY);
         int256 actualYSpend = int256(startingY) - int256(endingY);
         verifySpend(expectedYSpend, actualYSpend, pInfo.token1);
+
+        // Now that we've walked liqs and done updates, we need to clear the inside fees cache because we'll
+        // soon release the reentrancy lock and a swap can happen that changes fee growth globals.
+        PoolLib.updateWalkCount(pInfo.poolAddr);
     }
 
     /// Remove liquidity on the way down.
@@ -134,10 +138,6 @@ library PoolWalker {
             data.clearPreLend(key);
             node.liq.dirty &= ~ADD_LIQ_DIRTY_FLAG;
         }
-        // On the second walk down, we no longer need any of the fees so we can clear the growths in case
-        // there is another action in this same transaction.
-        PoolLib.clearTickGrowths(data.poolAddr, lowTick);
-        PoolLib.clearTickGrowths(data.poolAddr, highTick);
     }
 
     function upUpdateLiq(Key key, Node storage node, Data memory data) internal {

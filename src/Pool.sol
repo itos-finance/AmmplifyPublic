@@ -69,6 +69,8 @@ struct Pool {
     // The last time the pool was modified.
     // This is ONLY updated when a new Data struct is created.
     uint128 timestamp;
+    // Used to indicate when we need to update the tick fee growth caches.
+    uint128 walkCount;
     // Temporary liq storage
     mapping(Key key => tint256) preBorrows;
     mapping(Key key => tint256) preLends;
@@ -194,7 +196,7 @@ library PoolLib {
 
     function getTickGrowthsOutside(address pool, int24 tick, int24 currentTick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) internal returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128) {
         Pool storage pStore = Store.load().pools[pool];
-        if (pStore.tickInitialized[tick].get() > 0) {
+        if (pStore.tickInitialized[tick].get() == pStore.walkCount) {
             feeGrowthOutside0X128 = pStore.feeGrowthsOutside0X128[tick].get();
             feeGrowthOutside1X128 = pStore.feeGrowthsOutside1X128[tick].get();
         } else {
@@ -215,15 +217,17 @@ library PoolLib {
                 feeGrowthOutside0X128 = feeGrowthGlobal0X128;
                 feeGrowthOutside1X128 = feeGrowthGlobal1X128;
             }
-            pStore.tickInitialized[tick].set(1);
+            pStore.tickInitialized[tick].set(pStore.walkCount);
             pStore.feeGrowthsOutside0X128[tick].set(feeGrowthOutside0X128);
             pStore.feeGrowthsOutside1X128[tick].set(feeGrowthOutside1X128);
         }
     }
 
-    function clearTickGrowths(address pool, int24 tick) internal {
+    function updateWalkCount(address pool) internal {
         Pool storage pStore = Store.load().pools[pool];
-        pStore.tickInitialized[tick].set(0);
+        unchecked {
+            ++pStore.walkCount;
+        }
     }
 
     /// Get the liquidity specific to a particular range.

@@ -601,7 +601,7 @@ library LiqWalker {
 
     /* Helpers' Helpers */
 
-    /// Collect non-liquidating maker fees or pay taker fees.
+    /// Collect non-compounding maker fees or pay taker fees.
     /// @dev initializes the fee checks for new positions when liq is still 0. So called at the start of modify.
     function collectFees(AssetNode storage aNode, Node storage node, Data memory data) internal {
         uint128 liq = aNode.sliq;

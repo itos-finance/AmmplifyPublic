@@ -8,8 +8,6 @@ import { IPool } from "../interfaces/IPool.sol";
 
 import { IERC20 } from "a@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { console } from "forge-std/console.sol";
-
 interface ICapricornCLMintCallback {
     function capricornCLMintCallback(uint256 amount0Delta, uint256 amount1Delta, bytes calldata data) external;
 }
@@ -28,10 +26,6 @@ contract PoolFacet is IUniswapV3MintCallback, IPool, ICapricornCLMintCallback {
         address activeMint = PoolLib.poolGuard();
         require(msg.sender == activeMint, UnauthorizedMint(activeMint, msg.sender));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(activeMint);
-
-        console.log("Mint callback called");
-        console.log("Amount0 owed / Balance:", amount0Owed, IERC20(pInfo.token0).balanceOf(address(this)));
-        console.log("Amount1 owed / Balance:", amount1Owed, IERC20(pInfo.token1).balanceOf(address(this)));
 
         if (amount0Owed > 0) TransferHelper.safeTransfer(pInfo.token0, activeMint, amount0Owed);
         if (amount1Owed > 0) TransferHelper.safeTransfer(pInfo.token1, activeMint, amount1Owed);

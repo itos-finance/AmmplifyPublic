@@ -255,6 +255,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         // Recalc inside fees
         Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
         Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 1;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -305,8 +306,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(cachedFeeGrowthInside1X128, feeGrowthInside1X128, "feeGrowthInside1X128.cached.aboveRange");
 
         (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 2;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -343,8 +343,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertGt(currentTick, tickLower, "currentTick.gt.tickLower");
 
         (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = pInfo.getFeeGrowthGlobals();
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 3;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -413,6 +412,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         assertEq(global01, global00, "x stays same");
         Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
         Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 1;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -431,8 +431,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (, currentTick, , , , , ) = pool.slot0();
         assertEq(global12, global11, "y stays same");
         assertGt(global02, global10, "x goes up");
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 2;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -449,8 +448,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         // Still zero.
         (global02, global12) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 3;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -468,8 +466,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         (uint256 global03, uint256 global13) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
         assertGt(global03 + global13, global02 + global12, "global goes up");
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 4;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
@@ -486,8 +483,7 @@ contract PoolTest is Test, UniV3IntegrationSetup {
         swapTo(0, TickMath.getSqrtPriceAtTick(tickLower));
         (global03, global13) = pInfo.getFeeGrowthGlobals();
         (, currentTick, , , , , ) = pool.slot0();
-        Store.load().pools[poolAddr].tickInitialized[tickLower].set(0);
-        Store.load().pools[poolAddr].tickInitialized[tickUpper].set(0);
+        Store.load().pools[poolAddr].walkCount = 5;
         (feeGrowthInside0X128, feeGrowthInside1X128) = PoolLib.getInsideFees(
             poolAddr,
             currentTick,
