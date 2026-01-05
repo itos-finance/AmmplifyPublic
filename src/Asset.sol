@@ -49,6 +49,9 @@ library AssetLib {
     error AssetNotFound(uint256 assetId);
     error NotPermissioned(address owner, address attemptedOpener);
 
+    // Just for this build, compounding is not support for gas saving purposes.
+    error CompoundingUnsupported();
+
     event PermissionAdded(address owner, address opener);
     event PermissionRemoved(address owner, address opener);
     event PermissionedOpenerAdded(address opener);
@@ -72,7 +75,10 @@ library AssetLib {
         asset.poolAddr = pInfo.poolAddr;
         asset.lowTick = lowTick;
         asset.highTick = highTick;
-        asset.liqType = isCompounding ? LiqType.MAKER : LiqType.MAKER_NC;
+        if (isCompounding) {
+            revert CompoundingUnsupported();
+        }
+        asset.liqType = LiqType.MAKER_NC;
         asset.liq = liq;
         updateTimestamp(asset);
         // The Nodes are to be filled in by a walker.

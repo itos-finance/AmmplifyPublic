@@ -82,7 +82,8 @@ library LiqNodeImpl {
     function splitMakerFees(LiqNode storage self, uint256 nominal) internal view returns (uint128 c, uint256 nonCX128) {
         // Every mliq earns the same rate here. We round down for everyone to avoid overcollection of dust.
         nonCX128 = (uint256(nominal) << 128) / self.mLiq;
-        c = uint128(nominal - FullMath.mulX128(nonCX128, self.ncLiq, true)); // Round up to subtract down.
+        c = 0;
+        // c = uint128(nominal - FullMath.mulX128(nonCX128, self.ncLiq, true)); // Round up to subtract down.
     }
 
     function setDirty(LiqNode storage self) internal {
@@ -174,6 +175,7 @@ library LiqWalker {
         }
 
         // Compound first.
+        // We "compound" to collect fees, nothing else.
         compound(iter, node, data);
 
         // Do the modifications.
@@ -292,15 +294,16 @@ library LiqWalker {
         uint256 y = FullMath.mulX128(liq, feeDiffInside1X128, false);
 
         uint256 nonCX128;
-        (x, nonCX128) = node.liq.splitMakerFees(x);
+        (, nonCX128) = node.liq.splitMakerFees(x);
         node.fees.makerXFeesPerLiqX128 += nonCX128;
-        node.fees.xCFees = FeeWalker.add128Fees(node.fees.xCFees, x, data, true);
+        // node.fees.xCFees = FeeWalker.add128Fees(node.fees.xCFees, x, data, true);
 
-        (y, nonCX128) = node.liq.splitMakerFees(y);
+        (, nonCX128) = node.liq.splitMakerFees(y);
         node.fees.makerYFeesPerLiqX128 += nonCX128;
-        node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
+        // node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
 
         // See how much we can actually compound.
+        /*
         uint128 availableCompoundX = data.liq.xFeesCollected < node.fees.xCFees
             ? data.liq.xFeesCollected
             : node.fees.xCFees;
@@ -331,6 +334,7 @@ library LiqWalker {
             node.fees.xCFees -= usedX;
             node.fees.yCFees -= usedY;
         }
+        */
     }
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
@@ -345,7 +349,7 @@ library LiqWalker {
         uint128 targetSliq = targetLiq; // Only changed in the MAKER case
 
         if (data.liq.liqType == LiqType.MAKER) {
-            // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
+            /*             // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
             // hence we allow the overflow error to revert. This won't affect other pools.
             uint128 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + VIRTUAL_LIQ;
             {
@@ -409,7 +413,7 @@ library LiqWalker {
                 }
             } else {
                 dirty = false;
-            }
+            } */
         } else if (data.liq.liqType == LiqType.MAKER_NC) {
             if (sliq < targetLiq) {
                 uint128 liqDiff = targetLiq - sliq;

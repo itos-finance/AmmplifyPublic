@@ -14,6 +14,8 @@ import { IMaker } from "../interfaces/IMaker.sol";
 import { RFTLib } from "Commons/Util/RFT.sol";
 
 contract MakerFacet is ReentrancyGuardTransient, IMaker {
+    error UnsupportedMethod();
+
     uint128 public constant MIN_MAKER_LIQUIDITY = 1e6;
 
     /// @inheritdoc IMaker
@@ -191,11 +193,14 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
 
     // Collect fees from and compound a specific range of nodes.
     function compound(address poolAddr, int24 lowTick, int24 highTick) external nonReentrant {
+        revert UnsupportedMethod();
+        /*
         PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
         Asset storage asset = AssetLib.nullAsset();
         // When compounding, the liq and asset parameters are unused.
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
         CompoundWalkerLib.compound(pInfo, lowTick, highTick, data);
         PoolWalker.settle(pInfo, lowTick, highTick, data);
+        */
     }
 }
