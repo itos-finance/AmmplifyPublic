@@ -11,11 +11,13 @@ import { Math } from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import { TransferHelper } from "Commons/util/TransferHelper.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
+import { IBorrowVault } from "./interfaces/IBorrowVault.sol";
+
 /// A basic vault for holding the given token from taker positions.
 /// It allows the borrower to borrow funds indefinitely, so only use this with safe borrowers.
 /// @dev The ammplify owner should install this vault for new tokens upon graduation from the launchpad.
 /// And set the Bettor as the borrower.
-contract TakerVault is ERC4626 {
+contract TakerVault is ERC4626, IBorrowVault {
     address public borrower;
     uint256 public outstanding;
     address public owner;
