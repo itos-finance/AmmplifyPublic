@@ -70,8 +70,8 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     ) internal view returns (uint128 liquidity) {
         (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(poolAddr).slot0();
 
-        uint256 balance0 = IERC20(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+        uint256 balance0 = IERC20(token0).balanceOf(address(this)) - 1;
+        uint256 balance1 = IERC20(token1).balanceOf(address(this)) - 1;
 
         uint160 sqrtPriceX96A = TickMath.getSqrtPriceAtTick(tickLower);
         uint160 sqrtPriceX96B = TickMath.getSqrtPriceAtTick(tickUpper);

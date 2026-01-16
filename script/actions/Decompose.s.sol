@@ -33,25 +33,18 @@ contract Decompose is AmmplifyPositions {
         // Load deployer addresses from .env file
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // vm.startBroadcast(deployerPrivateKey);
 
         console2.log("=== Decomposing Uniswap V3 Position ===");
         console2.log("Deployer address:", deployer);
 
         // Try to load position ID from environment, otherwise use a default
-        uint256 positionId;
-        try vm.envUint("POSITION_ID") returns (uint256 id) {
-            positionId = id;
-        } catch {
-            console2.log("ERROR: POSITION_ID not set in environment");
-            console2.log("Please set POSITION_ID environment variable or modify the script");
-            vm.stopBroadcast();
-            return;
-        }
+        uint256 positionId = 7529;
         // Verify position exists and ownership
-        INonfungiblePositionManager nfpm = INonfungiblePositionManager(env.uniswapNFPM);
+        INonfungiblePositionManager nfpm = INonfungiblePositionManager(0x7197E214c0b767cFB76Fb734ab638E2c192F4E53);
         address owner = nfpm.ownerOf(positionId);
-        if (owner != deployer) revert NotPositionOwner();
+
+        vm.startPrank(owner);
 
         // Get position info before decomposition
         (
@@ -79,7 +72,7 @@ contract Decompose is AmmplifyPositions {
         console2.log("Liquidity:", liquidity);
 
         // Set approval for decomposer (similar to test)
-        nfpm.setApprovalForAll(env.decomposer, true);
+        nfpm.setApprovalForAll(0x24d394d7b3BB8ef8f95A6c2363B6fc7Cb2b3CBC3, true);
         console2.log("Approved decomposer to transfer NFT");
 
         // Set reasonable price bounds - allowing full range to avoid slippage issues
@@ -87,7 +80,7 @@ contract Decompose is AmmplifyPositions {
         uint160 maxSqrtPriceX96 = MAX_SQRT_RATIO; // Very high price
 
         // Decompose the position
-        UniV3Decomposer decomposer = UniV3Decomposer(env.decomposer);
+        UniV3Decomposer decomposer = UniV3Decomposer(0x24d394d7b3BB8ef8f95A6c2363B6fc7Cb2b3CBC3);
         uint256 newAssetId = decomposer.decompose(
             positionId,
             false, // isCompounding
@@ -99,7 +92,7 @@ contract Decompose is AmmplifyPositions {
         console2.log("=== Decomposition Complete ===");
         console2.log("Original Position ID:", positionId);
         console2.log("New Ammplify Asset ID:", newAssetId);
-
-        vm.stopBroadcast();
+        vm.stopPrank();
+        // vm.stopBroadcast();
     }
 }

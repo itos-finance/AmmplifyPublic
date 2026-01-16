@@ -7,17 +7,18 @@ import { Test } from "forge-std/Test.sol";
 
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { IUniswapV3Pool } from "lib/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { ITaker } from "../../src/interfaces/ITaker.sol";
-import { MockERC20 } from "../../test/mocks/MockERC20.sol";
+import { TickMath } from "v3-core/libraries/TickMath.sol";
+import { FullMath } from "v3-core/libraries/FullMath.sol";
+import { FixedPoint96 } from "v3-core/libraries/FixedPoint96.sol";
 import { LiquidityAmounts } from "../../test/utils/LiquidityAmounts.sol";
 
 /**
- * @title SetupTakers
- * @notice Script to set up a taker position with specified tick range and liquidity
- * @dev Run with: forge script script/actions/SetupTakers.s.sol --broadcast --rpc-url <RPC_URL>
+ * @title Collateral
+ * @notice Script to set up collateral for taker positions
+ * @dev Run with: forge script script/actions/Collateral.s.sol --broadcast --rpc-url <RPC_URL>
  */
-contract SetupTakers is Script, Test {
+contract Collateral is Script, Test {
     // ============ CONFIGURATION - Set all variables here ============
 
     // Hardcoded addresses
@@ -27,29 +28,21 @@ contract SetupTakers is Script, Test {
     address public constant TOKEN1 = 0x754704Bc059F8C67012fEd69BC8A327a5aafb603;
     address public constant PRANK_ADDRESS = 0x81785e00055159FCae25703D06422aBF5603f8A8;
 
-    // Taker position configuration
+    // Collateral percentage (5% = 500 basis points)
+    uint256 public constant COLLATERAL_PERCENTAGE = 500; // 5% in basis points (500/10000)
+
+    // Taker position configuration (for calculating required amounts)
     int24 public constant TICK_LOWER = type(int24).max; // Use type(int24).max to use current tick
     int24 public constant TICK_UPPER = type(int24).max; // Use type(int24).max to use current tick + tickSpacing
     uint128 public constant LIQUIDITY = 0; // Set to 0 to use liquidity from tick range, otherwise specify amount
-
-    // Vault indices for taker positions
-    uint8 public constant VAULT_INDEX_0 = 0;
-    uint8 public constant VAULT_INDEX_1 = 0;
-
-    // Collateral multiplier (multiplies the calculated token amounts needed for the position)
-    uint256 public constant COLLATERAL_MULTIPLIER = 2; // Use 2x the required amounts as collateral
-
-    // Constants for price limits
-    uint160 public constant MIN_SQRT_RATIO = 4295128739;
-    uint160 public constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
     function run() public {
         // Load deployer addresses from .env file
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        // vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
-        console2.log("=== Setting Up Taker Position ===");
+        console2.log("=== Setting Up Taker Collateral ===");
         console2.log("Deployer address:", deployer);
         console2.log("Prank address:", PRANK_ADDRESS);
 
@@ -111,122 +104,91 @@ contract SetupTakers is Script, Test {
         console2.log("Amount0 needed:", amount0);
         console2.log("Amount1 needed:", amount1);
 
-        // Calculate collateral amounts (multiply by multiplier for safety)
-        uint256 collateral0 = amount0 * COLLATERAL_MULTIPLIER;
-        uint256 collateral1 = amount1 * COLLATERAL_MULTIPLIER;
+        // Calculate collateral amounts based on the greater amount
+        // Take the greater of the two amounts, set 5% collateral for that,
+        // convert it using sqrtPriceX96 to get the other token value,
+        // and set 5% collateral for that converted amount too
+        (uint256 collateral0, uint256 collateral1) = _calculateCollateralAmounts(amount0, amount1, sqrtPriceX96);
 
         console2.log("\n=== Collateralizing Tokens ===");
         console2.log("Collateral0:", collateral0);
         console2.log("Collateral1:", collateral1);
 
-        // Prank with the specified address
-        vm.startPrank(PRANK_ADDRESS);
-
         // Collateralize tokens (mint to prank address)
         _collateralizeTaker(PRANK_ADDRESS, collateral0, collateral1, token0, token1, simplexDiamond);
 
         // Set up token approvals
-        _fundAccount(PRANK_ADDRESS, 1e20, 1e20, token0, token1);
-
+        // _fundAccount(PRANK_ADDRESS, 1e20, 1e20, token0, token1);
         _setupApprovals(type(uint256).max, token0, token1, simplexDiamond);
 
-        // Open taker position
-        console2.log("\n=== Opening Taker Position ===");
-        uint256 assetId = _openTaker(
-            PRANK_ADDRESS,
-            poolAddress,
-            [tickLower, tickUpper],
-            liquidityToUse,
-            simplexDiamond
-        );
+        console2.log("\n=== Collateral Setup Complete ===");
 
-        console2.log("\n=== Taker Setup Complete ===");
-        console2.log("Asset ID:", assetId);
-
-        // vm.stopBroadcast();
+        vm.stopBroadcast();
     }
 
-    // ============ Taker Position Management ============
-
     /**
-     * @notice Open a taker position
+     * @notice Calculate collateral amounts based on the greater token amount
+     * @dev Takes the greater of two amounts, sets 5% collateral for that,
+     *      converts it using sqrtPriceX96 to get the other token value,
+     *      and sets 5% collateral for that converted amount too
      */
-    function _openTaker(
-        address recipient,
-        address poolAddr,
-        int24[2] memory ticks,
-        uint128 liquidity,
-        address simplexDiamond
-    ) internal returns (uint256 assetId) {
-        // Determine freeze price based on position relative to current price
-        IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
-        (, int24 currentTick, , , , , ) = pool.slot0();
+    function _calculateCollateralAmounts(
+        uint256 amount0,
+        uint256 amount1,
+        uint160 sqrtPriceX96
+    ) internal pure returns (uint256 collateral0, uint256 collateral1) {
+        // Convert amount0 to amount1 using sqrtPriceX96 to compare values
+        // price = (sqrtPriceX96 / 2^96)^2 = token1/token0
+        // amount1Value = amount0 * price = amount0 * sqrtPriceX96^2 / 2^192
+        uint256 amount1ValueFromAmount0 = FullMath.mulDiv(
+            amount0,
+            uint256(sqrtPriceX96) * uint256(sqrtPriceX96),
+            FixedPoint96.Q96 * FixedPoint96.Q96
+        );
 
-        // If taker is below current price, freeze to prefer token1 (Y)
-        // If taker is above current price, freeze to prefer token0 (X)
-        uint160 freezeSqrtPriceX96;
-        if (ticks[1] < currentTick) {
-            // Below current price, freeze to prefer Y
-            freezeSqrtPriceX96 = MIN_SQRT_RATIO + 1;
-        } else if (ticks[0] > currentTick) {
-            // Above current price, freeze to prefer X
-            freezeSqrtPriceX96 = MAX_SQRT_RATIO - 1;
+        // Determine which has greater value
+        uint256 greaterAmount;
+        bool amount0IsGreater;
+
+        if (amount1ValueFromAmount0 >= amount1) {
+            // amount0 (converted to token1) is greater or equal
+            greaterAmount = amount0;
+            amount0IsGreater = true;
         } else {
-            // Overlaps current price, use current price
-            freezeSqrtPriceX96 = TickMath.getSqrtRatioAtTick(currentTick);
+            // amount1 is greater
+            greaterAmount = amount1;
+            amount0IsGreater = false;
         }
 
-        console2.log("Pool:", poolAddr);
-        console2.log("Tick Range:", vm.toString(ticks[0]), "to", vm.toString(ticks[1]));
-        console2.log("Liquidity:", liquidity);
-        console2.log("Vault Indices:", VAULT_INDEX_0, VAULT_INDEX_1);
+        // Set 5% collateral for the greater amount
+        uint256 collateralForGreater = (greaterAmount * COLLATERAL_PERCENTAGE) / 10000;
 
-        ITaker taker = ITaker(simplexDiamond);
+        if (amount0IsGreater) {
+            // amount0 is greater, so set collateral0 to 5% of greaterAmount
+            collateral0 = collateralForGreater;
 
-        assetId = taker.newTaker(
-            recipient,
-            poolAddr,
-            ticks,
-            liquidity,
-            [VAULT_INDEX_0, VAULT_INDEX_1],
-            [MIN_SQRT_RATIO, MAX_SQRT_RATIO],
-            freezeSqrtPriceX96,
-            ""
-        );
+            // Convert the greater amount to token1 and set 5% collateral for that
+            uint256 convertedAmount1 = FullMath.mulDiv(
+                greaterAmount,
+                uint256(sqrtPriceX96) * uint256(sqrtPriceX96),
+                FixedPoint96.Q96 * FixedPoint96.Q96
+            );
+            collateral1 = (convertedAmount1 * COLLATERAL_PERCENTAGE) / 10000;
+        } else {
+            // amount1 is greater, so set collateral1 to 5% of greaterAmount
+            collateral1 = collateralForGreater;
 
-        console2.log("Taker Position Created - Asset ID:", assetId);
+            // Convert the greater amount to token0 and set 5% collateral for that
+            uint256 convertedAmount0 = FullMath.mulDiv(
+                greaterAmount,
+                FixedPoint96.Q96 * FixedPoint96.Q96,
+                uint256(sqrtPriceX96) * uint256(sqrtPriceX96)
+            );
+            collateral0 = (convertedAmount0 * COLLATERAL_PERCENTAGE) / 10000;
+        }
 
-        return assetId;
+        return (collateral0, collateral1);
     }
-
-    /**
-     * @notice Collateralize a taker position with specific token amounts
-     */
-    function _collateralizeTaker(
-        address recipient,
-        uint256 token0Amount,
-        uint256 token1Amount,
-        address token0,
-        address token1,
-        address simplexDiamond
-    ) internal {
-        ITaker taker = ITaker(simplexDiamond);
-        _fundAccount(recipient, token0Amount, token1Amount, token0, token1);
-
-        if (token0Amount > 0) {
-            IERC20(token0).approve(simplexDiamond, token0Amount);
-            taker.collateralize(recipient, token0, token0Amount, "");
-            console2.log("Collateralized token0:", token0Amount, "of", token0);
-        }
-
-        if (token1Amount > 0) {
-            IERC20(token1).approve(simplexDiamond, token1Amount);
-            taker.collateralize(recipient, token1, token1Amount, "");
-            console2.log("Collateralized token1:", token1Amount, "of", token1);
-        }
-    }
-
-    // ============ Utility Functions ============
 
     /**
      * @notice Calculate required token amounts for a liquidity position
@@ -313,6 +275,34 @@ contract SetupTakers is Script, Test {
     function _getCurrentSqrtPrice(address pool) internal view returns (uint160 sqrtPriceX96) {
         (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
     }
+
+    /**
+     * @notice Collateralize a taker position with specific token amounts
+     */
+    function _collateralizeTaker(
+        address recipient,
+        uint256 token0Amount,
+        uint256 token1Amount,
+        address token0,
+        address token1,
+        address simplexDiamond
+    ) internal {
+        ITaker taker = ITaker(simplexDiamond);
+
+        if (token0Amount > 0) {
+            IERC20(token0).approve(simplexDiamond, token0Amount);
+            taker.collateralize(recipient, token0, token0Amount, "");
+            console2.log("Collateralized token0:", token0Amount, "of", token0);
+        }
+
+        if (token1Amount > 0) {
+            IERC20(token1).approve(simplexDiamond, token1Amount);
+            taker.collateralize(recipient, token1, token1Amount, "");
+            console2.log("Collateralized token1:", token1Amount, "of", token1);
+        }
+    }
+
+    // ============ Utility Functions ============
 
     /**
      * @notice Fund the caller with tokens for testing

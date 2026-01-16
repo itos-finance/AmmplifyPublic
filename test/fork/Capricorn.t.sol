@@ -170,7 +170,7 @@ contract CapricornFork is AmmplifyForkBase {
         _addLiquidityToPool();
 
         // Deploy Opener contract
-        Opener opener = new Opener(address(diamond));
+        Opener opener = new Opener();
         console2.log("Opener deployed:", address(opener));
 
         // Get pool info
@@ -255,6 +255,7 @@ contract CapricornFork is AmmplifyForkBase {
 
         // Open position using Opener
         uint256 assetId = opener.openMaker(
+            address(diamond),
             address(pool),
             address(token1), // tokenIn
             amountIn, // amountIn
@@ -304,7 +305,7 @@ contract CapricornFork is AmmplifyForkBase {
         _addLiquidityToPool();
 
         // Deploy Opener contract
-        Opener opener = new Opener(address(diamond));
+        Opener opener = new Opener();
 
         // Get pool info
         (uint24 fee, int24 tickSpacing, uint160 sqrtPriceX96, int24 currentTick, ) = getPoolInfo();
@@ -363,6 +364,7 @@ contract CapricornFork is AmmplifyForkBase {
         // Use error signature: keccak256("SlippageTooHigh()")[0:4]
         vm.expectRevert(bytes4(keccak256("SlippageTooHigh()")));
         opener.openMaker(
+            address(diamond),
             address(pool),
             address(token1), // tokenIn
             amountIn, // amountIn
