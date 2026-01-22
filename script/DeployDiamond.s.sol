@@ -7,7 +7,7 @@ import { SimplexDiamond } from "../src/Diamond.sol";
 import { AdminFacet } from "../src/facets/Admin.sol";
 import { MakerFacet } from "../src/facets/Maker.sol";
 import { TakerFacet } from "../src/facets/Taker.sol";
-import { PoolFacet } from "../src/facets/CapricornPool.sol";
+import { PoolFacet } from "../src/facets/Pool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
 
 /**
