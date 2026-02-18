@@ -254,55 +254,23 @@ library ViewWalker {
                 childWidth
             );
 
-            // Calculate x weighted split.
-            uint256 leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedX;
-            uint256 rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedX;
-            uint256 leftPaid;
-            uint256 leftEarned;
-            if (leftBorrowWeight == rightBorrowWeight) {
-                leftPaid = unpaidX / 2;
-                leftEarned = unclaimedX / 2;
-            } else if (leftBorrowWeight == 0) {
-                leftPaid = 0;
-                leftEarned = 0;
-            } else if (rightBorrowWeight == 0) {
-                leftPaid = unpaidX;
-                leftEarned = unclaimedX;
-            } else {
-                uint256 leftRatioX256 = FullMath.mulDivX256(
-                    leftBorrowWeight,
-                    leftBorrowWeight + rightBorrowWeight,
-                    false
-                );
-                leftPaid = FullMath.mulX256(unpaidX, leftRatioX256, false);
-                leftEarned = FullMath.mulX256(unclaimedX, leftRatioX256, false);
-            }
+            // X split
+            (uint256 leftPaid, uint256 leftEarned) = FeeWalker.splitByWeight(
+                leftWeight, rightWeight,
+                leftNode.liq.subtreeBorrowedX, rightNode.liq.subtreeBorrowedX,
+                unpaidX, unclaimedX
+            );
             data.leftChildUnpaidX = leftPaid;
             data.rightChildUnpaidX = unpaidX - leftPaid;
             data.leftChildUnclaimedX = leftEarned;
             data.rightChildUnclaimedX = unclaimedX - leftEarned;
 
-            // Repeat for Y.
-            leftBorrowWeight = leftWeight * leftNode.liq.subtreeBorrowedY;
-            rightBorrowWeight = rightWeight * rightNode.liq.subtreeBorrowedY;
-            if (leftBorrowWeight == rightBorrowWeight) {
-                leftPaid = unpaidY / 2;
-                leftEarned = unclaimedY / 2;
-            } else if (leftBorrowWeight == 0) {
-                leftPaid = 0;
-                leftEarned = 0;
-            } else if (rightBorrowWeight == 0) {
-                leftPaid = unpaidY;
-                leftEarned = unclaimedY;
-            } else {
-                uint256 leftRatioX256 = FullMath.mulDivX256(
-                    leftBorrowWeight,
-                    leftBorrowWeight + rightBorrowWeight,
-                    false
-                );
-                leftPaid = FullMath.mulX256(unpaidY, leftRatioX256, false);
-                leftEarned = FullMath.mulX256(unclaimedY, leftRatioX256, false);
-            }
+            // Y split
+            (leftPaid, leftEarned) = FeeWalker.splitByWeight(
+                leftWeight, rightWeight,
+                leftNode.liq.subtreeBorrowedY, rightNode.liq.subtreeBorrowedY,
+                unpaidY, unclaimedY
+            );
             data.leftChildUnpaidY = leftPaid;
             data.rightChildUnpaidY = unpaidY - leftPaid;
             data.leftChildUnclaimedY = leftEarned;

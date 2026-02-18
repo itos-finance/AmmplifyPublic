@@ -35,8 +35,9 @@ contract ViewFacet is IView {
     function getAssets(address owner) external view returns (uint256[] memory assetIds) {
         uint256[] storage _assetIds = Store.assets().ownerAssets[owner];
         assetIds = new uint256[](_assetIds.length);
-        for (uint256 i = 0; i < _assetIds.length; i++) {
+        for (uint256 i = 0; i < _assetIds.length;) {
             assetIds[i] = _assetIds[i];
+            unchecked { ++i; }
         }
     }
 
@@ -46,9 +47,10 @@ contract ViewFacet is IView {
         Pool storage pool = Store.pool(poolAddr);
         node = new Node[](keys.length);
 
-        for (uint256 i = 0; i < keys.length; i++) {
+        for (uint256 i = 0; i < keys.length;) {
             Key key = keys[i];
             node[i] = pool.nodes[key];
+            unchecked { ++i; }
         }
     }
 
@@ -73,8 +75,9 @@ contract ViewFacet is IView {
         }
 
         uint256[] memory balances = new uint256[](recipients.length);
-        for (uint256 i = 0; i < recipients.length; i++) {
+        for (uint256 i = 0; i < recipients.length;) {
             balances[i] = Store.fees().collateral[recipients[i]][tokens[i]];
+            unchecked { ++i; }
         }
         return balances;
     }
