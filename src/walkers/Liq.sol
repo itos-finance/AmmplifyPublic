@@ -175,10 +175,6 @@ library LiqWalker {
             iter = LiqIter({ key: key, width: key.width(), lowTick: lowTick, highTick: highTick });
         }
 
-        // Snapshot mLiq before compound to detect compounding cheaply.
-        // This SLOAD is free since compound() reads mLiq anyway (same storage slot, warm).
-        uint128 prevMLiq = node.liq.mLiq;
-
         // Compound first.
         compound(iter, node, data);
 
@@ -187,33 +183,27 @@ library LiqWalker {
             modify(iter, node, data, data.liq.liq);
         }
 
-        // Determine if this node's liq values changed.
-        // Compound only modifies mLiq; modify is only called when visit=true.
-        bool localChanged = visit || (node.liq.mLiq != prevMLiq);
-        bool needsSubtreeUpdate = localChanged || data.subtreeChanged;
-
-        // Update subtree liqs only when something in the subtree actually changed.
-        if (needsSubtreeUpdate) {
-            if (iter.width > 1) {
-                (Key lk, Key rk) = key.children();
-                Node storage lNode = data.node(lk);
-                Node storage rNode = data.node(rk);
-                // Subtree aggregates are bounded by max liquidity in the tree (fits in storage slots by construction).
-                unchecked {
-                    node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
-                    node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
-                    node.liq.subtreeBorrowedX = lNode.liq.subtreeBorrowedX + rNode.liq.subtreeBorrowedX + node.liq.borrowedX;
-                    node.liq.subtreeBorrowedY = lNode.liq.subtreeBorrowedY + rNode.liq.subtreeBorrowedY + node.liq.borrowedY;
-                }
-            } else {
-                node.liq.subtreeMLiq = node.liq.mLiq;
-                node.liq.subtreeTLiq = node.liq.tLiq;
-                node.liq.subtreeBorrowedX = node.liq.borrowedX;
-                node.liq.subtreeBorrowedY = node.liq.borrowedY;
+        // Update subtree liqs.
+        if (iter.width > 1) {
+            (Key lk, Key rk) = key.children();
+            Node storage lNode = data.node(lk);
+            Node storage rNode = data.node(rk);
+            // Subtree aggregates are bounded by max liquidity in the tree (fits in storage slots by construction).
+            unchecked {
+                node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
+                node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
+                node.liq.subtreeBorrowedX = lNode.liq.subtreeBorrowedX + rNode.liq.subtreeBorrowedX + node.liq.borrowedX;
+                node.liq.subtreeBorrowedY = lNode.liq.subtreeBorrowedY + rNode.liq.subtreeBorrowedY + node.liq.borrowedY;
             }
+        } else if (visit || node.liq.mLiq != 0) {
+            // For leaf nodes: skip when this node has no maker liquidity and was not modified.
+            // When mLiq == 0, compound() is a no-op (line 287), and without visit, modify() doesn't run,
+            // so no liq values changed and subtree aggregates remain correct.
+            node.liq.subtreeMLiq = node.liq.mLiq;
+            node.liq.subtreeTLiq = node.liq.tLiq;
+            node.liq.subtreeBorrowedX = node.liq.borrowedX;
+            node.liq.subtreeBorrowedY = node.liq.borrowedY;
         }
-        // Propagate subtree change status upward via OR accumulation.
-        data.subtreeChanged = needsSubtreeUpdate;
 
         // Make sure our liquidity is solvent at each node. This must happened regardless of visit.
         solveLiq(iter.key, node, data);
@@ -236,17 +226,9 @@ library LiqWalker {
         } else if (walkPhase == Phase.PRE_UP) {
             data.liq.mLiqPrefix = data.liq.leftMLiqPrefix;
             data.liq.tLiqPrefix = data.liq.leftTLiqPrefix;
-            // Reset subtreeChanged for the left leg walk.
-            data.subtreeChanged = false;
         } else if (walkPhase == Phase.LEFT_UP) {
             data.liq.mLiqPrefix = data.liq.rightMLiqPrefix;
             data.liq.tLiqPrefix = data.liq.rightTLiqPrefix;
-            // Save left leg's subtreeChanged and reset for the right leg.
-            data.leftLegSubtreeChanged = data.subtreeChanged;
-            data.subtreeChanged = false;
-        } else if (walkPhase == Phase.RIGHT_UP) {
-            // Combine both legs for the root spine walk.
-            data.subtreeChanged = data.subtreeChanged || data.leftLegSubtreeChanged;
         }
     }
 
