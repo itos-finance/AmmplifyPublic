@@ -36,6 +36,10 @@ struct Data {
     // to fit in integer limits. In the unbelievable case where this actually gets used, those fees go to the owner.
     uint256 escapedX;
     uint256 escapedY;
+    // Tracks whether subtree aggregate values changed during the walk.
+    // Used to skip redundant subtree recomputation on the root spine in LiqWalker.up().
+    bool subtreeChanged;
+    bool leftLegSubtreeChanged;
 }
 
 using DataImpl for Data global;
@@ -91,7 +95,9 @@ library DataImpl {
                 compoundSpendX: 0,
                 compoundSpendY: 0,
                 escapedX: 0,
-                escapedY: 0
+                escapedY: 0,
+                subtreeChanged: false,
+                leftLegSubtreeChanged: false
             });
     }
 
