@@ -74,9 +74,14 @@ struct Pool {
 library PoolLib {
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
+    using TransientSlot for TransientSlot.Uint256Slot;
 
     // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
+    // Transient storage prefix for caching UniV3 tick feeGrowthOutside during tree walks.
+    bytes32 private constant TICK_CACHE_SLOT = keccak256("ammplify.tick.cache");
+    // Epoch counter for cache invalidation between walks within the same transaction.
+    bytes32 private constant TICK_CACHE_EPOCH_SLOT = keccak256("ammplify.tick.cache.epoch");
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
 
@@ -187,6 +192,89 @@ library PoolLib {
             } else {
                 feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
                 feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+            }
+        }
+    }
+
+    /// Bump the tick cache epoch so that stale entries from a previous walk are not reused.
+    /// Call this at the start of each tree walk.
+    function bumpTickCacheEpoch() internal {
+        TransientSlot.Uint256Slot epochSlot = TICK_CACHE_EPOCH_SLOT.asUint256();
+        epochSlot.tstore(epochSlot.tload() + 1);
+    }
+
+    /// Like getInsideFees, but caches tick data in transient storage to avoid redundant external calls
+    /// during tree walks where adjacent nodes share boundary ticks.
+    /// @dev NOT view — uses tstore. Only call from mutating paths (e.g. LiqWalker.compound).
+    function getInsideFeesCached(
+        address pool,
+        int24 currentTick,
+        uint256 feeGrowthGlobal0X128,
+        uint256 feeGrowthGlobal1X128,
+        int24 lowerTick,
+        int24 upperTick
+    ) internal returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        uint256 epoch = TICK_CACHE_EPOCH_SLOT.asUint256().tload();
+
+        (uint256 lowerFG0, uint256 lowerFG1, bool lowerInit) = _getTickFeesCached(pool, lowerTick, epoch);
+        if (!lowerInit && currentTick >= lowerTick) {
+            lowerFG0 = feeGrowthGlobal0X128;
+            lowerFG1 = feeGrowthGlobal1X128;
+        }
+
+        (uint256 upperFG0, uint256 upperFG1, bool upperInit) = _getTickFeesCached(pool, upperTick, epoch);
+        if (!upperInit && currentTick >= upperTick) {
+            upperFG0 = feeGrowthGlobal0X128;
+            upperFG1 = feeGrowthGlobal1X128;
+        }
+
+        unchecked {
+            if (currentTick < lowerTick) {
+                feeGrowthInside0X128 = lowerFG0 - upperFG0;
+                feeGrowthInside1X128 = lowerFG1 - upperFG1;
+            } else if (currentTick >= upperTick) {
+                feeGrowthInside0X128 = upperFG0 - lowerFG0;
+                feeGrowthInside1X128 = upperFG1 - lowerFG1;
+            } else {
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFG0 - upperFG0;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFG1 - upperFG1;
+            }
+        }
+    }
+
+    /// Fetch tick fee data, using transient storage as a cache.
+    /// Sentinel values: 0 = not cached, 1 = cached + not initialized, 2 = cached + initialized.
+    /// Layout: base slot = sentinel, base+1 = feeGrowthOutside0X128, base+2 = feeGrowthOutside1X128.
+    function _getTickFeesCached(
+        address pool,
+        int24 tick,
+        uint256 epoch
+    ) private returns (uint256 fg0, uint256 fg1, bool init) {
+        bytes32 base = keccak256(abi.encodePacked(TICK_CACHE_SLOT, epoch, pool, tick));
+        uint256 sentinel;
+        assembly ("memory-safe") {
+            sentinel := tload(base)
+        }
+        if (sentinel != 0) {
+            // Cache hit
+            bytes32 slot1 = bytes32(uint256(base) + 1);
+            bytes32 slot2 = bytes32(uint256(base) + 2);
+            assembly ("memory-safe") {
+                fg0 := tload(slot1)
+                fg1 := tload(slot2)
+            }
+            init = sentinel == 2;
+        } else {
+            // Cache miss — external call
+            (,, fg0, fg1,,,, init) = IUniswapV3Pool(pool).ticks(tick);
+            // Store in transient cache
+            uint256 sentinelVal = init ? uint256(2) : uint256(1);
+            bytes32 slot1 = bytes32(uint256(base) + 1);
+            bytes32 slot2 = bytes32(uint256(base) + 2);
+            assembly ("memory-safe") {
+                tstore(base, sentinelVal)
+                tstore(slot1, fg0)
+                tstore(slot2, fg1)
             }
         }
     }

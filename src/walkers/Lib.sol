@@ -8,13 +8,14 @@ import { FeeWalker } from "./Fee.sol";
 import { LiqWalker } from "./Liq.sol";
 import { ViewWalker, ViewData } from "./View.sol";
 import { Data } from "./Data.sol";
-import { PoolInfo } from "../Pool.sol";
+import { PoolInfo, PoolLib } from "../Pool.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 import { FeeStore } from "../Fee.sol";
 import { Store } from "../Store.sol";
 
 library WalkerLib {
     function modify(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
+        PoolLib.bumpTickCacheEpoch();
         uint24 low = pInfo.treeTick(lowTick); // 130 B
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high); // 500 B
@@ -77,6 +78,7 @@ library WalkerLib {
 /// A compounding lib that effectively functions like a regular liq walk but without any modifications.
 library CompoundWalkerLib {
     function compound(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
+        PoolLib.bumpTickCacheEpoch();
         uint24 low = pInfo.treeTick(lowTick);
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
