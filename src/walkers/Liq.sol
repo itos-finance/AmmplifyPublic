@@ -29,11 +29,12 @@ struct LiqNode {
     // This is updated after all changes to mliq are completed.
     uint256 subtreeMLiq;
     uint256 subtreeTLiq;
-    // Taker required for fee calculation.
-    uint256 borrowedX;
-    uint256 borrowedY;
-    uint256 subtreeBorrowedX;
-    uint256 subtreeBorrowedY;
+    // Taker required for fee calculation. Packed into uint128 pairs to save storage slots.
+    // Safe because borrowed amounts are bounded by real token supplies (< 2^128 for any reasonable token).
+    uint128 borrowedX;
+    uint128 borrowedY;
+    uint128 subtreeBorrowedX;
+    uint128 subtreeBorrowedY;
     uint128 xTLiq; // The amount of taker liq borrowing as x.
     // Dirty flags for liquidity modifications.
     uint8 dirty;
@@ -443,8 +444,8 @@ library LiqWalker {
                 // The borrow is used to calculate payments amounts and we don't want that to fluctuate
                 // with price or else the fees become too unpredictable.
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrow(iter.key, liqDiff, true);
-                node.liq.borrowedX += xBorrow;
-                node.liq.borrowedY += yBorrow;
+                node.liq.borrowedX += uint128(xBorrow);
+                node.liq.borrowedY += uint128(yBorrow);
                 // But the actual balances they get are based on the current price.
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xBalance);
@@ -456,8 +457,8 @@ library LiqWalker {
                     node.liq.xTLiq -= liqDiff;
                 }
                 (uint256 xBorrow, uint256 yBorrow) = data.computeBorrow(iter.key, liqDiff, true);
-                node.liq.borrowedX -= xBorrow;
-                node.liq.borrowedY -= yBorrow;
+                node.liq.borrowedX -= uint128(xBorrow);
+                node.liq.borrowedY -= uint128(yBorrow);
                 // Takers need to return the assets to the pool according to the current proportion.
                 (uint256 xBalance, uint256 yBalance) = data.computeBalances(iter.key, liqDiff, true);
                 data.xBalance += int256(xBalance);
