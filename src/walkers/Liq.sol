@@ -235,22 +235,15 @@ library LiqWalker {
     /// Compounding's first step is to actually collect the base pool fees (for both makers and takers).
     /// So this is a crucial step to always call when walking over any node.
     /// @dev We update the taker fees here
+    /// @dev Fee collection from the underlying pool is deferred until we determine it is necessary.
+    /// This avoids the ~5,200 gas cost (burn(0) + collect) on nodes where the tokens aren't needed.
+    /// Collection is skipped for: (1) taker-only nodes (mLiq == 0), and (2) compounding-only maker
+    /// nodes where xFeesCollected already covers xCFees (no deficit). For nodes with non-compounding
+    /// liquidity (ncLiq > 0), we always collect since their claims draw from xFeesCollected.
+    /// Uncollected fees remain in the UniV3 pool and are collected on the next walk.
     function compound(LiqIter memory iter, Node storage node, Data memory data) internal {
-        // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
-        // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
-        // having more fees than that.
-        if (node.liq.net() > 0) {
-            // But we do track the actual fee balances given so that we know how much we can actually compound.
-            (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
-                data.poolAddr,
-                iter.lowTick,
-                iter.highTick,
-                true
-            );
-            data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
-            data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
-        }
-        // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
+        // Calculate what swap fees are earned by makers and owed by the taker borrows.
+        // This uses fee growth rates from the pool (a view call), NOT actual token collection.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
             data.currentTick,
@@ -284,10 +277,11 @@ library LiqWalker {
         );
 
         // If we have no maker liq in this node, then there is nothing to compound.
+        // We also skip collection for taker-only nodes — the fees stay in the pool
+        // and will be collected on a future walk via standing fee tracking.
         if (node.liq.mLiq == 0) return;
 
-        // Otherwise, the fees should have been collected (or are available from collateral)
-        // and we can compound.
+        // Otherwise, compute maker fee splits before deciding whether to collect.
         uint256 x = FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false);
         uint256 y = FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false);
 
@@ -299,6 +293,27 @@ library LiqWalker {
         (y, nonCX128) = node.liq.splitMakerFees(y);
         node.fees.makerYFeesPerLiqX128 += nonCX128;
         node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
+
+        // Deferred collection: only collect from the pool when the node has net positive liquidity
+        // AND we actually need tokens — either because:
+        //   (a) the compounding fees exceed currently available tokens (deficit), or
+        //   (b) there are non-compounding makers whose fee claims draw from xFeesCollected.
+        // For compounding-only nodes where xFeesCollected already covers xCFees, the existing
+        // balance is sufficient and we skip the expensive burn(0) + collect external calls.
+        if (node.liq.net() > 0 && (
+            node.fees.xCFees > data.liq.xFeesCollected ||
+            node.fees.yCFees > data.liq.yFeesCollected ||
+            node.liq.ncLiq > 0
+        )) {
+            (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
+                data.poolAddr,
+                iter.lowTick,
+                iter.highTick,
+                true
+            );
+            data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
+            data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
+        }
 
         // See how much we can actually compound.
         uint128 availableCompoundX = data.liq.xFeesCollected < node.fees.xCFees
