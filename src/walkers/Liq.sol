@@ -236,21 +236,10 @@ library LiqWalker {
     /// So this is a crucial step to always call when walking over any node.
     /// @dev We update the taker fees here
     function compound(LiqIter memory iter, Node storage node, Data memory data) internal {
-        // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
-        // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
-        // having more fees than that.
-        if (node.liq.net() > 0) {
-            // But we do track the actual fee balances given so that we know how much we can actually compound.
-            (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
-                data.poolAddr,
-                iter.lowTick,
-                iter.highTick,
-                true
-            );
-            data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
-            data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
-        }
-        // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
+        // Compute fee growth diff FIRST to determine if UniV3 collection is needed.
+        // getInsideFees reads tick feeGrowthOutside data (view-only) and is independent of
+        // whether we've called burn(0)+collect. By checking the diff before collecting,
+        // we can skip the expensive external calls when no new fees have accrued.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
             data.currentTick,
@@ -265,7 +254,23 @@ library LiqWalker {
             feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
             feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         }
-        // This raw fee growth is what's owed by Takers.
+
+        // Only collect from UniV3 when fees have actually accrued AND the node has positive
+        // net liquidity. When feeDiff is zero, no swaps have crossed this range since the last
+        // walk, so burn(0)+collect would return (0,0). Skipping saves ~10,400 gas per node
+        // (two external calls avoided).
+        if ((feeDiffInside0X128 | feeDiffInside1X128) != 0 && node.liq.net() > 0) {
+            (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
+                data.poolAddr,
+                iter.lowTick,
+                iter.highTick,
+                true
+            );
+            data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
+            data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
+        }
+
+        // Update fee growth checkpoint.
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
 
