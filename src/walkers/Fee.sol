@@ -205,26 +205,31 @@ library FeeWalker {
             }
         }
 
-        // Now split fees before updating prefixes.
-        (Key leftChild, Key rightChild) = key.children();
-        Node storage leftNode = data.node(leftChild);
-        Node storage rightNode = data.node(rightChild);
-        uint24 childWidth = leftChild.width();
-        childSplit(
-            data,
-            node,
-            leftNode,
-            rightNode,
-            childWidth,
-            node.fees.unpaidTakerXFees,
-            node.fees.unpaidTakerYFees,
-            node.fees.unclaimedMakerXFees,
-            node.fees.unclaimedMakerYFees
-        );
-        node.fees.unpaidTakerXFees = 0;
-        node.fees.unpaidTakerYFees = 0;
-        node.fees.unclaimedMakerXFees = 0;
-        node.fees.unclaimedMakerYFees = 0;
+        // Only split fees to children if there are any fees to split.
+        // When all four fee fields are zero, childSplit would split nothing but still
+        // trigger expensive child storage reads (getLeftRightWeights) and no-op SSTOREs.
+        if ((node.fees.unpaidTakerXFees | node.fees.unpaidTakerYFees |
+             node.fees.unclaimedMakerXFees | node.fees.unclaimedMakerYFees) != 0) {
+            (Key leftChild, Key rightChild) = key.children();
+            Node storage leftNode = data.node(leftChild);
+            Node storage rightNode = data.node(rightChild);
+            uint24 childWidth = leftChild.width();
+            childSplit(
+                data,
+                node,
+                leftNode,
+                rightNode,
+                childWidth,
+                node.fees.unpaidTakerXFees,
+                node.fees.unpaidTakerYFees,
+                node.fees.unclaimedMakerXFees,
+                node.fees.unclaimedMakerYFees
+            );
+            node.fees.unpaidTakerXFees = 0;
+            node.fees.unpaidTakerYFees = 0;
+            node.fees.unclaimedMakerXFees = 0;
+            node.fees.unclaimedMakerYFees = 0;
+        }
 
         // Now we can add to the prefix if we're not visiting.
         if (!visit) {
