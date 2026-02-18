@@ -189,10 +189,13 @@ library LiqWalker {
             (Key lk, Key rk) = key.children();
             Node storage lNode = data.node(lk);
             Node storage rNode = data.node(rk);
-            node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
-            node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
-            node.liq.subtreeBorrowedX = lNode.liq.subtreeBorrowedX + rNode.liq.subtreeBorrowedX + node.liq.borrowedX;
-            node.liq.subtreeBorrowedY = lNode.liq.subtreeBorrowedY + rNode.liq.subtreeBorrowedY + node.liq.borrowedY;
+            // Subtree aggregates are bounded by max liquidity in the tree (fits in storage slots by construction).
+            unchecked {
+                node.liq.subtreeMLiq = lNode.liq.subtreeMLiq + rNode.liq.subtreeMLiq + node.liq.mLiq * iter.width;
+                node.liq.subtreeTLiq = lNode.liq.subtreeTLiq + rNode.liq.subtreeTLiq + node.liq.tLiq * iter.width;
+                node.liq.subtreeBorrowedX = lNode.liq.subtreeBorrowedX + rNode.liq.subtreeBorrowedX + node.liq.borrowedX;
+                node.liq.subtreeBorrowedY = lNode.liq.subtreeBorrowedY + rNode.liq.subtreeBorrowedY + node.liq.borrowedY;
+            }
         } else {
             node.liq.subtreeMLiq = node.liq.mLiq;
             node.liq.subtreeTLiq = node.liq.tLiq;

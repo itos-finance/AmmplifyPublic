@@ -96,25 +96,38 @@ library FeeLib {
         }
     }
 
+    /// Computes JIT penalty amounts without applying them.
+    function _computeJITPenalties(Asset storage asset, uint256 xBalance, uint256 yBalance)
+        private view returns (bool penalized, uint256 xOut, uint256 yOut, uint256 xDiff, uint256 yDiff)
+    {
+        FeeStore storage store = Store.fees();
+        uint128 duration = uint128(block.timestamp) - asset.timestamp;
+        if (duration >= store.jitLifetime) {
+            return (false, xBalance, yBalance, 0, 0);
+        }
+        uint256 penaltyX64 = (1 << 64) - store.jitPenaltyX64;
+        xOut = FullMath.mulX64(xBalance, penaltyX64, true);
+        yOut = FullMath.mulX64(yBalance, penaltyX64, true);
+        xDiff = xBalance - xOut;
+        yDiff = yBalance - yOut;
+        penalized = true;
+    }
+
     /// Applies JIT penalities to balances if applicable for this asset.
     function applyJITPenalties(Asset storage asset, uint256 xBalance, uint256 yBalance, address tokenX, address tokenY)
         internal
         returns (uint256 xBalanceOut, uint256 yBalanceOut)
     {
-        FeeStore storage store = Store.fees();
-        uint128 duration = uint128(block.timestamp) - asset.timestamp;
-        if (duration >= store.jitLifetime) {
+        (bool penalized, uint256 xOut, uint256 yOut, uint256 xDiff, uint256 yDiff) =
+            _computeJITPenalties(asset, xBalance, yBalance);
+        if (!penalized) {
             return (xBalance, yBalance);
         }
-        // Apply the JIT penalty.
-        uint256 penaltyX64 = (1 << 64) - store.jitPenaltyX64;
-        xBalanceOut = FullMath.mulX64(xBalance, penaltyX64, true);
-        yBalanceOut = FullMath.mulX64(yBalance, penaltyX64, true);
-        // Give the penalties to the owner address.
+        xBalanceOut = xOut;
+        yBalanceOut = yOut;
+        FeeStore storage store = Store.fees();
         address owner = AdminLib.getOwner();
-        uint256 xDiff = xBalance - xBalanceOut;
         store.collateral[owner][tokenX] += xDiff;
-        uint256 yDiff = yBalance - yBalanceOut;
         store.collateral[owner][tokenY] += yDiff;
         emit JITPenalized(xDiff, yDiff);
     }
@@ -125,14 +138,6 @@ library FeeLib {
         view
         returns (uint256 xBalanceOut, uint256 yBalanceOut)
     {
-        FeeStore storage store = Store.fees();
-        uint128 duration = uint128(block.timestamp) - asset.timestamp;
-        if (duration >= store.jitLifetime) {
-            return (xBalance, yBalance);
-        }
-        // Apply the JIT penalty.
-        uint256 penaltyX64 = (1 << 64) - store.jitPenaltyX64;
-        xBalanceOut = FullMath.mulX64(xBalance, penaltyX64, true);
-        yBalanceOut = FullMath.mulX64(yBalance, penaltyX64, true);
+        (, xBalanceOut, yBalanceOut, , ) = _computeJITPenalties(asset, xBalance, yBalance);
     }
 }
