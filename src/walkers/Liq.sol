@@ -506,6 +506,12 @@ library LiqWalker {
         } else if (netLiq > 0 && node.liq.borrowed > 0) {
             // Check if we can repay liquidity.
             uint128 repayable = min(uint128(netLiq), node.liq.borrowed);
+            // Early exit before loading sibling: since the final repayable can only decrease
+            // (it's further min'd with sibling values), if the upper bound is already below
+            // the compound threshold, the actual repayable will be too.
+            if (repayable <= data.liq.compoundThreshold) {
+                return;
+            }
             Key sibKey = key.sibling();
             Node storage sibling = data.node(sibKey);
             int128 sibLiq = sibling.liq.net();
