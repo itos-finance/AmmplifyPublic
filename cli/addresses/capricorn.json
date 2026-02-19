@@ -1,0 +1,21 @@
+{
+  "network": "Monad Mainnet",
+  "chainId": 143,
+  "tokens": {
+    "WMON": { "address": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A", "decimals": 18 },
+    "USDC": { "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "decimals": 6 },
+    "WETH": { "address": "0xEE8c0E9f1BFFb4Eb878d8f15f368A02a35481242", "decimals": 18 },
+    "WBTC": { "address": "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c", "decimals": 8 },
+    "USDT0": { "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", "decimals": 6 },
+    "CHOG": { "address": "0x350035555E10d9AfAF1566AaebfCeD5BA6C27777", "decimals": 18 },
+    "shMON": { "address": "0x1B68626dCa36c7fE922fD2d55E4f631d962dE19c", "decimals": 18 }
+  },
+  "diamond": "0xEca6d8973238B71180327C0376c6495A2a29fDE9",
+  "decomposer": "0x21ed71650341A76F79FC5Db36bA5943c359af3ef",
+  "factory": "0x6B5F564339DbAD6b780249827f2198a841FEB7F3",
+  "nfpm": "0x4C02af995BB1f574c9bf31F43ddc112414aE0Ac7",
+  "router": "0xdac97b6a3951641B177283028A8f428332333071",
+  "pools": {
+    "CHOG_WMON_10000": "0x116e7d070f1888b81e1e0324f56d6746b2d7d8f1"
+  }
+}
