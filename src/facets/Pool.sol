@@ -42,7 +42,7 @@ contract PoolFacet is IUniswapV3MintCallback, IPool, ICapricornCLMintCallback {
         bytes calldata /* data */
     ) external override(IPool, ICapricornCLMintCallback) {
         address activeMint = PoolLib.poolGuard();
-        // require(msg.sender == activeMint, UnauthorizedMint(activeMint, msg.sender));
+        require(msg.sender == activeMint, UnauthorizedMint(activeMint, msg.sender));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(activeMint);
         if (amount0Delta > 0) TransferHelper.safeTransfer(pInfo.token0, activeMint, uint256(amount0Delta));
         if (amount1Delta > 0) TransferHelper.safeTransfer(pInfo.token1, activeMint, uint256(amount1Delta));
