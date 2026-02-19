@@ -175,12 +175,14 @@ library LiqWalker {
             iter = LiqIter({ key: key, width: key.width(), lowTick: lowTick, highTick: highTick });
         }
 
-        // Compound first.
-        compound(iter, node, data);
-
-        // Do the modifications.
-        if (visit) {
-            modify(iter, node, data, data.liq.liq);
+        // Skip compound for uninitialized nodes that aren't being visited.
+        // Uninitialized nodes have mLiq=0, tLiq=0, no fees to track.
+        // Saves expensive feeGrowthInside SSTOREs (0→non-zero = 20k each) and getInsideFees calls.
+        if (node.liq.initialized || visit) {
+            compound(iter, node, data);
+            if (visit) {
+                modify(iter, node, data, data.liq.liq);
+            }
         }
 
         // Update subtree liqs.
