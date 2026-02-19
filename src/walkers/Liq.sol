@@ -351,16 +351,21 @@ library LiqWalker {
             {
                 // For adding liquidity, we need to consider existing fees
                 // and what amount of equivalent liq they're worth.
-                uint128 equivLiq = PoolLib.getEquivalentLiq(
-                    iter.lowTick,
-                    iter.highTick,
-                    node.fees.xCFees,
-                    node.fees.yCFees,
-                    data.sqrtPriceX96,
-                    data.twapSqrtPriceX96,
-                    true
-                );
-                compoundingLiq += equivLiq;
+                // Skip the expensive getEquivalentLiq call when both compound fee
+                // balances are zero — zero assets always have zero equivalent liquidity.
+                // getEquivalentLiq computes getAmounts at two prices (4 TickMath calls +
+                // SqrtPriceMath), so skipping saves ~2,000 gas per zero-fee node.
+                if (node.fees.xCFees > 0 || node.fees.yCFees > 0) {
+                    compoundingLiq += PoolLib.getEquivalentLiq(
+                        iter.lowTick,
+                        iter.highTick,
+                        node.fees.xCFees,
+                        node.fees.yCFees,
+                        data.sqrtPriceX96,
+                        data.twapSqrtPriceX96,
+                        true
+                    );
+                }
             }
             // We ONLY use virtual shares when adding and removing compounding liq.
             // All fee calculations, liquidity minted/burned etc. are done using real liq values.
