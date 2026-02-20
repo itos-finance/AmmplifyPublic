@@ -2,13 +2,14 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3SwapCallback } from "v3-core/interfaces/callback/IUniswapV3SwapCallback.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { PoolLib, PoolInfo } from "../Pool.sol";
 import { IMaker } from "../interfaces/IMaker.sol";
+import { IOpener } from "../interfaces/IOpener.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import { console2 } from "forge-std/console2.sol";
 
 interface ICapricornCLSwapCallback {
     function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
@@ -17,20 +18,14 @@ interface ICapricornCLSwapCallback {
 /**
  * @title Opener
  * @notice Contract that opens maker positions by swapping for missing tokens
- * @dev Handles exact input swaps and Capricorn callbacks to acquire the token the user doesn't have
+ * @dev Handles exact input swaps and both Capricorn and Uniswap callbacks to acquire the token the user doesn't have
  */
-contract Opener is ICapricornCLSwapCallback {
+contract Opener is IOpener, ICapricornCLSwapCallback, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
 
-    /// @notice The diamond contract that implements IMaker
-    address public immutable diamond;
-
-    /// @notice Error thrown when callback is from wrong pool
-    error InvalidCallbackSender();
-    /// @notice Error thrown when slippage is too high
-    error SlippageTooHigh();
-    /// @notice Error thrown when token is not part of the pool
-    error InvalidToken();
+    /// @notice Slippage discount in basis points (e.g., 100 = 1%)
+    uint256 public constant LIQUIDITY_DISCOUNT_BPS = 100; // 1% discount
+    uint256 private constant BPS_DENOMINATOR = 10000;
 
     /// @notice Swap state stored during callback
     struct SwapState {
@@ -44,12 +39,9 @@ contract Opener is ICapricornCLSwapCallback {
     /// @notice Temporary storage for swap state during callback
     SwapState private swapState;
 
-    constructor(address _diamond) {
-        diamond = _diamond;
-    }
-
     /**
      * @notice Opens a maker position by swapping for the missing token
+     * @param diamond The diamond contract that implements IMaker
      * @param poolAddr The address of the pool
      * @param tokenIn The token address that the user is providing
      * @param amountIn The amount of tokenIn to swap for the other token
@@ -64,6 +56,7 @@ contract Opener is ICapricornCLSwapCallback {
      * @return assetId The ID of the created asset
      */
     function openMaker(
+        address diamond,
         address poolAddr,
         address tokenIn,
         uint256 amountIn,
@@ -94,30 +87,21 @@ contract Opener is ICapricornCLSwapCallback {
         uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(lowTick);
         uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(highTick);
 
-        // Calculate expected liquidity from the amountSwap and the user's tokenIn
-        // We'll use amountSwap as the expected output, and calculate what liquidity we can get
-        // First, estimate what we'll have after swap: amountSwap of tokenOut
-        // We need to determine how much tokenIn will be used in the swap
-        // For now, we'll swap to get exactly amountSwap of tokenOut
-
         // Transfer user's tokenIn to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // Perform exact output swap: swap to get exactly amountSwap of tokenOut
-        _swapExactOut(poolAddr, tokenIn, tokenOut, pInfo.fee, amountSwap, amountIn, amountOutMinimum, msg.sender);
+        // Only perform swap if amountSwap > 0 (skip for out-of-range positions that need no swap)
+        if (amountSwap > 0) {
+            // Perform exact output swap: swap to get exactly amountSwap of tokenOut
+            _swapExactOut(poolAddr, tokenIn, tokenOut, pInfo.fee, amountSwap, amountIn, amountOutMinimum, msg.sender);
+
+            // Re-fetch price after swap since it may have moved
+            sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
+        }
 
         // Get balances after swap
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
-
-        // Calculate liquidity from the token amounts we have
-        // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
-
-        console2.log("balance0", balance0);
-        console2.log("balance1", balance1);
-        console2.log("sqrtPriceX96", sqrtPriceX96);
-        console2.log("sqrtPriceAX96", sqrtPriceAX96);
-        console2.log("sqrtPriceBX96", sqrtPriceBX96);
 
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
@@ -127,32 +111,22 @@ contract Opener is ICapricornCLSwapCallback {
             balance1
         );
 
-        // Reduce liquidity by 2 to help with rounding
-        if (liq >= 2) {
-            liq -= 2;
-        } else {
-            liq = 0;
-        }
+        // Apply percentage-based discount to handle slippage and rounding errors
+        uint256 discountedLiq = (uint256(liq) * (BPS_DENOMINATOR - LIQUIDITY_DISCOUNT_BPS)) / BPS_DENOMINATOR;
+        liq = uint128(discountedLiq);
 
         // If liquidity is too low, revert
         if (liq == 0) {
             revert("Insufficient liquidity");
         }
 
-        // Calculate actual amounts needed for this liquidity
-        (uint256 neededAmount0, uint256 neededAmount1) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceAX96,
-            sqrtPriceBX96,
-            liq
-        );
-
-        // Approve tokens to diamond
-        if (neededAmount0 > 0) {
-            IERC20(token0).approve(diamond, neededAmount0);
+        // Approve entire balance to diamond (any unused will be refunded)
+        // Using balance instead of neededAmount to avoid rounding issues
+        if (balance0 > 0) {
+            IERC20(token0).approve(diamond, balance0);
         }
-        if (neededAmount1 > 0) {
-            IERC20(token1).approve(diamond, neededAmount1);
+        if (balance1 > 0) {
+            IERC20(token1).approve(diamond, balance1);
         }
 
         // Open the maker position
@@ -181,11 +155,11 @@ contract Opener is ICapricornCLSwapCallback {
     }
 
     /**
-     * @notice Capricorn CL swap callback
+     * @notice Internal handler for swap callbacks
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
      */
-    function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
+    function _handleSwapCallback(int256 amount0Delta, int256 amount1Delta) private {
         require(amount0Delta > 0 || amount1Delta > 0, "Invalid swap callback");
 
         SwapState memory state = swapState;
@@ -208,6 +182,24 @@ contract Opener is ICapricornCLSwapCallback {
             // Otherwise transfer from payer
             IERC20(state.tokenIn).safeTransferFrom(state.payer, msg.sender, amountToPay);
         }
+    }
+
+    /**
+     * @notice Capricorn CL swap callback
+     * @param amount0Delta The change in token0 balance
+     * @param amount1Delta The change in token1 balance
+     */
+    function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
+        _handleSwapCallback(amount0Delta, amount1Delta);
+    }
+
+    /**
+     * @notice Uniswap V3 swap callback
+     * @param amount0Delta The change in token0 balance
+     * @param amount1Delta The change in token1 balance
+     */
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
+        _handleSwapCallback(amount0Delta, amount1Delta);
     }
 
     /**
