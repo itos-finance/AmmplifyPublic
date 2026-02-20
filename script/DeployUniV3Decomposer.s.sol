@@ -30,95 +30,24 @@ contract DeployUniV3Decomposer is Script {
     // Deployed contract
     UniV3Decomposer public decomposer;
 
-    // Configuration (loaded from environment)
-    address public makerFacetAddress;
-    address public nfpmAddress;
-
     function run() external {
         // Get the deployer's address and private key from environment
         address deployer = vm.envAddress("DEPLOYER_PUBLIC_KEY");
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
 
-        address diamond = address(0x05567622F4246b4372E3963CF5a0d435354a467d);
+        address diamond = address(0xEca6d8973238B71180327C0376c6495A2a29fDE9);
+        address nfpmAddress = address(0x4C02af995BB1f574c9bf31F43ddc112414aE0Ac7);
 
         console.log("Deploying UniV3Decomposer with deployer:", deployer);
-
-        // Load required addresses
-        _loadAddresses();
 
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy UniV3Decomposer
-        decomposer = new UniV3Decomposer(nfpmAddress, makerFacetAddress);
+        decomposer = new UniV3Decomposer(nfpmAddress, diamond);
 
         // add it as a generically usable opener
         AdminFacet(diamond).addPermissionedOpener(address(decomposer));
 
         vm.stopBroadcast();
-
-        // Log deployment summary
-        _logDeploymentSummary();
-    }
-
-    /**
-     * @notice Load required contract addresses from environment variables
-     */
-    function _loadAddresses() internal {
-        try vm.envAddress("MAKER_FACET") returns (address maker) {
-            makerFacetAddress = maker;
-        } catch {
-            console.log("MAKER_FACET not set in environment, using zero address");
-            makerFacetAddress = address(0);
-        }
-        try vm.envAddress("NFPM") returns (address nfpm) {
-            nfpmAddress = nfpm;
-        } catch {
-            console.log("NFPM not set in environment, using zero address");
-            nfpmAddress = address(0);
-        }
-        require(makerFacetAddress != address(0), "MAKER_FACET address required");
-        require(nfpmAddress != address(0), "NFPM address required");
-
-        console.log("Using MakerFacet at:", makerFacetAddress);
-        console.log("Using NFPM at:", nfpmAddress);
-    }
-
-    /**
-     * @notice Log deployment summary
-     */
-    function _logDeploymentSummary() internal view {
-        console.log("\n=== UniV3Decomposer Deployment Summary ===");
-        console.log("UniV3Decomposer:", address(decomposer));
-        console.log("Configuration:");
-        console.log("  NFPM:", address(decomposer.NFPM()));
-        console.log("  MakerFacet:", address(decomposer.MAKER()));
-
-        console.log("\nThe UniV3Decomposer can now:");
-        console.log("- Convert Uniswap V3 position NFTs to Ammplify positions");
-        console.log("- Handle token transfers via RFT callback mechanism");
-        console.log("- Calculate dynamic liquidity offsets based on tick ranges");
-    }
-
-    /**
-     * @notice Helper function to verify the deployment by checking configuration
-     */
-    function verifyDeployment() external view returns (bool) {
-        if (address(decomposer) == address(0)) {
-            console.log("ERROR: Decomposer not deployed");
-            return false;
-        }
-
-        if (address(decomposer.NFPM()) != nfpmAddress) {
-            console.log("ERROR: NFPM address mismatch");
-            return false;
-        }
-
-        if (address(decomposer.MAKER()) != makerFacetAddress) {
-            console.log("ERROR: MakerFacet address mismatch");
-            return false;
-        }
-
-        console.log(unicode"✅ UniV3Decomposer deployment verified successfully");
-        return true;
     }
 }

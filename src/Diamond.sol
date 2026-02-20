@@ -13,7 +13,7 @@ import { IERC165 } from "Commons/ERC/interfaces/IERC165.sol";
 import { BaseAdminFacet, AdminLib } from "Commons/Util/Admin.sol";
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 
-import { AdminFacet } from "./facets/Admin.sol";
+import { AdminFacet, AmmplifyAdminRights } from "./facets/Admin.sol";
 import { MakerFacet } from "./facets/Maker.sol";
 import { TakerFacet } from "./facets/Taker.sol";
 import { PoolFacet } from "./facets/Pool.sol";
@@ -37,6 +37,11 @@ contract SimplexDiamond is IDiamond {
         AdminLib.initOwner(msg.sender);
         FeeLib.init();
         PoolValidation.initFactory(uniV3factory);
+        // Terence Hardware
+        AdminLib.register(0x6e7465acBaa3217Bdcc4C17CDbE1DaDbb4356377, AmmplifyAdminRights.TAKER);
+        // Brian Hardware
+        AdminLib.register(0x81785e00055159FCae25703D06422aBF5603f8A8, AmmplifyAdminRights.TAKER);
+
         FacetCut[] memory cuts = new FacetCut[](7);
 
         // Deploy DiamondCutFacet and DiamondLoupeFacet inline
