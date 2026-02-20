@@ -39,7 +39,7 @@ export interface DeployedAddresses {
 function loadAddresses(): DeployedAddresses {
   const addressesPath = resolve(
     cliRoot,
-    process.env.AMMPLIFY_ADDRESSES_FILE || "../deployed-addresses.json"
+    process.env.AMMPLIFY_ADDRESSES_FILE || "./addresses/uniswapv3.json"
   );
   return JSON.parse(readFileSync(addressesPath, "utf-8"));
 }
