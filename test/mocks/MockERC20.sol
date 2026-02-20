@@ -7,6 +7,7 @@ contract MockERC20 {
     string public symbol;
     uint8 public decimals;
     mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
 
     constructor(string memory _n, string memory _s, uint8 _d) {
         name = _n;
@@ -26,7 +27,8 @@ contract MockERC20 {
         return true;
     }
 
-    function approve(address, uint256) external pure returns (bool) {
+    function approve(address spender, uint256 value) external returns (bool) {
+        allowance[msg.sender][spender] = value;
         return true;
     }
 
