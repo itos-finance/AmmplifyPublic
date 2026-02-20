@@ -30,6 +30,7 @@ contract UniV4PositionOpener is IUnlockCallback {
 
     error InvalidToken();
     error SlippageTooHigh();
+    error InputSlippageTooHigh();
     error NotPoolManager();
 
     struct SwapCallbackData {
@@ -37,6 +38,7 @@ contract UniV4PositionOpener is IUnlockCallback {
         address tokenIn;
         address tokenOut;
         uint256 amountSwap;
+        uint256 amountInMaximum;
     }
 
     constructor(IPoolManager _poolManager, IPositionManager _posm, IAllowanceTransfer _permit2) {
@@ -72,25 +74,30 @@ contract UniV4PositionOpener is IUnlockCallback {
 
         address tokenOut = tokenIn == token0 ? token1 : token0;
 
+        // Record pre-call balances for delta-based accounting
+        uint256 balBefore0 = IERC20(token0).balanceOf(address(this));
+        uint256 balBefore1 = IERC20(token1).balanceOf(address(this));
+
         // Pull tokens from user
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // Phase A: Swap via PoolManager unlock
+        // Phase A: Swap via PoolManager unlock (includes input-side slippage guard)
         bytes memory swapData = abi.encode(SwapCallbackData({
             key: key,
             tokenIn: tokenIn,
             tokenOut: tokenOut,
-            amountSwap: amountSwap
+            amountSwap: amountSwap,
+            amountInMaximum: amountIn
         }));
         poolManager.unlock(swapData);
 
-        // Verify slippage on output
-        uint256 outputBalance = IERC20(tokenOut).balanceOf(address(this));
-        require(outputBalance >= amountOutMinimum, "Slippage too high");
+        // Delta-based accounting: only count tokens received during this call
+        uint256 balance0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
+        uint256 balance1 = IERC20(token1).balanceOf(address(this)) - balBefore1;
 
-        // Calculate liquidity from resulting balances
-        uint256 balance0 = IERC20(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+        // Post-swap slippage check on actual received output
+        uint256 actualOutput = tokenIn == token0 ? balance1 : balance0;
+        if (actualOutput < amountOutMinimum) revert SlippageTooHigh();
 
         (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(key.toId());
         uint160 sqrtPriceAX96 = TickMath.getSqrtPriceAtTick(tickLower);
@@ -141,9 +148,9 @@ contract UniV4PositionOpener is IUnlockCallback {
         tokenId = posm.nextTokenId();
         posm.modifyLiquidities(unlockData, deadline);
 
-        // Refund unused tokens
-        uint256 refund0 = IERC20(token0).balanceOf(address(this));
-        uint256 refund1 = IERC20(token1).balanceOf(address(this));
+        // Refund unused tokens (delta-based)
+        uint256 refund0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
+        uint256 refund1 = IERC20(token1).balanceOf(address(this)) - balBefore1;
         if (refund0 > 0) IERC20(token0).safeTransfer(msg.sender, refund0);
         if (refund1 > 0) IERC20(token1).safeTransfer(msg.sender, refund1);
     }
@@ -170,6 +177,15 @@ contract UniV4PositionOpener is IUnlockCallback {
         // V4 delta convention: negative = must settle (pay to pool), positive = can take (receive from pool)
         int128 delta0 = delta.amount0();
         int128 delta1 = delta.amount1();
+
+        // Input-side slippage guard: verify amount consumed doesn't exceed maximum
+        uint256 inputConsumed;
+        if (zeroForOne) {
+            inputConsumed = uint256(int256(-delta0));
+        } else {
+            inputConsumed = uint256(int256(-delta1));
+        }
+        if (inputConsumed > swapData.amountInMaximum) revert InputSlippageTooHigh();
 
         // Settle input token (pay to pool) — negative delta means we owe
         if (delta0 < 0) {

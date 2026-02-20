@@ -233,7 +233,7 @@ contract UniV4PositionOpenerTest is Test {
         tokenA.approve(address(opener), AMOUNT_IN);
 
         // Set amountOutMinimum higher than amountSwap to trigger revert
-        vm.expectRevert("Slippage too high");
+        vm.expectRevert(UniV4PositionOpener.SlippageTooHigh.selector);
         opener.openPosition(
             key,
             address(tokenA),

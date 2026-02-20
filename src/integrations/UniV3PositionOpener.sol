@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
+import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
 import { IUniswapV3SwapCallback } from "v3-core/interfaces/callback/IUniswapV3SwapCallback.sol";
 import { TickMath } from "v3-core/libraries/TickMath.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
@@ -20,6 +21,7 @@ contract UniV3PositionOpener is IUniswapV3SwapCallback {
     error InvalidCallbackSender();
     error SlippageTooHigh();
     error InvalidToken();
+    error InvalidPool();
 
     struct SwapState {
         address poolAddr;
@@ -32,6 +34,9 @@ contract UniV3PositionOpener is IUniswapV3SwapCallback {
     constructor(address _nfpm) {
         nfpm = _nfpm;
     }
+
+    /// @notice Accept ETH refunds from NFPM.mint()
+    receive() external payable {}
 
     /// @notice Opens a Uniswap V3 position from a single token
     /// @param poolAddr The address of the V3 pool
@@ -58,21 +63,35 @@ contract UniV3PositionOpener is IUniswapV3SwapCallback {
         address token1 = pool.token1();
         uint24 fee = pool.fee();
 
+        // Verify pool is deployed by its factory
+        address factory = pool.factory();
+        if (IUniswapV3Factory(factory).getPool(token0, token1, fee) != poolAddr) {
+            revert InvalidPool();
+        }
+
         if (tokenIn != token0 && tokenIn != token1) {
             revert InvalidToken();
         }
 
         address tokenOut = tokenIn == token0 ? token1 : token0;
 
+        // Record pre-call balances for delta-based accounting
+        uint256 balBefore0 = IERC20(token0).balanceOf(address(this));
+        uint256 balBefore1 = IERC20(token1).balanceOf(address(this));
+
         // Pull tokens from user
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
         // Perform exact-output swap
-        _swapExactOut(poolAddr, tokenIn, tokenOut, amountSwap, amountIn, amountOutMinimum);
+        _swapExactOut(poolAddr, tokenIn, tokenOut, amountSwap, amountIn);
 
-        // Get balances after swap
-        uint256 balance0 = IERC20(token0).balanceOf(address(this));
-        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+        // Delta-based accounting: only count tokens received during this call
+        uint256 balance0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
+        uint256 balance1 = IERC20(token1).balanceOf(address(this)) - balBefore1;
+
+        // Post-swap slippage check on actual received output
+        uint256 actualOutput = tokenIn == token0 ? balance1 : balance0;
+        if (actualOutput < amountOutMinimum) revert SlippageTooHigh();
 
         // Calculate liquidity from the balances
         (uint160 sqrtPriceX96, , , , , , ) = pool.slot0();
@@ -114,11 +133,17 @@ contract UniV3PositionOpener is IUniswapV3SwapCallback {
             })
         );
 
-        // Refund unused tokens
-        uint256 refund0 = IERC20(token0).balanceOf(address(this));
-        uint256 refund1 = IERC20(token1).balanceOf(address(this));
+        // Refund unused tokens (delta-based)
+        uint256 refund0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
+        uint256 refund1 = IERC20(token1).balanceOf(address(this)) - balBefore1;
         if (refund0 > 0) IERC20(token0).safeTransfer(msg.sender, refund0);
         if (refund1 > 0) IERC20(token1).safeTransfer(msg.sender, refund1);
+
+        // Refund any ETH sent back by NFPM
+        if (address(this).balance > 0) {
+            (bool success, ) = payable(msg.sender).call{value: address(this).balance}("");
+            require(success, "ETH refund failed");
+        }
     }
 
     /// @inheritdoc IUniswapV3SwapCallback
@@ -140,13 +165,10 @@ contract UniV3PositionOpener is IUniswapV3SwapCallback {
         address tokenIn,
         address tokenOut,
         uint256 amountOut,
-        uint256 amountInMaximum,
-        uint256 amountOutMinimum
+        uint256 amountInMaximum
     ) private returns (uint256 amountIn) {
         IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
         bool zeroForOne = tokenIn < tokenOut;
-
-        require(amountOut >= amountOutMinimum, "Slippage too high");
 
         swapState = SwapState({
             poolAddr: poolAddr,

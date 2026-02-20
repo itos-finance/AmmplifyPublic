@@ -154,7 +154,7 @@ contract UniV3PositionOpenerTest is MultiSetupTest, UniV3IntegrationSetup {
         token0.approve(address(opener), AMOUNT_IN);
 
         // Set amountOutMinimum higher than amountSwap to trigger slippage revert
-        vm.expectRevert("Slippage too high");
+        vm.expectRevert(UniV3PositionOpener.SlippageTooHigh.selector);
         opener.openPosition(
             poolAddr,
             address(token0),
