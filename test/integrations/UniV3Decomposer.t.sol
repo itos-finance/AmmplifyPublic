@@ -68,7 +68,7 @@ contract UniV3DecomposerTest is MultiSetupTest, UniV3IntegrationSetup {
         vm.prank(address(0xBEEF));
         nfpm.approve(address(decomposer), pos);
         vm.expectRevert();
-        decomposer.decompose(pos, false, 0, 0, "");
+        decomposer.decompose(pos, 0, 0, "");
     }
 
     function testDecomposeNFT() public {
@@ -78,7 +78,7 @@ contract UniV3DecomposerTest is MultiSetupTest, UniV3IntegrationSetup {
         // Set reasonable price bounds - allowing full range to avoid slippage issues
         uint160 minSqrtPriceX96 = 4295128739; // Very low price
         uint160 maxSqrtPriceX96 = 1461446703485210103287273052203988822378723970341; // Very high price
-        decomposer.decompose(pos, false, minSqrtPriceX96, maxSqrtPriceX96, "");
+        decomposer.decompose(pos, minSqrtPriceX96, maxSqrtPriceX96, "");
     }
 
     // TODO

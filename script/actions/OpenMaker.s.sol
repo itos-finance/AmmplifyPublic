@@ -41,7 +41,6 @@ contract OpenMaker is AmmplifyPositions {
 
         // Adjust liquidity based on available tokens
         params.liquidity = 64861280439056 - 10_000;
-        // params.liquidity = 1e18;
 
         // Calculate ticks ±300 around current tick, ensuring they're valid for 3000 fee tier (tick spacing = 60)
         int24 tickRange = 300;
@@ -54,7 +53,6 @@ contract OpenMaker is AmmplifyPositions {
         console2.log("Low Tick:", params.lowTick);
         console2.log("High Tick:", params.highTick);
         console2.log("Liquidity:", params.liquidity);
-        console2.log("Is Compounding:", params.isCompounding);
 
         params.recipient = 0xbe7dC5cC7977ac378ead410869D6c96f1E6C773e;
 

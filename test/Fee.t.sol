@@ -19,21 +19,21 @@ contract FeeTest is Test {
 
     function testInit() public view {
         FeeStore storage store = Store.fees();
-        assertEq(store.defaultCompoundThreshold, 1e12);
+        assertEq(store.defaultRedistributionThreshold, 1e12);
         _assertDefaultFeeCurve(store.defaultFeeCurve);
         _assertDefaultSplitCurve(store.defaultSplitCurve);
     }
 
     // Getters
 
-    function testGetCompoundThreshold() public {
+    function testGetRedistributionThreshold() public {
         // Default
         FeeStore storage store = Store.fees();
-        assertEq(FeeLib.getCompoundThreshold(address(0)), 1e12);
+        assertEq(FeeLib.getRedistributionThreshold(address(0)), 1e12);
 
         // Set
-        store.compoundThresholds[address(0)] = 1e13;
-        assertEq(FeeLib.getCompoundThreshold(address(0)), 1e13);
+        store.redistributionThresholds[address(0)] = 1e13;
+        assertEq(FeeLib.getRedistributionThreshold(address(0)), 1e13);
     }
 
     function testGetSplitCurve() public {

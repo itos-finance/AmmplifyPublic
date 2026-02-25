@@ -133,7 +133,6 @@ contract CapricornFork is AmmplifyForkBase {
             tickLower,
             tickUpper,
             liquidity,
-            false, // isCompounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             "" // rftData
@@ -260,7 +259,6 @@ contract CapricornFork is AmmplifyForkBase {
             amountIn, // amountIn
             tickLower,
             tickUpper,
-            false, // isCompounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             amountOutMinimum,
@@ -368,7 +366,6 @@ contract CapricornFork is AmmplifyForkBase {
             amountIn, // amountIn
             tickLower,
             tickUpper,
-            false, // isCompounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             amountOutMinimum, // This is too high, will cause revert

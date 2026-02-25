@@ -49,14 +49,14 @@ contract UpdateFeeCurve is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory currentFeeCurve,
             SmoothRateCurveConfig memory /* currentSplitCurve */,
-            uint128 currentCompoundThreshold,
+            uint128 currentRedistributionThreshold,
             uint32 /* currentTwapInterval */
         ) {
             console2.log("Current Fee Curve - invAlphaX128:", currentFeeCurve.invAlphaX128);
             console2.log("Current Fee Curve - betaX64:", currentFeeCurve.betaX64);
             console2.log("Current Fee Curve - maxUtilX64:", currentFeeCurve.maxUtilX64);
             console2.log("Current Fee Curve - maxRateX64:", currentFeeCurve.maxRateX64);
-            console2.log("Current Compound Threshold:", currentCompoundThreshold);
+            console2.log("Current Redistribution Threshold:", currentRedistributionThreshold);
         } catch {
             console2.log("No existing fee configuration found for this pool");
         }
@@ -76,14 +76,14 @@ contract UpdateFeeCurve is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory updatedFeeCurve,
             SmoothRateCurveConfig memory /* updatedSplitCurve */,
-            uint128 updatedCompoundThreshold,
+            uint128 updatedRedistributionThreshold,
             uint32 /* updatedTwapInterval */
         ) {
             console2.log("Updated Fee Curve - invAlphaX128:", updatedFeeCurve.invAlphaX128);
             console2.log("Updated Fee Curve - betaX64:", updatedFeeCurve.betaX64);
             console2.log("Updated Fee Curve - maxUtilX64:", updatedFeeCurve.maxUtilX64);
             console2.log("Updated Fee Curve - maxRateX64:", updatedFeeCurve.maxRateX64);
-            console2.log("Updated Compound Threshold:", updatedCompoundThreshold);
+            console2.log("Updated Redistribution Threshold:", updatedRedistributionThreshold);
 
             // Verify the values match what we set
             bool invAlphaMatch = updatedFeeCurve.invAlphaX128 == mmSPR.invAlphaX128;

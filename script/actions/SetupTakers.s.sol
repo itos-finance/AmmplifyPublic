@@ -349,7 +349,6 @@ contract SetupTakers is AmmplifyPositions {
             tickLower,
             tickUpper,
             makerLiquidity,
-            true, // compounding
             MIN_SQRT_RATIO,
             MAX_SQRT_RATIO,
             ""

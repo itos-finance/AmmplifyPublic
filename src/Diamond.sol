@@ -82,8 +82,8 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[9] = AdminFacet.setDefaultFeeCurve.selector;
             adminSelectors[10] = AdminFacet.setSplitCurve.selector;
             adminSelectors[11] = AdminFacet.setDefaultSplitCurve.selector;
-            adminSelectors[12] = AdminFacet.setCompoundThreshold.selector;
-            adminSelectors[13] = AdminFacet.setDefaultCompoundThreshold.selector;
+            adminSelectors[12] = AdminFacet.setRedistributionThreshold.selector;
+            adminSelectors[13] = AdminFacet.setDefaultRedistributionThreshold.selector;
             adminSelectors[14] = AdminFacet.setTwapInterval.selector;
             adminSelectors[15] = AdminFacet.setDefaultTwapInterval.selector;
             adminSelectors[16] = AdminFacet.setJITPenalties.selector;
@@ -104,14 +104,13 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](7);
+            bytes4[] memory selectors = new bytes4[](6);
             selectors[0] = MakerFacet.newMaker.selector;
             selectors[1] = MakerFacet.removeMaker.selector;
             selectors[2] = MakerFacet.collectFees.selector;
             selectors[3] = MakerFacet.adjustMaker.selector;
-            selectors[4] = MakerFacet.compound.selector;
-            selectors[5] = MakerFacet.addPermission.selector;
-            selectors[6] = MakerFacet.removePermission.selector;
+            selectors[4] = MakerFacet.addPermission.selector;
+            selectors[5] = MakerFacet.removePermission.selector;
 
             cuts[3] = IDiamond.FacetCut({
                 facetAddress: facetAddresses.makerFacet,

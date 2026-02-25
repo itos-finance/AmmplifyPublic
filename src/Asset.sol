@@ -27,10 +27,9 @@ struct Asset {
 }
 
 struct AssetNode {
-    uint128 sliq; // The share/liq of the node we own.
+    uint128 sliq; // The liq of the node we own.
     // For takers, this is a checkpoint of the per liq token fees owed.
-    // For NC makers, this is a checkpoint of the per liq fees earned.
-    // For C makers, this is not used.
+    // For makers, this is a checkpoint of the per liq fees earned.
     // These checkpoints include both the swap fees and the reservation fees.
     uint256 fee0CheckX128;
     uint256 fee1CheckX128;
@@ -60,8 +59,7 @@ library AssetLib {
         PoolInfo memory pInfo,
         int24 lowTick,
         int24 highTick,
-        uint128 liq,
-        bool isCompounding
+        uint128 liq
     ) internal returns (Asset storage asset, uint256 assetId) {
         // address 0x0 is a valid recipient for maker assets.
 
@@ -72,7 +70,7 @@ library AssetLib {
         asset.poolAddr = pInfo.poolAddr;
         asset.lowTick = lowTick;
         asset.highTick = highTick;
-        asset.liqType = isCompounding ? LiqType.MAKER : LiqType.MAKER_NC;
+        asset.liqType = LiqType.MAKER;
         asset.liq = liq;
         updateTimestamp(asset);
         // The Nodes are to be filled in by a walker.
@@ -173,12 +171,6 @@ library AssetLib {
     }
 
     /* Helpers */
-
-    /// Get a null asset (used for compounding where no asset is needed).
-    function nullAsset() internal view returns (Asset storage asset) {
-        // The zeroeth assetId is never used.
-        return Store.assets().assets[0];
-    }
 
     function addAssetToOwner(AssetStore storage store, uint256 assetId, address owner) private {
         address opener = msg.sender;

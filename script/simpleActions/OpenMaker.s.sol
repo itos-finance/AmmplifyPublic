@@ -25,7 +25,6 @@ contract OpenMakerScript is Script {
             (int24(-307336) / 60) * 60,
             (int24(-305282) / 60) * 60,
             100_000_000_000,
-            true,
             TickMath.MIN_SQRT_PRICE,
             TickMath.MAX_SQRT_PRICE,
             ""

@@ -29,8 +29,8 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
+    event DefaultRedistributionThresholdSet(uint256 threshold);
+    event RedistributionThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
     event VaultAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
     event TwapIntervalSet(address indexed pool, uint32 interval);
@@ -118,24 +118,24 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         assertEq(storedSplitCurve.maxRateX64, testSplitCurve.maxRateX64);
     }
 
-    function testSetCompoundThreshold() public {
+    function testSetRedistributionThreshold() public {
         uint128 threshold = 1e18;
         vm.expectEmit(true, false, false, true);
-        emit CompoundThresholdSet(testPool, threshold);
+        emit RedistributionThresholdSet(testPool, threshold);
 
-        adminFacet.setCompoundThreshold(testPool, threshold);
+        adminFacet.setRedistributionThreshold(testPool, threshold);
 
         // Verify the configuration was stored
         (, , uint128 storedThreshold, ) = adminFacet.getFeeConfig(testPool);
         assertEq(storedThreshold, threshold);
     }
 
-    function testSetDefaultCompoundThreshold() public {
+    function testSetDefaultRedistributionThreshold() public {
         uint128 threshold = 1e18;
         vm.expectEmit(false, false, false, true);
-        emit DefaultCompoundThresholdSet(threshold);
+        emit DefaultRedistributionThresholdSet(threshold);
 
-        adminFacet.setDefaultCompoundThreshold(threshold);
+        adminFacet.setDefaultRedistributionThreshold(threshold);
 
         // Verify the default configuration was stored
         (, , uint128 storedThreshold, , , ) = adminFacet.getDefaultFeeConfig();
@@ -203,7 +203,7 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setDefaultSplitCurve(testSplitCurve);
 
         vm.expectRevert(AdminLib.NotOwner.selector);
-        adminFacet.setCompoundThreshold(testPool, 1e18);
+        adminFacet.setRedistributionThreshold(testPool, 1e18);
 
         vm.expectRevert(AdminLib.NotOwner.selector);
         adminFacet.setJITPenalties(1 hours, 1e18);

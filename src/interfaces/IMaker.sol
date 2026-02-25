@@ -10,7 +10,6 @@ interface IMaker {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        bool isCompounding,
         int256 balance0,
         int256 balance1
     );
@@ -51,7 +50,6 @@ interface IMaker {
     /// @param lowTick The lower tick of the liquidity range.
     /// @param highTick The upper tick of the liquidity range.
     /// @param liq The amount of liquidity to provide.
-    /// @param isCompounding Whether the position is compounding.
     /// @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this.
     /// @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this.
     /// @param rftData Data passed during RFT to the payer.
@@ -61,7 +59,6 @@ interface IMaker {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        bool isCompounding,
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData

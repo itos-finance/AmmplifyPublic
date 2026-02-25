@@ -43,10 +43,10 @@ library PoolWalker {
 
         // Verify balances. Technically just checking the pool price has not changed is sufficient
         // but this adds an additional layer of safety just in case.
-        int256 expectedXSpend = data.xBalance + int256(data.compoundSpendX);
+        int256 expectedXSpend = data.xBalance;
         int256 actualXSpend = int256(startingX) - int256(endingX);
         verifySpend(expectedXSpend, actualXSpend, pInfo.token0);
-        int256 expectedYSpend = data.yBalance + int256(data.compoundSpendY);
+        int256 expectedYSpend = data.yBalance;
         int256 actualYSpend = int256(startingY) - int256(endingY);
         verifySpend(expectedYSpend, actualYSpend, pInfo.token1);
 
