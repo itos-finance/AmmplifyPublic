@@ -124,7 +124,7 @@ contract AmmplifyPositions is Script {
         console2.log("Pool:", params.poolAddr);
         console2.log("Tick Range:", vm.toString(params.lowTick), "to", vm.toString(params.highTick));
         console2.log("Liquidity:", params.liquidity);
-        console2.log("Compounding:", params.isCompounding);
+
 
         NFTManager nftManager = NFTManager(env.nftManager);
 
@@ -274,7 +274,6 @@ contract AmmplifyPositions is Script {
             lowTick: -600, // Adjust based on current price
             highTick: 600, // Adjust based on current price
             liquidity: 1e12, // Minimum liquidity
-            isCompounding: true,
             minSqrtPriceX96: MIN_SQRT_RATIO,
             maxSqrtPriceX96: MAX_SQRT_RATIO,
             rftData: ""
@@ -436,7 +435,6 @@ contract AmmplifyPositions is Script {
                 lowTick: getValidTick(-600, 3000),
                 highTick: getValidTick(600, 3000),
                 liquidity: 1e12, // Minimum maker liquidity
-                isCompounding: true,
                 minSqrtPriceX96: MIN_SQRT_RATIO,
                 maxSqrtPriceX96: MAX_SQRT_RATIO,
                 rftData: ""

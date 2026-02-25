@@ -8,7 +8,6 @@ import { IMaker } from "../interfaces/IMaker.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import { console2 } from "forge-std/console2.sol";
 
 interface ICapricornCLSwapCallback {
     function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
@@ -109,14 +108,6 @@ contract Opener is ICapricornCLSwapCallback {
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
         // Calculate liquidity from the token amounts we have
-        // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
-
-        console2.log("balance0", balance0);
-        console2.log("balance1", balance1);
-        console2.log("sqrtPriceX96", sqrtPriceX96);
-        console2.log("sqrtPriceAX96", sqrtPriceAX96);
-        console2.log("sqrtPriceBX96", sqrtPriceBX96);
-
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             sqrtPriceAX96,
