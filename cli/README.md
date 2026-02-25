@@ -118,7 +118,7 @@ Options:
 | `maker remove-permission <opener>` | Revoke opener permission |
 
 ```bash
-ammplify maker open --pool 0x... --low-tick -100 --high-tick 100 --liquidity 5000000 --compounding
+ammplify maker open --pool 0x... --low-tick -100 --high-tick 100 --liquidity 5000000
 ammplify maker close 42 --recipient 0xOther...
 ammplify maker adjust 42 10000000
 ammplify maker collect-fees 42
@@ -126,7 +126,7 @@ ammplify maker add-permission 0xOpener...
 ```
 
 Options:
-- `maker open`: `--pool`, `--low-tick`, `--high-tick`, `--liquidity` (all required), `--compounding`, `--recipient`
+- `maker open`: `--pool`, `--low-tick`, `--high-tick`, `--liquidity` (all required), `--recipient`
 - All write commands: `--no-confirm` to skip confirmation prompt, `--recipient` to override receiver
 
 ### Taker

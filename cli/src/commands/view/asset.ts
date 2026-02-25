@@ -6,7 +6,7 @@ import { withErrorHandler } from "../../utils/error.js";
 import { shortAddr } from "../../utils/format.js";
 import { createTable, printTable, printJson } from "../../utils/table.js";
 
-const LIQ_TYPES = ["MAKER", "MAKER_NC", "TAKER"];
+const LIQ_TYPES = ["MAKER", "TAKER"];
 
 export const viewAsset = withErrorHandler(
   async (assetId: string, options: { json?: boolean }) => {

@@ -14,7 +14,6 @@ export function registerMakerCommands(maker: Command) {
     .requiredOption("--low-tick <tick>", "Lower tick", parseInt)
     .requiredOption("--high-tick <tick>", "Upper tick", parseInt)
     .requiredOption("--liquidity <amount>", "Liquidity amount")
-    .option("--compounding", "Enable compounding", false)
     .option("--recipient <address>", "Recipient address (defaults to signer)")
     .option("--no-confirm", "Skip confirmation prompt")
     .action(makerOpen);

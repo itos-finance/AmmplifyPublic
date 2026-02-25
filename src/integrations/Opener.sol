@@ -55,7 +55,6 @@ contract Opener is ICapricornCLSwapCallback {
      * @param amountIn The amount of tokenIn to swap for the other token
      * @param lowTick The lower tick of the liquidity range
      * @param highTick The upper tick of the liquidity range
-     * @param isCompounding Whether the position is compounding
      * @param minSqrtPriceX96 Minimum sqrt price for the operation
      * @param maxSqrtPriceX96 Maximum sqrt price for the operation
      * @param amountOutMinimum Minimum amount of output token to receive (slippage protection)
@@ -69,7 +68,6 @@ contract Opener is ICapricornCLSwapCallback {
         uint256 amountIn,
         int24 lowTick,
         int24 highTick,
-        bool isCompounding,
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         uint256 amountOutMinimum,
@@ -162,7 +160,6 @@ contract Opener is ICapricornCLSwapCallback {
             lowTick,
             highTick,
             liq,
-            isCompounding,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData

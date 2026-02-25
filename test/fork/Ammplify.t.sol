@@ -115,14 +115,8 @@ contract Ammplify is AmmplifyForkBase {
         nftManager.approve(address(decomposer), tokenId);
 
         // now decompose the position
-        //         uint256 positionId,
-        // bool isCompounding,
-        // uint160 minSqrtPriceX96,
-        // uint160 maxSqrtPriceX96,
-        // bytes calldata rftData
         decomposer.decompose(
             tokenId,
-            false,
             TickMath.getSqrtRatioAtTick(tickLower),
             TickMath.getSqrtRatioAtTick(tickUpper),
             ""

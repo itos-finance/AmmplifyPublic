@@ -15,66 +15,66 @@ contract AssetTest is Test {
         address owner = makeAddr("cOwner");
         AssetLib.addPermission(owner, msg.sender);
 
-        // create maker not compounding
-        PoolInfo memory pInfoNC;
-        pInfoNC.poolAddr = makeAddr("ncPool");
+        // create first maker
+        PoolInfo memory pInfo1;
+        pInfo1.poolAddr = makeAddr("pool1");
 
         vm.warp(100);
 
-        (Asset storage assetNC, uint256 assetIdNC) = AssetLib.newMaker(owner, pInfoNC, -2000, 2000, 1e20, false);
+        (Asset storage asset1, uint256 assetId1) = AssetLib.newMaker(owner, pInfo1, -2000, 2000, 1e20);
 
-        assertEq(assetIdNC, 1, "assetIdNC");
+        assertEq(assetId1, 1, "assetId1");
 
-        assertEq(assetNC.owner, owner, "assetNC.owner");
-        assertEq(assetNC.poolAddr, pInfoNC.poolAddr, "assetNC.poolAddr");
-        assertEq(assetNC.lowTick, -2000, "assetNC.lowTick");
-        assertEq(assetNC.highTick, 2000, "assetNC.highTick");
-        assertEq(uint8(assetNC.liqType), uint8(LiqType.MAKER_NC), "assetNC.liqType");
-        assertEq(assetNC.liq, 1e20, "assetNC.liq");
-        assertEq(assetNC.timestamp, 100, "assetNC.timestamp");
+        assertEq(asset1.owner, owner, "asset1.owner");
+        assertEq(asset1.poolAddr, pInfo1.poolAddr, "asset1.poolAddr");
+        assertEq(asset1.lowTick, -2000, "asset1.lowTick");
+        assertEq(asset1.highTick, 2000, "asset1.highTick");
+        assertEq(uint8(asset1.liqType), uint8(LiqType.MAKER), "asset1.liqType");
+        assertEq(asset1.liq, 1e20, "asset1.liq");
+        assertEq(asset1.timestamp, 100, "asset1.timestamp");
 
         // confirm in store
-        Asset storage storedAsset = Store.assets().assets[assetIdNC];
-        assertEq(storedAsset.owner, assetNC.owner, "storedAssetNC.owner");
-        assertEq(storedAsset.poolAddr, assetNC.poolAddr, "storedAssetNC.poolAddr");
-        assertEq(storedAsset.lowTick, assetNC.lowTick, "storedAssetNC.lowTick");
-        assertEq(storedAsset.highTick, assetNC.highTick, "storedAssetNC.highTick");
-        assertEq(uint8(storedAsset.liqType), uint8(assetNC.liqType), "storedAssetNC.liqType");
-        assertEq(storedAsset.liq, assetNC.liq, "storedAssetNC.liq");
-        assertEq(storedAsset.timestamp, assetNC.timestamp, "storedAssetNC.timestamp");
+        Asset storage storedAsset = Store.assets().assets[assetId1];
+        assertEq(storedAsset.owner, asset1.owner, "storedAsset1.owner");
+        assertEq(storedAsset.poolAddr, asset1.poolAddr, "storedAsset1.poolAddr");
+        assertEq(storedAsset.lowTick, asset1.lowTick, "storedAsset1.lowTick");
+        assertEq(storedAsset.highTick, asset1.highTick, "storedAsset1.highTick");
+        assertEq(uint8(storedAsset.liqType), uint8(asset1.liqType), "storedAsset1.liqType");
+        assertEq(storedAsset.liq, asset1.liq, "storedAsset1.liq");
+        assertEq(storedAsset.timestamp, asset1.timestamp, "storedAsset1.timestamp");
 
-        // create maker compounding
-        PoolInfo memory pInfoC;
-        pInfoC.poolAddr = makeAddr("cPool");
+        // create second maker
+        PoolInfo memory pInfo2;
+        pInfo2.poolAddr = makeAddr("pool2");
 
         vm.warp(200);
 
-        (Asset storage assetC, uint256 assetIdC) = AssetLib.newMaker(owner, pInfoC, -3000, 4000, 2e21, true);
-        assertEq(assetIdC, 2, "assetIdC");
+        (Asset storage asset2, uint256 assetId2) = AssetLib.newMaker(owner, pInfo2, -3000, 4000, 2e21);
+        assertEq(assetId2, 2, "assetId2");
 
-        assertEq(assetC.owner, owner, "assetC.owner");
-        assertEq(assetC.poolAddr, pInfoC.poolAddr, "assetC.poolAddr");
-        assertEq(assetC.lowTick, -3000, "assetC.lowTick");
-        assertEq(assetC.highTick, 4000, "assetC.highTick");
-        assertEq(uint8(assetC.liqType), uint8(LiqType.MAKER), "assetC.liqType");
-        assertEq(assetC.liq, 2e21, "assetC.liq");
-        assertEq(assetC.timestamp, 200, "assetC.timestamp");
+        assertEq(asset2.owner, owner, "asset2.owner");
+        assertEq(asset2.poolAddr, pInfo2.poolAddr, "asset2.poolAddr");
+        assertEq(asset2.lowTick, -3000, "asset2.lowTick");
+        assertEq(asset2.highTick, 4000, "asset2.highTick");
+        assertEq(uint8(asset2.liqType), uint8(LiqType.MAKER), "asset2.liqType");
+        assertEq(asset2.liq, 2e21, "asset2.liq");
+        assertEq(asset2.timestamp, 200, "asset2.timestamp");
 
         // confirm in store
-        Asset storage storedAssetC = Store.assets().assets[assetIdC];
-        assertEq(storedAssetC.owner, assetC.owner, "storedAssetC.owner");
-        assertEq(storedAssetC.poolAddr, assetC.poolAddr, "storedAssetC.poolAddr");
-        assertEq(storedAssetC.lowTick, assetC.lowTick, "storedAssetC.lowTick");
-        assertEq(storedAssetC.highTick, assetC.highTick, "storedAssetC.highTick");
-        assertEq(uint8(storedAssetC.liqType), uint8(assetC.liqType), "storedAssetC.liqType");
-        assertEq(storedAssetC.liq, assetC.liq, "storedAssetC.liq");
-        assertEq(storedAssetC.timestamp, assetC.timestamp, "storedAssetC.timestamp");
+        Asset storage storedAsset2 = Store.assets().assets[assetId2];
+        assertEq(storedAsset2.owner, asset2.owner, "storedAsset2.owner");
+        assertEq(storedAsset2.poolAddr, asset2.poolAddr, "storedAsset2.poolAddr");
+        assertEq(storedAsset2.lowTick, asset2.lowTick, "storedAsset2.lowTick");
+        assertEq(storedAsset2.highTick, asset2.highTick, "storedAsset2.highTick");
+        assertEq(uint8(storedAsset2.liqType), uint8(asset2.liqType), "storedAsset2.liqType");
+        assertEq(storedAsset2.liq, asset2.liq, "storedAsset2.liq");
+        assertEq(storedAsset2.timestamp, asset2.timestamp, "storedAsset2.timestamp");
 
         // confirm ownership in store (addAssetToOwner)
         uint256[] storage ownerAssets = Store.assets().ownerAssets[owner];
         assertEq(ownerAssets.length, 2, "ownerAssets.length");
-        assertEq(ownerAssets[0], assetIdNC, "ownerAssets[0].NC");
-        assertEq(ownerAssets[1], assetIdC, "ownerAssets[1].C");
+        assertEq(ownerAssets[0], assetId1, "ownerAssets[0]");
+        assertEq(ownerAssets[1], assetId2, "ownerAssets[1]");
     }
 
     function testNewTaker() public {
@@ -141,7 +141,7 @@ contract AssetTest is Test {
         pInfo.poolAddr = makeAddr("pool");
 
         // maker
-        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         Asset storage gMaker = AssetLib.getAsset(makerId);
         assertEq(gMaker.owner, maker.owner, "gMaker.owner");
@@ -153,7 +153,7 @@ contract AssetTest is Test {
         assertEq(gMaker.timestamp, maker.timestamp, "gMaker.timestamp");
 
         // taker
-        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         Asset storage gTaker = AssetLib.getAsset(takerId);
         assertEq(gTaker.owner, taker.owner, "gTaker.owner");
@@ -174,9 +174,9 @@ contract AssetTest is Test {
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
 
-        (, uint256 assetId1) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
-        (, uint256 assetId2) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
-        (, uint256 assetId3) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (, uint256 assetId1) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
+        (, uint256 assetId2) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
+        (, uint256 assetId3) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove middle
         AssetLib.removeAsset(assetId2);
@@ -232,31 +232,31 @@ contract AssetTest is Test {
         // maker
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Add permission.
         AssetLib.addPermission(owner, msg.sender);
         assertTrue(AssetLib.viewPermission(owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove permission
         AssetLib.removePermission(owner, msg.sender);
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Add permissioned opener.
         AssetLib.addPermissionedOpener(msg.sender);
         assertTrue(AssetLib.viewPermission(owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove permissioned opener.
         AssetLib.removePermissionedOpener(msg.sender);
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // But we can always open for ourselves.
-        AssetLib.newMaker(msg.sender, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(msg.sender, pInfo, -2000, 2000, 1e20);
     }
 }

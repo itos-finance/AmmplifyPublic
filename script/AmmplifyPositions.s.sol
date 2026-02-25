@@ -58,7 +58,6 @@ contract AmmplifyPositions is Script {
         int24 lowTick;
         int24 highTick;
         uint128 liquidity;
-        bool isCompounding;
         uint160 minSqrtPriceX96;
         uint160 maxSqrtPriceX96;
         bytes rftData;
@@ -154,7 +153,6 @@ contract AmmplifyPositions is Script {
             params.lowTick,
             params.highTick,
             params.liquidity,
-            params.isCompounding,
             uint128(params.minSqrtPriceX96),
             uint128(params.maxSqrtPriceX96),
             params.rftData
@@ -221,7 +219,6 @@ contract AmmplifyPositions is Script {
             params.lowTick,
             params.highTick,
             params.liquidity,
-            params.isCompounding,
             params.minSqrtPriceX96,
             params.maxSqrtPriceX96,
             params.rftData

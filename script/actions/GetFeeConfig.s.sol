@@ -29,30 +29,30 @@ contract GetFeeConfig is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
+            uint128 redistributionThreshold,
             uint32 twapInterval
         ) {
             console2.log("=== Fee Configuration ===");
             console2.log("");
-            
+
             console2.log("Fee Curve:");
             console2.log("  invAlphaX128:", feeCurve.invAlphaX128);
             console2.log("  betaX64:", feeCurve.betaX64);
             console2.log("  maxUtilX64:", feeCurve.maxUtilX64);
             console2.log("  maxRateX64:", feeCurve.maxRateX64);
             console2.log("");
-            
+
             console2.log("Split Curve:");
             console2.log("  invAlphaX128:", splitCurve.invAlphaX128);
             console2.log("  betaX64:", splitCurve.betaX64);
             console2.log("  maxUtilX64:", splitCurve.maxUtilX64);
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
             console2.log("");
-            
-            console2.log("Compound Threshold:", compoundThreshold);
+
+            console2.log("Redistribution Threshold:", redistributionThreshold);
             console2.log("TWAP Interval:", twapInterval);
             console2.log("");
-            
+
             console2.log("=== Query Complete ===");
         } catch Error(string memory reason) {
             console2.log("=== Error Querying Fee Configuration ===");
@@ -79,30 +79,30 @@ contract GetFeeConfig is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
+            uint128 redistributionThreshold,
             uint32 twapInterval
         ) {
             console2.log("=== Fee Configuration ===");
             console2.log("");
-            
+
             console2.log("Fee Curve:");
             console2.log("  invAlphaX128:", feeCurve.invAlphaX128);
             console2.log("  betaX64:", feeCurve.betaX64);
             console2.log("  maxUtilX64:", feeCurve.maxUtilX64);
             console2.log("  maxRateX64:", feeCurve.maxRateX64);
             console2.log("");
-            
+
             console2.log("Split Curve:");
             console2.log("  invAlphaX128:", splitCurve.invAlphaX128);
             console2.log("  betaX64:", splitCurve.betaX64);
             console2.log("  maxUtilX64:", splitCurve.maxUtilX64);
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
             console2.log("");
-            
-            console2.log("Compound Threshold:", compoundThreshold);
+
+            console2.log("Redistribution Threshold:", redistributionThreshold);
             console2.log("TWAP Interval:", twapInterval);
             console2.log("");
-            
+
             console2.log("=== Query Complete ===");
         } catch Error(string memory reason) {
             console2.log("=== Error Querying Fee Configuration ===");

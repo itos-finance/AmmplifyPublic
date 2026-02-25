@@ -145,11 +145,6 @@ export const IMakerAbi = [
         "internalType": "uint128"
       },
       {
-        "name": "isCompounding",
-        "type": "bool",
-        "internalType": "bool"
-      },
-      {
         "name": "minSqrtPriceX96",
         "type": "uint160",
         "internalType": "uint160"
@@ -360,12 +355,6 @@ export const IMakerAbi = [
         "type": "uint128",
         "indexed": false,
         "internalType": "uint128"
-      },
-      {
-        "name": "isCompounding",
-        "type": "bool",
-        "indexed": false,
-        "internalType": "bool"
       },
       {
         "name": "balance0",

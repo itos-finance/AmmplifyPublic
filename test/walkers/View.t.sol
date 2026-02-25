@@ -20,7 +20,7 @@ contract ViewWalkerTest is Test, UniV3IntegrationSetup {
 
     function testMakerSwapMatch() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
     }
 

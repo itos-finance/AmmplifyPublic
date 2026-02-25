@@ -90,7 +90,6 @@ contract Decompose is AmmplifyPositions {
         UniV3Decomposer decomposer = UniV3Decomposer(env.decomposer);
         uint256 newAssetId = decomposer.decompose(
             positionId,
-            false, // isCompounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             "" // rftData

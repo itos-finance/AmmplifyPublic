@@ -75,7 +75,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @param lowTick The lower tick of the liquidity range
      * @param highTick The upper tick of the liquidity range
      * @param liq The amount of liquidity to provide
-     * @param isCompounding Whether the position should compound fees
      * @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this
      * @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this
      * @param rftData Data passed during RFT to the payer
@@ -88,7 +87,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        bool isCompounding,
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
@@ -103,7 +101,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
             lowTick,
             highTick,
             liq,
-            isCompounding,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -126,7 +123,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
     /**
      * @notice Decomposes an existing Uniswap V3 position and mints an NFT for the resulting Ammplify asset
      * @param positionId The ID of the Uniswap V3 position to decompose
-     * @param isCompounding Whether the new position should compound fees
      * @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this
      * @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this
      * @param rftData Data passed during RFT to the payer
@@ -135,7 +131,6 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      */
     function decomposeAndMint(
         uint256 positionId,
-        bool isCompounding,
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
@@ -157,7 +152,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
         _currentTokenRequester = msg.sender;
 
         // Decompose the Uniswap V3 position
-        assetId = DECOMPOSER.decompose(positionId, isCompounding, minSqrtPriceX96, maxSqrtPriceX96, rftData);
+        assetId = DECOMPOSER.decompose(positionId, minSqrtPriceX96, maxSqrtPriceX96, rftData);
 
         // Clear the token requester context
         _currentTokenRequester = address(0);
@@ -262,7 +257,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return token1 The address of token1
      * @return lowTick The lower end of the tick range
      * @return highTick The higher end of the tick range
-     * @return liqType The liquidity type (MAKER, MAKER_NC, TAKER)
+     * @return liqType The liquidity type (MAKER, TAKER)
      * @return liquidity The liquidity of the position
      */
     function positions(
@@ -470,8 +465,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return The color string
      */
     function _getColorForLiqType(LiqType liqType) internal pure returns (string memory) {
-        if (liqType == LiqType.MAKER) return "#4CAF50"; // Green for compounding maker
-        if (liqType == LiqType.MAKER_NC) return "#8BC34A"; // Light green for non-compounding maker
+        if (liqType == LiqType.MAKER) return "#4CAF50"; // Green for maker
         if (liqType == LiqType.TAKER) return "#FF9800"; // Orange for taker
         return "#9E9E9E"; // Default gray
     }
@@ -482,8 +476,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return The string representation
      */
     function _getLiqTypeString(LiqType liqType) internal pure returns (string memory) {
-        if (liqType == LiqType.MAKER) return "Compounding Maker";
-        if (liqType == LiqType.MAKER_NC) return "Non-Compounding Maker";
+        if (liqType == LiqType.MAKER) return "Maker";
         if (liqType == LiqType.TAKER) return "Taker";
         return "Unknown";
     }

@@ -19,8 +19,8 @@ contract AdminFacet is TimedAdminFacet {
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
+    event DefaultRedistributionThresholdSet(uint256 threshold);
+    event RedistributionThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
     event TwapIntervalSet(address indexed pool, uint32 interval);
     event DefaultTwapIntervalSet(uint32 interval);
@@ -68,16 +68,16 @@ contract AdminFacet is TimedAdminFacet {
         emit SplitCurveSet(pool, splitCurve);
     }
 
-    function setDefaultCompoundThreshold(uint128 threshold) external {
+    function setDefaultRedistributionThreshold(uint128 threshold) external {
         AdminLib.validateOwner();
-        Store.fees().defaultCompoundThreshold = threshold;
-        emit DefaultCompoundThresholdSet(threshold);
+        Store.fees().defaultRedistributionThreshold = threshold;
+        emit DefaultRedistributionThresholdSet(threshold);
     }
 
-    function setCompoundThreshold(address pool, uint128 threshold) external {
+    function setRedistributionThreshold(address pool, uint128 threshold) external {
         AdminLib.validateOwner();
-        Store.fees().compoundThresholds[pool] = threshold;
-        emit CompoundThresholdSet(pool, threshold);
+        Store.fees().redistributionThresholds[pool] = threshold;
+        emit RedistributionThresholdSet(pool, threshold);
     }
 
     function setTwapInterval(address pool, uint32 interval) external {
@@ -109,14 +109,14 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
+            uint128 redistributionThreshold,
             uint32 twapInterval
         )
     {
         FeeStore storage store = Store.fees();
         feeCurve = store.feeCurves[pool];
         splitCurve = store.splitCurves[pool];
-        compoundThreshold = store.compoundThresholds[pool];
+        redistributionThreshold = store.redistributionThresholds[pool];
         twapInterval = store.twapIntervals[pool];
     }
 
@@ -126,7 +126,7 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
+            uint128 redistributionThreshold,
             uint32 twapInterval,
             uint32 jitLifetime,
             uint64 jitPenaltyX64
@@ -135,7 +135,7 @@ contract AdminFacet is TimedAdminFacet {
         FeeStore storage store = Store.fees();
         feeCurve = store.defaultFeeCurve;
         splitCurve = store.defaultSplitCurve;
-        compoundThreshold = store.defaultCompoundThreshold;
+        redistributionThreshold = store.defaultRedistributionThreshold;
         twapInterval = store.defaultTwapInterval;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;

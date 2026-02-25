@@ -108,7 +108,6 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
 
     function decompose(
         uint256 positionId,
-        bool isCompounding,
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
@@ -174,7 +173,6 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
             tickLower,
             tickUpper,
             liquidity - liquidityOffset,
-            isCompounding,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData

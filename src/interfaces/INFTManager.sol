@@ -27,7 +27,6 @@ interface INFTManager {
      * @param lowTick The lower tick of the liquidity range
      * @param highTick The upper tick of the liquidity range
      * @param liq The amount of liquidity to provide
-     * @param isCompounding Whether the position should compound fees
      * @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this
      * @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this
      * @param rftData Data passed during RFT to the payer
@@ -40,7 +39,6 @@ interface INFTManager {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        bool isCompounding,
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
@@ -49,7 +47,6 @@ interface INFTManager {
     /**
      * @notice Decomposes an existing Uniswap V3 position and mints an NFT for the resulting Ammplify asset
      * @param positionId The ID of the Uniswap V3 position to decompose
-     * @param isCompounding Whether the new position should compound fees
      * @param minSqrtPriceX96 For any price dependent operations, the actual price of the pool must be above this
      * @param maxSqrtPriceX96 For any price dependent operations, the actual price of the pool must be below this
      * @param rftData Data passed during RFT to the payer
@@ -58,7 +55,6 @@ interface INFTManager {
      */
     function decomposeAndMint(
         uint256 positionId,
-        bool isCompounding,
         uint128 minSqrtPriceX96,
         uint128 maxSqrtPriceX96,
         bytes calldata rftData
@@ -112,7 +108,7 @@ interface INFTManager {
      * @return token1 The address of token1
      * @return lowTick The lower end of the tick range
      * @return highTick The higher end of the tick range
-     * @return liqType The liquidity type (MAKER, MAKER_NC, TAKER)
+     * @return liqType The liquidity type (MAKER, TAKER)
      * @return liquidity The liquidity of the position
      * @return timestamp The timestamp of when the asset was last modified
      */

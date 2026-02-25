@@ -30,8 +30,6 @@ struct Data {
     int256 yBalance;
     uint256 xFees;
     uint256 yFees;
-    uint256 compoundSpendX;
-    uint256 compoundSpendY;
     // Unlikely to EVER be used, but in some extreme fee cases, we have to limit fee collection sizes
     // to fit in integer limits. In the unbelievable case where this actually gets used, those fees go to the owner.
     uint256 escapedX;
@@ -88,8 +86,6 @@ library DataImpl {
                 yBalance: 0,
                 xFees: 0,
                 yFees: 0,
-                compoundSpendX: 0,
-                compoundSpendY: 0,
                 escapedX: 0,
                 escapedY: 0
             });
