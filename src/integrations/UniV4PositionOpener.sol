@@ -24,14 +24,15 @@ contract UniV4PositionOpener is IUnlockCallback {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
-    IPoolManager public immutable poolManager;
-    IPositionManager public immutable posm;
-    IAllowanceTransfer public immutable permit2;
+    IPoolManager public immutable POOL_MANAGER;
+    IPositionManager public immutable POSM;
+    IAllowanceTransfer public immutable PERMIT2;
 
     error InvalidToken();
     error SlippageTooHigh();
     error InputSlippageTooHigh();
     error NotPoolManager();
+    error InsufficientLiquidity();
 
     struct SwapCallbackData {
         PoolKey key;
@@ -41,10 +42,10 @@ contract UniV4PositionOpener is IUnlockCallback {
         uint256 amountInMaximum;
     }
 
-    constructor(IPoolManager _poolManager, IPositionManager _posm, IAllowanceTransfer _permit2) {
-        poolManager = _poolManager;
-        posm = _posm;
-        permit2 = _permit2;
+    constructor(IPoolManager poolManager, IPositionManager posm, IAllowanceTransfer permit2) {
+        POOL_MANAGER = poolManager;
+        POSM = posm;
+        PERMIT2 = permit2;
     }
 
     /// @notice Opens a Uniswap V4 position from a single token
@@ -78,18 +79,9 @@ contract UniV4PositionOpener is IUnlockCallback {
         uint256 balBefore0 = IERC20(token0).balanceOf(address(this));
         uint256 balBefore1 = IERC20(token1).balanceOf(address(this));
 
-        // Pull tokens from user
+        // Pull tokens from user and swap via PoolManager
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
-
-        // Phase A: Swap via PoolManager unlock (includes input-side slippage guard)
-        bytes memory swapData = abi.encode(SwapCallbackData({
-            key: key,
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            amountSwap: amountSwap,
-            amountInMaximum: amountIn
-        }));
-        poolManager.unlock(swapData);
+        _executeSwap(key, tokenIn, tokenOut, amountSwap, amountIn);
 
         // Delta-based accounting: only count tokens received during this call
         uint256 balance0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
@@ -99,119 +91,142 @@ contract UniV4PositionOpener is IUnlockCallback {
         uint256 actualOutput = tokenIn == token0 ? balance1 : balance0;
         if (actualOutput < amountOutMinimum) revert SlippageTooHigh();
 
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(key.toId());
-        uint160 sqrtPriceAX96 = TickMath.getSqrtPriceAtTick(tickLower);
-        uint160 sqrtPriceBX96 = TickMath.getSqrtPriceAtTick(tickUpper);
+        // Compute liquidity and mint
+        (uint128 liq, uint256 amount0Needed, uint256 amount1Needed) =
+            _computeLiquidityAndAmounts(key, tickLower, tickUpper, balance0, balance1);
 
-        uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, balance0, balance1
+        tokenId = _mintPosition(key, tickLower, tickUpper, liq, amount0Needed, amount1Needed, deadline);
+
+        // Refund unused tokens (delta-based)
+        _refundExcess(token0, token1, balBefore0, balBefore1);
+    }
+
+    /// @inheritdoc IUnlockCallback
+    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+        if (msg.sender != address(POOL_MANAGER)) revert NotPoolManager();
+
+        SwapCallbackData memory swapData = abi.decode(data, (SwapCallbackData));
+        bool zeroForOne = swapData.tokenIn < swapData.tokenOut;
+
+        BalanceDelta delta = POOL_MANAGER.swap(
+            swapData.key,
+            SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: int256(swapData.amountSwap),
+                sqrtPriceLimitX96: zeroForOne
+                    ? TickMath.MIN_SQRT_PRICE + 1
+                    : TickMath.MAX_SQRT_PRICE - 1
+            }),
+            ""
         );
 
-        // Reduce liquidity by 2 to avoid rounding issues
+        // Input-side slippage guard
+        int128 delta0 = delta.amount0();
+        int128 delta1 = delta.amount1();
+        uint256 inputConsumed = uint256(int256(-(zeroForOne ? delta0 : delta1)));
+        if (inputConsumed > swapData.amountInMaximum) revert InputSlippageTooHigh();
+
+        // Settle input token (negative delta = we owe)
+        _settleIfNegative(swapData.key.currency0, delta0);
+        _settleIfNegative(swapData.key.currency1, delta1);
+
+        // Take output token (positive delta = pool owes us)
+        _takeIfPositive(swapData.key.currency0, delta0);
+        _takeIfPositive(swapData.key.currency1, delta1);
+
+        return "";
+    }
+
+    /* ============ Internal Helpers ============ */
+
+    function _executeSwap(
+        PoolKey calldata key,
+        address tokenIn,
+        address tokenOut,
+        uint256 amountSwap,
+        uint256 amountInMaximum
+    ) private {
+        bytes memory swapData = abi.encode(SwapCallbackData({
+            key: key,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            amountSwap: amountSwap,
+            amountInMaximum: amountInMaximum
+        }));
+        POOL_MANAGER.unlock(swapData);
+    }
+
+    function _computeLiquidityAndAmounts(
+        PoolKey calldata key,
+        int24 tickLower,
+        int24 tickUpper,
+        uint256 balance0,
+        uint256 balance1
+    ) private view returns (uint128 liq, uint256 amount0Needed, uint256 amount1Needed) {
+        (uint160 sqrtPriceX96, , , ) = POOL_MANAGER.getSlot0(key.toId());
+        uint160 sqrtRatioAx96 = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtRatioBx96 = TickMath.getSqrtPriceAtTick(tickUpper);
+
+        liq = LiquidityAmounts.getLiquidityForAmounts(sqrtPriceX96, sqrtRatioAx96, sqrtRatioBx96, balance0, balance1);
+
         if (liq >= 2) liq -= 2;
         else liq = 0;
-        require(liq > 0, "Insufficient liquidity");
+        if (liq == 0) revert InsufficientLiquidity();
 
-        (uint256 amount0Needed, uint256 amount1Needed) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liq
-        );
+        (amount0Needed, amount1Needed) =
+            LiquidityAmounts.getAmountsForLiquidity(sqrtPriceX96, sqrtRatioAx96, sqrtRatioBx96, liq);
+    }
 
-        // Phase B: Mint position via PositionManager
-        // Approve tokens to Permit2
-        _ensureApproval(token0, address(permit2), amount0Needed);
-        _ensureApproval(token1, address(permit2), amount1Needed);
+    function _mintPosition(
+        PoolKey calldata key,
+        int24 tickLower,
+        int24 tickUpper,
+        uint128 liq,
+        uint256 amount0Needed,
+        uint256 amount1Needed,
+        uint256 deadline
+    ) private returns (uint256 tokenId) {
+        address token0 = Currency.unwrap(key.currency0);
+        address token1 = Currency.unwrap(key.currency1);
 
-        // Set Permit2 allowance for PositionManager
-        permit2.approve(token0, address(posm), uint160(amount0Needed + 1), uint48(block.timestamp + 3600));
-        permit2.approve(token1, address(posm), uint160(amount1Needed + 1), uint48(block.timestamp + 3600));
+        _ensureApproval(token0, address(PERMIT2), amount0Needed);
+        _ensureApproval(token1, address(PERMIT2), amount1Needed);
 
-        // Encode mint actions: MINT_POSITION + SETTLE_PAIR
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.MINT_POSITION),
-            uint8(Actions.SETTLE_PAIR)
-        );
+        PERMIT2.approve(token0, address(POSM), uint160(amount0Needed + 1), uint48(block.timestamp + 3600));
+        PERMIT2.approve(token1, address(POSM), uint160(amount1Needed + 1), uint48(block.timestamp + 3600));
 
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encode(
-            key,
-            tickLower,
-            tickUpper,
-            uint256(liq),
-            uint128(amount0Needed + 1),
-            uint128(amount1Needed + 1),
-            msg.sender,
-            bytes("")
+            key, tickLower, tickUpper, uint256(liq),
+            uint128(amount0Needed + 1), uint128(amount1Needed + 1),
+            msg.sender, bytes("")
         );
         params[1] = abi.encode(key.currency0, key.currency1);
 
-        bytes memory unlockData = abi.encode(actions, params);
-        tokenId = posm.nextTokenId();
-        posm.modifyLiquidities(unlockData, deadline);
+        tokenId = POSM.nextTokenId();
+        POSM.modifyLiquidities(abi.encode(actions, params), deadline);
+    }
 
-        // Refund unused tokens (delta-based)
+    function _refundExcess(address token0, address token1, uint256 balBefore0, uint256 balBefore1) private {
         uint256 refund0 = IERC20(token0).balanceOf(address(this)) - balBefore0;
         uint256 refund1 = IERC20(token1).balanceOf(address(this)) - balBefore1;
         if (refund0 > 0) IERC20(token0).safeTransfer(msg.sender, refund0);
         if (refund1 > 0) IERC20(token1).safeTransfer(msg.sender, refund1);
     }
 
-    /// @inheritdoc IUnlockCallback
-    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
-        if (msg.sender != address(poolManager)) revert NotPoolManager();
-
-        SwapCallbackData memory swapData = abi.decode(data, (SwapCallbackData));
-
-        bool zeroForOne = swapData.tokenIn < swapData.tokenOut;
-
-        // V4: positive amountSpecified = exact output
-        SwapParams memory swapParams = SwapParams({
-            zeroForOne: zeroForOne,
-            amountSpecified: int256(swapData.amountSwap),
-            sqrtPriceLimitX96: zeroForOne
-                ? TickMath.MIN_SQRT_PRICE + 1
-                : TickMath.MAX_SQRT_PRICE - 1
-        });
-
-        BalanceDelta delta = poolManager.swap(swapData.key, swapParams, "");
-
-        // V4 delta convention: negative = must settle (pay to pool), positive = can take (receive from pool)
-        int128 delta0 = delta.amount0();
-        int128 delta1 = delta.amount1();
-
-        // Input-side slippage guard: verify amount consumed doesn't exceed maximum
-        uint256 inputConsumed;
-        if (zeroForOne) {
-            inputConsumed = uint256(int256(-delta0));
-        } else {
-            inputConsumed = uint256(int256(-delta1));
+    function _settleIfNegative(Currency currency, int128 delta) private {
+        if (delta < 0) {
+            POOL_MANAGER.sync(currency);
+            IERC20(Currency.unwrap(currency)).safeTransfer(address(POOL_MANAGER), uint256(int256(-delta)));
+            POOL_MANAGER.settle();
         }
-        if (inputConsumed > swapData.amountInMaximum) revert InputSlippageTooHigh();
+    }
 
-        // Settle input token (pay to pool) — negative delta means we owe
-        if (delta0 < 0) {
-            Currency currency0 = swapData.key.currency0;
-            poolManager.sync(currency0);
-            IERC20(Currency.unwrap(currency0)).safeTransfer(address(poolManager), uint256(int256(-delta0)));
-            poolManager.settle();
+    function _takeIfPositive(Currency currency, int128 delta) private {
+        if (delta > 0) {
+            POOL_MANAGER.take(currency, address(this), uint256(int256(delta)));
         }
-
-        if (delta1 < 0) {
-            Currency currency1 = swapData.key.currency1;
-            poolManager.sync(currency1);
-            IERC20(Currency.unwrap(currency1)).safeTransfer(address(poolManager), uint256(int256(-delta1)));
-            poolManager.settle();
-        }
-
-        // Take output token — positive delta means pool owes us
-        if (delta0 > 0) {
-            poolManager.take(swapData.key.currency0, address(this), uint256(int256(delta0)));
-        }
-
-        if (delta1 > 0) {
-            poolManager.take(swapData.key.currency1, address(this), uint256(int256(delta1)));
-        }
-
-        return "";
     }
 
     function _ensureApproval(address token, address spender, uint256 amount) private {
