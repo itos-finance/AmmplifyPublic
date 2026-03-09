@@ -10,8 +10,6 @@ interface IAdmin {
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint64 lifetime, uint64 penaltyX64);
 
     /* Vault related events */
@@ -25,8 +23,6 @@ interface IAdmin {
     function setDefaultFeeCurve(SmoothRateCurveConfig calldata feeCurve) external;
     function setDefaultSplitCurve(SmoothRateCurveConfig calldata splitCurve) external;
     function setSplitCurve(address pool, SmoothRateCurveConfig calldata splitCurve) external;
-    function setDefaultCompoundThreshold(uint128 threshold) external;
-    function setCompoundThreshold(address pool, uint128 threshold) external;
     function setJITPenalties(uint64 lifetime, uint64 penaltyX64) external;
 
     function getFeeConfig(
@@ -37,7 +33,6 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval
         );
 
@@ -47,7 +42,7 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
+            uint32 twapInterval,
             uint64 jitLifetime,
             uint64 jitPenaltyX64
         );

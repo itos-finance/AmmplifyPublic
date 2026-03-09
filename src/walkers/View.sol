@@ -7,7 +7,7 @@ import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
 import { Node } from "./Node.sol";
-import { LiqType, LiqData, LiqDataLib, LiqWalker } from "./Liq.sol";
+import { LiqType, LiqData, LiqDataLib } from "./Liq.sol";
 import { FullMath } from "../FullMath.sol";
 import { FeeData, FeeDataLib, FeeWalker } from "./Fee.sol";
 import { Asset, AssetNode } from "../Asset.sol";
@@ -162,15 +162,7 @@ library ViewWalker {
             // First we claim the existing fee earnings.
             claimCurrentFees(node, aNode, data, low, high);
 
-            uint128 liq = (data.liq.liqType == LiqType.MAKER)
-                ? uint128(
-                    FullMath.mulDiv(
-                        node.liq.mLiq - node.liq.ncLiq + LiqWalker.VIRTUAL_LIQ,
-                        aNode.sliq,
-                        node.liq.shares + LiqWalker.VIRTUAL_SHARES
-                    )
-                )
-                : aNode.sliq;
+            uint128 liq = aNode.sliq;
 
             // Now claim the unclaimed/unpaid fees.
             if (data.liq.liqType == LiqType.TAKER) {
@@ -359,20 +351,6 @@ library ViewWalker {
             fee1DiffX128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         }
         if (data.liq.liqType == LiqType.MAKER) {
-            // We just claim our shares.
-            // If the sliq and shares are zero, you should fail anyways.
-            uint128 nodeShares = node.liq.shares + LiqWalker.VIRTUAL_SHARES;
-            uint256 shareRatioX256 = FullMath.mulDivX256(aNode.sliq, nodeShares, false);
-            {
-                data.earningsX += FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
-                data.earningsY += FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
-            }
-            {
-                uint256 liq = FullMath.mulX256(node.liq.mLiq - node.liq.ncLiq, shareRatioX256, false);
-                data.earningsX += FullMath.mulX128(liq, fee0DiffX128, false);
-                data.earningsY += FullMath.mulX128(liq, fee1DiffX128, false);
-            }
-        } else if (data.liq.liqType == LiqType.MAKER_NC) {
             data.earningsX += FullMath.mulX128(
                 aNode.sliq,
                 fee0DiffX128 + node.fees.makerXFeesPerLiqX128 - aNode.fee0CheckX128,

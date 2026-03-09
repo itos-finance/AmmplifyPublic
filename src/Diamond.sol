@@ -69,7 +69,7 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory adminSelectors = new bytes4[](26);
+            bytes4[] memory adminSelectors = new bytes4[](24);
             adminSelectors[0] = TimedAdminFacet.transferOwnership.selector;
             adminSelectors[1] = TimedAdminFacet.acceptOwnership.selector;
             adminSelectors[2] = TimedAdminFacet.submitRights.selector;
@@ -82,20 +82,18 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[9] = AdminFacet.setDefaultFeeCurve.selector;
             adminSelectors[10] = AdminFacet.setSplitCurve.selector;
             adminSelectors[11] = AdminFacet.setDefaultSplitCurve.selector;
-            adminSelectors[12] = AdminFacet.setCompoundThreshold.selector;
-            adminSelectors[13] = AdminFacet.setDefaultCompoundThreshold.selector;
-            adminSelectors[14] = AdminFacet.setTwapInterval.selector;
-            adminSelectors[15] = AdminFacet.setDefaultTwapInterval.selector;
-            adminSelectors[16] = AdminFacet.setJITPenalties.selector;
-            adminSelectors[17] = AdminFacet.getFeeConfig.selector;
-            adminSelectors[18] = AdminFacet.getDefaultFeeConfig.selector;
-            adminSelectors[19] = AdminFacet.sendStandingFees.selector;
-            adminSelectors[20] = AdminFacet.viewVaults.selector;
-            adminSelectors[21] = AdminFacet.addVault.selector;
-            adminSelectors[22] = AdminFacet.removeVault.selector;
-            adminSelectors[23] = AdminFacet.swapVault.selector;
-            adminSelectors[24] = AdminFacet.addPermissionedOpener.selector;
-            adminSelectors[25] = AdminFacet.removePermissionedOpener.selector;
+            adminSelectors[12] = AdminFacet.setTwapInterval.selector;
+            adminSelectors[13] = AdminFacet.setDefaultTwapInterval.selector;
+            adminSelectors[14] = AdminFacet.setJITPenalties.selector;
+            adminSelectors[15] = AdminFacet.getFeeConfig.selector;
+            adminSelectors[16] = AdminFacet.getDefaultFeeConfig.selector;
+            adminSelectors[17] = AdminFacet.sendStandingFees.selector;
+            adminSelectors[18] = AdminFacet.viewVaults.selector;
+            adminSelectors[19] = AdminFacet.addVault.selector;
+            adminSelectors[20] = AdminFacet.removeVault.selector;
+            adminSelectors[21] = AdminFacet.swapVault.selector;
+            adminSelectors[22] = AdminFacet.addPermissionedOpener.selector;
+            adminSelectors[23] = AdminFacet.removePermissionedOpener.selector;
             cuts[2] = FacetCut({
                 facetAddress: facetAddresses.adminFacet,
                 action: FacetCutAction.Add,
@@ -104,14 +102,13 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](7);
+            bytes4[] memory selectors = new bytes4[](6);
             selectors[0] = MakerFacet.newMaker.selector;
             selectors[1] = MakerFacet.removeMaker.selector;
             selectors[2] = MakerFacet.collectFees.selector;
             selectors[3] = MakerFacet.adjustMaker.selector;
-            selectors[4] = MakerFacet.compound.selector;
-            selectors[5] = MakerFacet.addPermission.selector;
-            selectors[6] = MakerFacet.removePermission.selector;
+            selectors[4] = MakerFacet.addPermission.selector;
+            selectors[5] = MakerFacet.removePermission.selector;
 
             cuts[3] = IDiamond.FacetCut({
                 facetAddress: facetAddresses.makerFacet,

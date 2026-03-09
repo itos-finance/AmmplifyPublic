@@ -12,7 +12,6 @@ interface MakerOpenOptions {
   lowTick: number;
   highTick: number;
   liquidity: string;
-  compounding: boolean;
   recipient?: string;
   confirm: boolean;
 }
@@ -26,7 +25,6 @@ export const makerOpen = withErrorHandler(async (options: MakerOpenOptions) => {
   console.log(`  Pool:         ${options.pool}`);
   console.log(`  Ticks:        ${options.lowTick} to ${options.highTick}`);
   console.log(`  Liquidity:    ${options.liquidity}`);
-  console.log(`  Compounding:  ${options.compounding}`);
   console.log(`  Recipient:    ${recipient}`);
 
   const receipt = await executeTx({
@@ -39,7 +37,6 @@ export const makerOpen = withErrorHandler(async (options: MakerOpenOptions) => {
       options.lowTick,
       options.highTick,
       BigInt(options.liquidity),
-      options.compounding,
       MIN_SQRT_RATIO,
       MAX_SQRT_RATIO,
       "0x",

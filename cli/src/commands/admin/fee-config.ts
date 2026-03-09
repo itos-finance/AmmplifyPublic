@@ -11,7 +11,7 @@ export const adminFeeConfig = withErrorHandler(
     const client = getPublicClient();
     const diamond = getDiamondAddress();
 
-    const [feeCurve, splitCurve, compoundThreshold, twapInterval] =
+    const [feeCurve, splitCurve, twapInterval] =
       await client.readContract({
         address: diamond,
         abi: IAdminAbi,
@@ -23,7 +23,6 @@ export const adminFeeConfig = withErrorHandler(
       pool: poolAddress,
       feeCurve,
       splitCurve,
-      compoundThreshold: compoundThreshold.toString(),
       twapInterval: Number(twapInterval),
     };
 
@@ -35,7 +34,6 @@ export const adminFeeConfig = withErrorHandler(
     console.log(chalk.bold(`\nFee Config for ${poolAddress}\n`));
     const table = createTable(["Property", "Value"]);
     table.push(
-      ["Compound Threshold", data.compoundThreshold],
       ["TWAP Interval", `${data.twapInterval}s`],
       ["Fee Curve", JSON.stringify(feeCurve, null, 2)],
       ["Split Curve", JSON.stringify(splitCurve, null, 2)]

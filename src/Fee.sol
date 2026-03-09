@@ -12,9 +12,7 @@ struct FeeStore {
     SmoothRateCurveConfig defaultSplitCurve;
     mapping(address => SmoothRateCurveConfig) feeCurves;
     mapping(address => SmoothRateCurveConfig) splitCurves;
-    mapping(address => uint128) compoundThresholds;
     mapping(address => uint32) twapIntervals;
-    uint128 defaultCompoundThreshold; // Below this amount of equivalent liq, it is not worth compounding.
     uint32 defaultTwapInterval; // The default interval to use when calculating TWAPs.
     /* JIT Prevention */
     // Someone can try to use JIT to manipulate fees by supplying/removing liquidity from certain nodes
@@ -39,7 +37,6 @@ library FeeLib {
 
     function init() internal {
         FeeStore storage store = Store.fees();
-        store.defaultCompoundThreshold = 1e12; // 1 of each if both tokens are 6 decimals.
         // Target 16% APR at 60% util. 0.2% at 0%. Stored as SPR (second percentage rate).
         store.defaultFeeCurve = SmoothRateCurveConfig({
             invAlphaX128: 1562792664755071494808317984768,
@@ -59,14 +56,6 @@ library FeeLib {
     }
 
     /* Getters */
-
-    function getCompoundThreshold(address poolAddr) internal view returns (uint128 compoundThreshold) {
-        FeeStore storage store = Store.fees();
-        compoundThreshold = store.compoundThresholds[poolAddr];
-        if (compoundThreshold == 0) {
-            compoundThreshold = store.defaultCompoundThreshold;
-        }
-    }
 
     /// Configuration for how to split fees across children subtrees.
     function getSplitCurve(address poolAddr) internal view returns (SmoothRateCurveConfig memory splitCurve) {

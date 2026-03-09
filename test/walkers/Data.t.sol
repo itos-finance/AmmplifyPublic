@@ -24,7 +24,7 @@ contract DataTest is Test, UniV3IntegrationSetup {
         Pool storage p = Store.pool(pools[0]);
         p.timestamp = uint128(block.timestamp);
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         // Setup done.
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         // We can't really test this here because of how foundry works with expecting reverts.
@@ -44,7 +44,7 @@ contract DataTest is Test, UniV3IntegrationSetup {
 
     function testComputeBorrows() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         uint24 base = TreeTickLib.tickToTreeIndex(100, data.fees.rootWidth, data.fees.tickSpacing);
         Key key = KeyImpl.make(base, 16);
@@ -78,7 +78,7 @@ contract DataTest is Test, UniV3IntegrationSetup {
     function testComputeBalances() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
         console.log("pool info");
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         console.log("asset created");
         Data memory data = DataImpl.make(pInfo, asset, 0, 2 << 96, 1);
         console.log("data created");

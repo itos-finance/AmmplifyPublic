@@ -117,7 +117,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -330,7 +329,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -368,7 +366,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -421,7 +418,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -455,7 +451,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity,
-            false, // non-compounding
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -575,7 +570,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -623,7 +617,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -707,7 +700,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -782,7 +774,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -860,7 +851,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -927,7 +917,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -975,7 +964,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 3,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1040,7 +1028,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity * 2,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1126,7 +1113,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0] - 1200,
             ticks[1] + 1200,
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1172,7 +1158,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0] - 1200,
             middleTick,
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1199,7 +1184,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             middleTick,
             ticks[1],
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1231,7 +1215,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             ticks[0],
             ticks[1],
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1280,7 +1263,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             -491520,
             491520,
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1311,7 +1293,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             -491520,
             491520,
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1343,7 +1324,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             -491520,
             491520,
             liquidity,
-            true,
             sqrtPriceLimitsX96[0],
             sqrtPriceLimitsX96[1],
             rftData
@@ -1369,7 +1349,6 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
                 4200,
                 4800,
                 liquidity / 8,
-                true,
                 sqrtPriceLimitsX96[0],
                 sqrtPriceLimitsX96[1],
                 rftData

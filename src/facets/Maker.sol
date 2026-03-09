@@ -6,7 +6,7 @@ import { Asset, AssetLib } from "../Asset.sol";
 import { LiqType } from "../walkers/Liq.sol";
 import { Data, DataImpl } from "../walkers/Data.sol";
 import { ReentrancyGuardTransient } from "openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol";
-import { WalkerLib, CompoundWalkerLib } from "../walkers/Lib.sol";
+import { WalkerLib } from "../walkers/Lib.sol";
 import { PoolLib } from "../Pool.sol";
 import { PoolWalker } from "../walkers/Pool.sol";
 import { FeeLib } from "../Fee.sol";
@@ -23,33 +23,28 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         int24 lowTick,
         int24 highTick,
         uint128 liq,
-        bool isCompounding,
         uint160 minSqrtPriceX96,
         uint160 maxSqrtPriceX96,
         bytes calldata rftData
     ) external nonReentrant returns (uint256 _assetId) {
         require(liq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(liq));
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr); // 1 kB
-        // When creating new positions, we make sure to validate the pool isn't malicious.
-        pInfo.validate(); // .5 kB
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        pInfo.validate();
         (Asset storage asset, uint256 assetId) = AssetLib.newMaker(
             recipient,
             pInfo,
             lowTick,
             highTick,
-            liq,
-            isCompounding
-        ); // 1.2 kB
-        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq); // 4.6 kb
-        // This fills in the nodes in the asset.
-        WalkerLib.modify(pInfo, lowTick, highTick, data); // 21.5 kB
-        // Settle balances.
+            liq
+        );
+        Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq);
+        WalkerLib.modify(pInfo, lowTick, highTick, data);
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        balances[0] = data.xBalance; // There are no fees to consider on new positions.
+        balances[0] = data.xBalance;
         balances[1] = data.yBalance;
-        RFTLib.settle(msg.sender, tokens, balances, rftData); // 2.4 kB
-        PoolWalker.settle(pInfo, lowTick, highTick, data); // 3.4 kB
+        RFTLib.settle(msg.sender, tokens, balances, rftData);
+        PoolWalker.settle(pInfo, lowTick, highTick, data);
         emit MakerCreated(
             recipient,
             poolAddr,
@@ -57,7 +52,6 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             lowTick,
             highTick,
             liq,
-            isCompounding,
             balances[0],
             balances[1]
         );
@@ -76,7 +70,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         Asset storage asset = AssetLib.getAsset(assetId);
         require(targetLiq >= MIN_MAKER_LIQUIDITY, DeMinimusMaker(targetLiq)); // Use remove if you want to remove.
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
-        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
+        require(asset.liqType == LiqType.MAKER, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, targetLiq);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
@@ -123,7 +117,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
     ) external nonReentrant returns (address token0, address token1, uint256 removedX, uint256 removedY) {
         Asset storage asset = AssetLib.getAsset(assetId);
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
-        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
+        require(asset.liqType == LiqType.MAKER, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, 0);
         WalkerLib.modify(pInfo, asset.lowTick, asset.highTick, data);
@@ -158,7 +152,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
     ) external nonReentrant returns (uint256 fees0, uint256 fees1) {
         Asset storage asset = AssetLib.getAsset(assetId);
         require(asset.owner == msg.sender, NotMakerOwner(asset.owner, msg.sender));
-        require(asset.liqType == LiqType.MAKER || asset.liqType == LiqType.MAKER_NC, NotMaker(assetId));
+        require(asset.liqType == LiqType.MAKER, NotMaker(assetId));
         PoolInfo memory pInfo = PoolLib.getPoolInfo(asset.poolAddr);
         // We collect simply by targeting the original liq balance.
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, asset.liq);
@@ -168,8 +162,6 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         // Even if technically someone can marginally reduce their JIT penalty be collecting and then removing.
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);
-        // Compounding fees are treated like liq (since they're removed in PoolWalker) so they'll show up in
-        // the balance fields instead of the fee fields.
         balances[0] = data.xBalance - int256(data.xFees);
         balances[1] = data.yBalance - int256(data.yFees);
         RFTLib.settle(recipient, tokens, balances, rftData);
@@ -189,13 +181,4 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
         AssetLib.removePermission(msg.sender, opener);
     }
 
-    // Collect fees from and compound a specific range of nodes.
-    function compound(address poolAddr, int24 lowTick, int24 highTick) external nonReentrant {
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
-        Asset storage asset = AssetLib.nullAsset();
-        // When compounding, the liq and asset parameters are unused.
-        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
-        CompoundWalkerLib.compound(pInfo, lowTick, highTick, data);
-        PoolWalker.settle(pInfo, lowTick, highTick, data);
-    }
 }

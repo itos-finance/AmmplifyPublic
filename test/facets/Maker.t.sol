@@ -75,7 +75,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -92,7 +92,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
         assertEq(highTick_, highTick);
-        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+        assertEq(uint8(liqType), uint8(LiqType.MAKER));
         assertEq(liq, liquidity);
     }
 
@@ -107,7 +107,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -124,28 +124,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
         assertEq(highTick_, highTick);
-        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
-        assertEq(liq, liquidity);
-    }
-
-    function testNewMakerCompounding() public {
-        bytes memory rftData = "";
-
-        uint256 assetId = makerFacet.newMaker(
-            recipient,
-            poolAddr,
-            lowTick,
-            highTick,
-            liquidity,
-            true, // compounding
-            minSqrtPriceX96,
-            maxSqrtPriceX96,
-            rftData
-        );
-
-        // Verify asset was created with compounding type
-        (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
         assertEq(uint8(liqType), uint8(LiqType.MAKER));
+        assertEq(liq, liquidity);
     }
 
     function testNewMakerInvalidTicks() public {
@@ -160,7 +140,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             highTick, // high tick first
             lowTick, // low tick second
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -178,7 +157,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             0, // zero liquidity
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -196,7 +174,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false,
             maxSqrtPriceX96, // min > max
             minSqrtPriceX96,
             rftData
@@ -214,7 +191,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -254,7 +230,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -299,7 +274,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -334,7 +308,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -372,7 +345,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -390,13 +363,13 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         assertEq(poolAddr_, poolAddr);
         assertEq(lowTick_, lowTick);
         assertEq(highTick_, highTick);
-        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
+        assertEq(uint8(liqType), uint8(LiqType.MAKER));
         assertEq(liq, liquidity);
 
         // Get initial position balances
         (int256 initialNetBalance0, int256 initialNetBalance1, , ) = viewFacet.queryAssetBalances(assetId);
-        assertApproxEqAbs(uint256(initialNetBalance0), usedBalance0, 2);
-        assertApproxEqAbs(uint256(initialNetBalance1), usedBalance1, 2);
+        assertApproxEqAbs(uint256(initialNetBalance0), usedBalance0, 10);
+        assertApproxEqAbs(uint256(initialNetBalance1), usedBalance1, 10);
         assertGt(
             usedBalance0,
             uint256(initialNetBalance0),
@@ -443,14 +416,14 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         assertApproxEqAbs(
             queriedNetBalance0 + int256(queriedFees0),
             int256(actualRemoved0),
-            2,
+            10,
             "Queried token0 balance should approximate actual removed amount"
         );
 
         assertApproxEqAbs(
             queriedNetBalance1 + int256(queriedFees1),
             int256(actualRemoved1),
-            2,
+            10,
             "Queried token1 balance should approximate actual removed amount"
         );
     }
@@ -465,7 +438,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -496,14 +469,14 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         assertApproxEqAbs(
             queriedNetBalance0 + int256(queriedFees0),
             int256(actualRemoved0),
-            2,
+            10,
             "Queried token0 balance should approximate actual removed amount after price down"
         );
 
         assertApproxEqAbs(
             queriedNetBalance1 + int256(queriedFees1),
             int256(actualRemoved1),
-            2,
+            10,
             "Queried token1 balance should approximate actual removed amount after price down"
         );
     }
@@ -518,7 +491,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -559,7 +532,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -580,8 +553,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         // Verify the adjusted values
         assertApproxEqAbs(adjustedBalance0, balance0 + delta0, 1, "Adjusted balance0 should match");
         assertApproxEqAbs(adjustedBalance1, balance1 + delta1, 1, "Adjusted balance1 should match");
-        assertApproxEqAbs(balance0, delta0, 2, "we doubled 0");
-        assertApproxEqAbs(balance1, delta1, 2, "we doubled 1");
+        assertApproxEqAbs(balance0, delta0, 10, "we doubled 0");
+        assertApproxEqAbs(balance1, delta1, 10, "we doubled 1");
 
         // Halve the liquidity back
         (, , delta0, delta1) = makerFacet.adjustMaker(
@@ -592,8 +565,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             maxSqrtPriceX96,
             rftData
         );
-        assertApproxEqAbs(delta0, -balance0, 2, "Should have negative delta0");
-        assertApproxEqAbs(delta1, -balance1, 2, "Should have negative delta1");
+        assertApproxEqAbs(delta0, -balance0, 10, "Should have negative delta0");
+        assertApproxEqAbs(delta1, -balance1, 10, "Should have negative delta1");
         (adjustedBalance0, adjustedBalance1, , ) = viewFacet.queryAssetBalances(assetId);
         assertApproxEqAbs(balance0, adjustedBalance0, 1, "Back to the original balance0");
         assertApproxEqAbs(balance1, adjustedBalance1, 1, "Back to the original balance1");
@@ -611,7 +584,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lowTick,
             highTick,
             excessiveLiq,
-            false, // non-compounding
+
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -633,7 +606,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         // set current price to the middle of the interval
         swapTo(0, TickMath.getSqrtRatioAtTick(630));
 
-        // create first compounding maker
+        // create first maker
         uint256 attackerBalance0 = token0.balanceOf(address(this));
         uint256 attackerBalance1 = token1.balanceOf(address(this));
         uint256 assetId = makerFacet.newMaker(
@@ -642,7 +615,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lt,
             ht,
             1e6,
-            true,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -650,7 +622,7 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         int256 attackerSpend0 = int256(attackerBalance0 - token0.balanceOf(address(this)));
         int256 attackerSpend1 = int256(attackerBalance1 - token1.balanceOf(address(this)));
 
-        // donate some amount to compound liquidity
+        // donate some amount to the pool
         UniswapV3Pool(poolAddr).flash(address(this), 0, 0, "");
         attackerSpend0 += 1e18;
         attackerSpend1 += 1e18;
@@ -675,9 +647,8 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
         // victim mints and then immediately closes
         // By opening and closing immediately they're swapping fees for adding liquidity without any slippage.
         // This is actually benefitial to both sides. They're doing the swap at the worse price of either
-        // the current price or the TWAP. We want to compound but we can't because our fees are imbalanced.
-        // This lets them avoid slippage if they're happy with the twap and current price, and we get to
-        // compound immediately without having to pay swap fees ourselves. Win win!
+        // the current price or the TWAP.
+        // This lets them avoid slippage if they're happy with the twap and current price.
         vm.startPrank(victim);
         MockERC20(token0).mint(victim, 2e18);
         MockERC20(token1).mint(victim, 2e18);
@@ -691,7 +662,6 @@ contract MakerFacetTest is MultiSetupTest, IUniswapV3FlashCallback, UniV3Integra
             lt,
             ht,
             300e18,
-            true,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData

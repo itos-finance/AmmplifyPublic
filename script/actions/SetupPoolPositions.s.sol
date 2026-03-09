@@ -307,7 +307,6 @@ contract SetupPoolPositions is AmmplifyPositions {
             lowTick: lowTick,
             highTick: highTick,
             liquidity: liquidity,
-            isCompounding: true,
             minSqrtPriceX96: MIN_SQRT_RATIO,
             maxSqrtPriceX96: MAX_SQRT_RATIO,
             rftData: ""

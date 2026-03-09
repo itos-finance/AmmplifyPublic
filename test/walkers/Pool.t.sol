@@ -30,7 +30,7 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
     function testUpdateLiq() public {
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Check the pool's current liquidity for this key.
         Key key = KeyImpl.make(6400, 1600);
@@ -80,7 +80,7 @@ contract PoolWalkerTest is Test, UniV3IntegrationSetup {
         assertEq(pInfo.tickSpacing, 60);
 
         // Create asset and data for testing
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
 
         // Test the settle function with range aligned to tick spacing 60
