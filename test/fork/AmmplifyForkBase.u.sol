@@ -134,7 +134,7 @@ contract AmmplifyForkBase is ForkableTest {
 
     /**
      * @notice Increase pool observation cardinality to minimum required
-     * @dev Pools need at least 32 observations for TWAP calculations
+     * @dev Pools need at least 32 observations for price calculations
      */
     function _increasePoolCardinality() internal {
         uint16 minObservations = 32;

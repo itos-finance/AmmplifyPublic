@@ -58,6 +58,11 @@ library LiqNodeImpl {
         return SafeCast.toInt128(self.borrowed + self.mLiq) - SafeCast.toInt128(self.tLiq + self.lent);
     }
 
+    /// @dev All maker fees go to per-liq rates.
+    function makerFeesPerLiqX128(LiqNode storage self, uint256 nominal) internal view returns (uint256) {
+        return (uint256(nominal) << 128) / self.mLiq;
+    }
+
     function setDirty(LiqNode storage self) internal {
         self.dirty |= DIRTY_FLAG;
     }
@@ -120,6 +125,8 @@ library LiqDataLib {
 }
 
 library LiqWalker {
+    uint128 public constant MIN_BORROW_THRESHOLD = 1e12;
+
     error InsufficientBorrowLiquidity(int256 netLiq);
     error InsufficientStandingFees(uint256 required, uint128 available, bool isX);
 
@@ -140,15 +147,15 @@ library LiqWalker {
             iter = LiqIter({ key: key, width: key.width(), lowTick: lowTick, highTick: highTick });
         }
 
-        // Collect pool fees for this node.
-        collectPoolFees(iter, node, data);
+        // Update fee checkpoints first.
+        updateFeeCheckpoints(iter, node, data);
 
         // Do the modifications.
         if (visit) {
             modify(iter, node, data, data.liq.liq);
         }
 
-        // Update subtree liqs.
+        // Update subtree liqs after modifications.
         if (iter.width > 1) {
             (Key lk, Key rk) = key.children();
             Node storage lNode = data.node(lk);
@@ -193,9 +200,10 @@ library LiqWalker {
 
     /* Helpers */
 
-    /// Collect pool fees and update maker/taker fee rates for this node.
-    /// @dev We update the taker fees here.
-    function collectPoolFees(LiqIter memory iter, Node storage node, Data memory data) internal {
+    /// Collect pool fees and update fee checkpoints for this node.
+    /// @dev Must be called on every node during the up walk to keep fee accounting accurate.
+    function updateFeeCheckpoints(LiqIter memory iter, Node storage node, Data memory data) internal {
+        // Collect fees from V4 pool positions at this node.
         if (node.liq.net() > 0) {
             (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
                 data.poolAddr,
@@ -206,7 +214,7 @@ library LiqWalker {
             data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
             data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
         }
-        // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
+        // Calculate swap fees earned by makers and owed by taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
             data.currentTick,
@@ -221,11 +229,10 @@ library LiqWalker {
             feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
             feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         }
-        // This raw fee growth is what's owed by Takers.
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
 
-        // The taker fees owed are covered by the collaterals they post.
+        // Taker fees owed are covered by their collateral, counted as collected fees.
         data.liq.xFeesCollected = FeeWalker.add128Fees(
             data.liq.xFeesCollected,
             FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false),
@@ -239,12 +246,15 @@ library LiqWalker {
             false
         );
 
-        // If we have no maker liq in this node, nothing to track.
-        if (node.liq.mLiq == 0) return;
-
-        // All maker fees go to per-liq rate tracking.
-        node.fees.makerXFeesPerLiqX128 += feeDiffInside0X128;
-        node.fees.makerYFeesPerLiqX128 += feeDiffInside1X128;
+        // All maker fees go directly to per-liq rates.
+        if (node.liq.mLiq > 0) {
+            node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(
+                FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false)
+            );
+            node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(
+                FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false)
+            );
+        }
     }
 
     function modify(LiqIter memory iter, Node storage node, Data memory data, uint128 targetLiq) internal {
@@ -369,6 +379,10 @@ library LiqWalker {
             }
             repayable = min(repayable, uint128(sibLiq));
             repayable = min(repayable, sibling.liq.borrowed);
+            if (repayable <= MIN_BORROW_THRESHOLD) {
+                // Below the threshold it's too small to be worth repaying.
+                return;
+            }
             Key parentKey = key.parent();
             Node storage parent = data.node(parentKey);
             int128 iRepayable = SafeCast.toInt128(repayable);
@@ -399,6 +413,10 @@ library LiqWalker {
             Node storage sibling = data.node(sibKey);
             Node storage parent = data.node(parentKey);
             int128 borrow = -netLiq;
+            if (borrow < int128(MIN_BORROW_THRESHOLD)) {
+                // We borrow at least this amount.
+                borrow = int128(MIN_BORROW_THRESHOLD);
+            }
             data.modifyPreLend(parentKey, borrow);
             parent.liq.setDirty();
             uint128 uBorrow = uint128(borrow);

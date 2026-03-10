@@ -8,51 +8,39 @@ import { Node } from "./Node.sol";
 import { Route, RouteImpl, Phase } from "../tree/Route.sol";
 import { PoolLib, PoolInfo } from "../Pool.sol";
 import { WalkerLib } from "./Lib.sol";
-import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /// Walk down and up the pool to settle balances with the underlying AMM.
 /// @dev When walking down, we settle all the liquidity decreases so we have balances to work with,
 /// and then on the walk up we add liquidity with the balances as necessary.
+/// In V4, burn/mint operations are recorded during the walk and executed in a batched
+/// unlock callback after the walk completes.
 library PoolWalker {
     error InsolventLiquidityUpdate(Key key, int256 targetLiq);
-    error MismatchedSettlementBalance(int256 required, int256 actual, address token);
     error StalePoolPrice(address poolAddr, uint160 expectedSqrtPriceX96, uint160 actualSqrtPriceX96);
     /// We add this to the dirty bit when we discover the liquidity needs to increase on the walk up.
 
     uint8 public constant ADD_LIQ_DIRTY_FLAG = 1 << 7;
 
     /// This does all the balances changes because all liquidity is only changed here.
-    /// Thus we verify the balances changes here.
-    /// TODO add test where we fudge the pool price during RFT settlement and hit the settlement mismatch.
+    /// In V4, operations are batched and executed inside a PoolManager unlock callback
+    /// which handles token settlement via sync/settle/take.
     function settle(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
         // Before we settle we make sure the pool price has not changed from the time we made all our initial
         // calculations.
         uint160 sqrtPriceX96 = PoolLib.getSqrtPriceX96(pInfo.poolAddr);
         require(data.sqrtPriceX96 == sqrtPriceX96, StalePoolPrice(pInfo.poolAddr, data.sqrtPriceX96, sqrtPriceX96));
 
-        uint256 startingX = IERC20(pInfo.token0).balanceOf(address(this));
-        uint256 startingY = IERC20(pInfo.token1).balanceOf(address(this));
+        // NOTE: We do NOT clear ops here. The modify walk may have recorded poke ops (via compound → collect)
+        // that are needed to collect fees from V4. Those ops must survive into executeOps.
 
         uint24 low = pInfo.treeTick(lowTick);
         uint24 high = pInfo.treeTick(highTick) - 1;
         Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
         route.walk(down, up, phase, WalkerLib.toRaw(data));
 
-        uint256 endingX = IERC20(pInfo.token0).balanceOf(address(this));
-        uint256 endingY = IERC20(pInfo.token1).balanceOf(address(this));
-
-        // Verify balances. Technically just checking the pool price has not changed is sufficient
-        // but this adds an additional layer of safety just in case.
-        int256 expectedXSpend = data.xBalance;
-        int256 actualXSpend = int256(startingX) - int256(endingX);
-        verifySpend(expectedXSpend, actualXSpend, pInfo.token0);
-        int256 expectedYSpend = data.yBalance;
-        int256 actualYSpend = int256(startingY) - int256(endingY);
-        verifySpend(expectedYSpend, actualYSpend, pInfo.token1);
-
-        // Now that we've walked liqs and done updates, we need to clear the inside fees cache because we'll
-        // soon release the reentrancy lock and a swap can happen that changes fee growth globals.
-        PoolLib.updateWalkCount(pInfo.poolAddr);
+        // Execute all recorded V4 operations in a single unlock callback.
+        // The PoolManager's settlement verification ensures all token deltas are properly settled.
+        PoolLib.executeOps(pInfo);
     }
 
     /// Remove liquidity on the way down.
@@ -120,7 +108,7 @@ library PoolWalker {
         uint128 targetLiq = uint128(uint256(_targetLiq)) + 1;
         // We add 1 which will cause the first liq deposit into this node to pay a little dust.
         // This is because we want the node to always hold 1 unit of liquidity that only the underlying
-        // uniswap pool is aware of. This way the ticks never clear their tick initializations even when
+        // pool is aware of. This way the ticks never clear their tick initializations even when
         // all liq is borrowed out according to our own accounting.
 
         if (targetLiq > liq) {
@@ -131,7 +119,9 @@ library PoolWalker {
             data.setPreLend(key, int128(targetLiq - liq));
         } else {
             if (targetLiq < liq) {
+                // In V4, burn is recorded for batched execution.
                 PoolLib.burn(data.poolAddr, lowTick, highTick, liq - targetLiq);
+                // In V4, collect is implicit in modifyLiquidity. Record a poke if needed.
                 PoolLib.collect(data.poolAddr, lowTick, highTick, false);
             }
             // A revisit (due to sib solving) might have changed our intended mint, so we have to clear those.
@@ -149,10 +139,7 @@ library PoolWalker {
 
         uint128 liqDiff = uint128(data.clearPreLend(key));
         (int24 lowTick, int24 highTick) = key.ticks(data.fees.rootWidth, data.fees.tickSpacing);
+        // In V4, mint is recorded for batched execution.
         PoolLib.mint(data.poolAddr, lowTick, highTick, liqDiff);
-    }
-
-    function verifySpend(int256 expectedSpend, int256 actualSpend, address token) internal pure {
-        require(actualSpend <= expectedSpend, MismatchedSettlementBalance(expectedSpend, actualSpend, token));
     }
 }

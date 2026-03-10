@@ -1,31 +1,35 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
-import { TickMath } from "v3-core/libraries/TickMath.sol";
-import { PoolLib, PoolInfo } from "../Pool.sol";
+import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
+import { IUnlockCallback } from "v4-core/interfaces/callback/IUnlockCallback.sol";
+import { PoolKey } from "v4-core/types/PoolKey.sol";
+import { Currency } from "v4-core/types/Currency.sol";
+import { BalanceDelta } from "v4-core/types/BalanceDelta.sol";
+import { SwapParams } from "v4-core/types/PoolOperation.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { IMaker } from "../interfaces/IMaker.sol";
+import { IView } from "../interfaces/IView.sol";
+import { PoolInfo } from "../Pool.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import { console2 } from "forge-std/console2.sol";
-
-interface ICapricornCLSwapCallback {
-    function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
-}
 
 /**
  * @title Opener
- * @notice Contract that opens maker positions by swapping for missing tokens
- * @dev Handles exact input swaps and Capricorn callbacks to acquire the token the user doesn't have
+ * @notice Contract that opens maker positions by swapping for missing tokens via Uniswap V4
+ * @dev Handles exact output swaps through the V4 PoolManager to acquire the token the user doesn't have
  */
-contract Opener is ICapricornCLSwapCallback {
+contract Opener is IUnlockCallback {
     using SafeERC20 for IERC20;
 
-    /// @notice The diamond contract that implements IMaker
+    /// @notice The diamond contract that implements IMaker and IView
     address public immutable diamond;
 
-    /// @notice Error thrown when callback is from wrong pool
+    /// @notice The Uniswap V4 PoolManager
+    IPoolManager public immutable poolManager;
+
+    /// @notice Error thrown when callback is not from the PoolManager
     error InvalidCallbackSender();
     /// @notice Error thrown when slippage is too high
     error SlippageTooHigh();
@@ -34,23 +38,24 @@ contract Opener is ICapricornCLSwapCallback {
 
     /// @notice Swap state stored during callback
     struct SwapState {
-        address poolAddr;
+        PoolKey poolKey;
         address tokenIn;
         address tokenOut;
-        address payer;
         uint256 amountInMaximum;
     }
 
     /// @notice Temporary storage for swap state during callback
     SwapState private swapState;
 
-    constructor(address _diamond) {
+    constructor(address _diamond, address _poolManager) {
         diamond = _diamond;
+        poolManager = IPoolManager(_poolManager);
     }
 
     /**
      * @notice Opens a maker position by swapping for the missing token
-     * @param poolAddr The address of the pool
+     * @param poolKey The Uniswap V4 PoolKey for the swap pool
+     * @param poolAddr The address of the Ammplify pool on the diamond
      * @param tokenIn The token address that the user is providing
      * @param amountIn The amount of tokenIn to swap for the other token
      * @param lowTick The lower tick of the liquidity range
@@ -58,11 +63,12 @@ contract Opener is ICapricornCLSwapCallback {
      * @param minSqrtPriceX96 Minimum sqrt price for the operation
      * @param maxSqrtPriceX96 Maximum sqrt price for the operation
      * @param amountOutMinimum Minimum amount of output token to receive (slippage protection)
-     * @param amountSwap The expected amount of output token from the exact output swap (based on original liquidity calculation)
+     * @param amountSwap The expected amount of output token from the exact output swap
      * @param rftData Data passed during RFT to the payer
      * @return assetId The ID of the created asset
      */
     function openMaker(
+        PoolKey calldata poolKey,
         address poolAddr,
         address tokenIn,
         uint256 amountIn,
@@ -74,10 +80,9 @@ contract Opener is ICapricornCLSwapCallback {
         uint256 amountSwap,
         bytes calldata rftData
     ) external returns (uint256 assetId) {
-        // Get pool info
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
-        address token0 = pInfo.token0;
-        address token1 = pInfo.token1;
+        // Derive token addresses from the PoolKey currencies
+        address token0 = Currency.unwrap(poolKey.currency0);
+        address token1 = Currency.unwrap(poolKey.currency1);
 
         // Validate tokenIn is part of the pool
         if (tokenIn != token0 && tokenIn != token1) {
@@ -86,36 +91,21 @@ contract Opener is ICapricornCLSwapCallback {
 
         address tokenOut = tokenIn == token0 ? token1 : token0;
 
-        // Calculate expected liquidity and token amounts upfront based on original liquidity calculation
-        // This helps us determine the expected ratio when opening the position
-        uint160 sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
-        uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(lowTick);
-        uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(highTick);
-
-        // Calculate expected liquidity from the amountSwap and the user's tokenIn
-        // We'll use amountSwap as the expected output, and calculate what liquidity we can get
-        // First, estimate what we'll have after swap: amountSwap of tokenOut
-        // We need to determine how much tokenIn will be used in the swap
-        // For now, we'll swap to get exactly amountSwap of tokenOut
+        // Get current price from the diamond
+        PoolInfo memory pInfo = IView(diamond).getPoolInfo(poolAddr);
+        uint160 sqrtPriceX96 = pInfo.sqrtPriceX96;
+        uint160 sqrtPriceAX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 sqrtPriceBX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         // Transfer user's tokenIn to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // Perform exact output swap: swap to get exactly amountSwap of tokenOut
-        _swapExactOut(poolAddr, tokenIn, tokenOut, pInfo.fee, amountSwap, amountIn, amountOutMinimum, msg.sender);
+        // Perform exact output swap via V4 PoolManager
+        _swapExactOut(poolKey, tokenIn, tokenOut, amountSwap, amountIn, amountOutMinimum);
 
         // Get balances after swap
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
-
-        // Calculate liquidity from the token amounts we have
-        // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
-
-        console2.log("balance0", balance0);
-        console2.log("balance1", balance1);
-        console2.log("sqrtPriceX96", sqrtPriceX96);
-        console2.log("sqrtPriceAX96", sqrtPriceAX96);
-        console2.log("sqrtPriceBX96", sqrtPriceBX96);
 
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
@@ -178,38 +168,63 @@ contract Opener is ICapricornCLSwapCallback {
     }
 
     /**
-     * @notice Capricorn CL swap callback
-     * @param amount0Delta The change in token0 balance
-     * @param amount1Delta The change in token1 balance
+     * @notice Callback from the PoolManager after unlock
+     * @param data Encoded swap parameters
+     * @return Encoded BalanceDelta result
      */
-    function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
-        require(amount0Delta > 0 || amount1Delta > 0, "Invalid swap callback");
+    function unlockCallback(bytes calldata data) external override returns (bytes memory) {
+        require(msg.sender == address(poolManager), InvalidCallbackSender());
 
-        SwapState memory state = swapState;
-        require(state.poolAddr != address(0), "Invalid swap state");
+        (
+            PoolKey memory poolKey,
+            bool zeroForOne,
+            int256 amountSpecified,
+            uint160 sqrtPriceLimitX96
+        ) = abi.decode(data, (PoolKey, bool, int256, uint160));
 
-        // Verify the callback is from the correct pool
-        require(msg.sender == state.poolAddr, InvalidCallbackSender());
+        // Execute the swap
+        BalanceDelta delta = poolManager.swap(
+            poolKey,
+            SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: amountSpecified,
+                sqrtPriceLimitX96: sqrtPriceLimitX96
+            }),
+            ""
+        );
 
-        // Determine which token we need to pay
-        uint256 amountToPay = amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
+        // Settle deltas
+        int128 delta0 = delta.amount0();
+        int128 delta1 = delta.amount1();
 
-        // Verify slippage
-        require(amountToPay <= state.amountInMaximum, SlippageTooHigh());
-
-        // Transfer tokens to the pool
-        // If payer is this contract, tokens are already here, just transfer
-        if (state.payer == address(this)) {
-            IERC20(state.tokenIn).safeTransfer(msg.sender, amountToPay);
-        } else {
-            // Otherwise transfer from payer
-            IERC20(state.tokenIn).safeTransferFrom(state.payer, msg.sender, amountToPay);
+        // For negative deltas (we owe the manager): sync, transfer, settle
+        if (delta0 < 0) {
+            Currency currency0 = poolKey.currency0;
+            poolManager.sync(currency0);
+            IERC20(Currency.unwrap(currency0)).safeTransfer(address(poolManager), uint256(uint128(-delta0)));
+            poolManager.settle();
         }
+        if (delta1 < 0) {
+            Currency currency1 = poolKey.currency1;
+            poolManager.sync(currency1);
+            IERC20(Currency.unwrap(currency1)).safeTransfer(address(poolManager), uint256(uint128(-delta1)));
+            poolManager.settle();
+        }
+
+        // For positive deltas (manager owes us): take
+        if (delta0 > 0) {
+            poolManager.take(poolKey.currency0, address(this), uint256(uint128(delta0)));
+        }
+        if (delta1 > 0) {
+            poolManager.take(poolKey.currency1, address(this), uint256(uint128(delta1)));
+        }
+
+        return abi.encode(delta);
     }
 
     /**
-     * @notice Performs an exact output swap
-     * @param poolAddr The pool address
+     * @notice Performs an exact output swap via V4 PoolManager
+     * @param poolKey The V4 PoolKey
      * @param tokenIn The input token
      * @param tokenOut The output token
      * @param amountOut The exact amount of output token to receive
@@ -218,43 +233,43 @@ contract Opener is ICapricornCLSwapCallback {
      * @return amountIn The amount of input token spent
      */
     function _swapExactOut(
-        address poolAddr,
+        PoolKey calldata poolKey,
         address tokenIn,
         address tokenOut,
-        uint24 /* fee */,
         uint256 amountOut,
         uint256 amountInMaximum,
-        uint256 amountOutMinimum,
-        address /* payer */
+        uint256 amountOutMinimum
     ) private returns (uint256 amountIn) {
-        IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
-
         // Determine swap direction
         bool zeroForOne = tokenIn < tokenOut;
 
         // Verify amountOut meets minimum requirement
         require(amountOut >= amountOutMinimum, SlippageTooHigh());
 
-        // Store swap state for callback (we use amountInMaximum as max since it's exact output)
+        // Store swap state for post-swap validation
         swapState = SwapState({
-            poolAddr: poolAddr,
+            poolKey: poolKey,
             tokenIn: tokenIn,
             tokenOut: tokenOut,
-            payer: address(this), // tokens are already in this contract
             amountInMaximum: amountInMaximum
         });
 
-        // Execute the swap (exact output - negative amount for exact output)
-        (int256 amount0Delta, int256 amount1Delta) = pool.swap(
-            address(this), // recipient
+        // Encode swap parameters for the unlock callback
+        bytes memory callbackData = abi.encode(
+            poolKey,
             zeroForOne,
-            -int256(amountOut), // negative for exact output
-            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1, // no price limit
-            "" // no callback data needed, we use storage
+            int256(amountOut), // positive amountSpecified = exact output
+            zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         );
 
-        // Calculate amount in (positive delta for the input token)
-        amountIn = uint256(zeroForOne ? amount0Delta : amount1Delta);
+        // Call unlock, which triggers unlockCallback
+        bytes memory result = poolManager.unlock(callbackData);
+        BalanceDelta delta = abi.decode(result, (BalanceDelta));
+
+        // Calculate amount in (the absolute value of the negative delta for the input token)
+        int128 delta0 = delta.amount0();
+        int128 delta1 = delta.amount1();
+        amountIn = uint256(uint128(zeroForOne ? -delta0 : -delta1));
 
         // Verify we didn't exceed maximum input
         require(amountIn <= amountInMaximum, SlippageTooHigh());

@@ -6,15 +6,18 @@ import { console2 as console } from "forge-std/console2.sol";
 import { ViewDataImpl, ViewData, ViewWalker } from "../../src/walkers/View.sol";
 import { Data, DataImpl } from "../../src/walkers/Data.sol";
 import { Key, KeyImpl } from "../../src/tree/Key.sol";
-import { Pool, PoolInfo, PoolLib } from "../../src/Pool.sol";
+import { Pool, PoolInfo, PoolLib, PoolValidation } from "../../src/Pool.sol";
 import { FeeLib } from "../../src/Fee.sol";
 import { Asset, AssetLib } from "../../src/Asset.sol";
-import { UniV3IntegrationSetup } from "../UniV3.u.sol";
+import { Store } from "../../src/Store.sol";
+import { UniV4IntegrationSetup } from "../UniV4.u.sol";
 import { Asset, AssetLib } from "../../src/Asset.sol";
 
-contract ViewWalkerTest is Test, UniV3IntegrationSetup {
+contract ViewWalkerTest is Test, UniV4IntegrationSetup {
     function setUp() public {
         setUpPool(500); // For a tick spacing of 10.
+        PoolValidation.initPoolManager(address(manager));
+        Store.registerPoolKey(poolKeys[0]);
         FeeLib.init();
     }
 

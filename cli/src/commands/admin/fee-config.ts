@@ -11,7 +11,7 @@ export const adminFeeConfig = withErrorHandler(
     const client = getPublicClient();
     const diamond = getDiamondAddress();
 
-    const [feeCurve, splitCurve, twapInterval] =
+    const [feeCurve, splitCurve] =
       await client.readContract({
         address: diamond,
         abi: IAdminAbi,
@@ -23,7 +23,6 @@ export const adminFeeConfig = withErrorHandler(
       pool: poolAddress,
       feeCurve,
       splitCurve,
-      twapInterval: Number(twapInterval),
     };
 
     if (options.json) {
@@ -34,7 +33,6 @@ export const adminFeeConfig = withErrorHandler(
     console.log(chalk.bold(`\nFee Config for ${poolAddress}\n`));
     const table = createTable(["Property", "Value"]);
     table.push(
-      ["TWAP Interval", `${data.twapInterval}s`],
       ["Fee Curve", JSON.stringify(feeCurve, null, 2)],
       ["Split Curve", JSON.stringify(splitCurve, null, 2)]
     );

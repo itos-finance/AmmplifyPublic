@@ -80,16 +80,6 @@ export const IViewAbi = [
                 "internalType": "uint128"
               },
               {
-                "name": "ncLiq",
-                "type": "uint128",
-                "internalType": "uint128"
-              },
-              {
-                "name": "shares",
-                "type": "uint128",
-                "internalType": "uint128"
-              },
-              {
                 "name": "subtreeMLiq",
                 "type": "uint256",
                 "internalType": "uint256"
@@ -190,16 +180,6 @@ export const IViewAbi = [
                 "name": "makerYFeesPerLiqX128",
                 "type": "uint256",
                 "internalType": "uint256"
-              },
-              {
-                "name": "xCFees",
-                "type": "uint128",
-                "internalType": "uint128"
-              },
-              {
-                "name": "yCFees",
-                "type": "uint128",
-                "internalType": "uint128"
               },
               {
                 "name": "unclaimedMakerXFees",

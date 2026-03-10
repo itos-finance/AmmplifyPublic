@@ -28,8 +28,7 @@ contract GetFeeConfig is AmmplifyPositions {
         // Query fee configuration
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
-            SmoothRateCurveConfig memory splitCurve,
-            uint32 twapInterval
+            SmoothRateCurveConfig memory splitCurve
         ) {
             console2.log("=== Fee Configuration ===");
             console2.log("");
@@ -46,9 +45,6 @@ contract GetFeeConfig is AmmplifyPositions {
             console2.log("  betaX64:", splitCurve.betaX64);
             console2.log("  maxUtilX64:", splitCurve.maxUtilX64);
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
-            console2.log("");
-            
-            console2.log("TWAP Interval:", twapInterval);
             console2.log("");
             
             console2.log("=== Query Complete ===");
@@ -76,8 +72,7 @@ contract GetFeeConfig is AmmplifyPositions {
         // Query fee configuration
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
-            SmoothRateCurveConfig memory splitCurve,
-            uint32 twapInterval
+            SmoothRateCurveConfig memory splitCurve
         ) {
             console2.log("=== Fee Configuration ===");
             console2.log("");
@@ -94,9 +89,6 @@ contract GetFeeConfig is AmmplifyPositions {
             console2.log("  betaX64:", splitCurve.betaX64);
             console2.log("  maxUtilX64:", splitCurve.maxUtilX64);
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
-            console2.log("");
-            
-            console2.log("TWAP Interval:", twapInterval);
             console2.log("");
             
             console2.log("=== Query Complete ===");
