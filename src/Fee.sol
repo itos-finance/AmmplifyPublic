@@ -12,8 +12,6 @@ struct FeeStore {
     SmoothRateCurveConfig defaultSplitCurve;
     mapping(address => SmoothRateCurveConfig) feeCurves;
     mapping(address => SmoothRateCurveConfig) splitCurves;
-    mapping(address => uint32) twapIntervals;
-    uint32 defaultTwapInterval; // The default interval to use when calculating TWAPs.
     /* JIT Prevention */
     // Someone can try to use JIT to manipulate fees by supplying/removing liquidity from certain nodes
     uint32 jitLifetime; // Positions with shorter lifetimes than this will pay a penalty.
@@ -52,7 +50,6 @@ library FeeLib {
             maxUtilX64: 20291418481080508416, // 110%
             maxRateX64: 1169884834710 // 200%
         });
-        store.defaultTwapInterval = 300; // 5 minutes
     }
 
     /* Getters */
@@ -74,14 +71,6 @@ library FeeLib {
             return store.defaultFeeCurve;
         } else {
             return store.feeCurves[poolAddr];
-        }
-    }
-
-    function getTwapInterval(address poolAddr) internal view returns (uint32 twapInterval) {
-        FeeStore storage store = Store.fees();
-        twapInterval = store.twapIntervals[poolAddr];
-        if (twapInterval == 0) {
-            twapInterval = store.defaultTwapInterval;
         }
     }
 

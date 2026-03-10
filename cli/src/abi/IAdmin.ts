@@ -169,16 +169,6 @@ export const IAdminAbi = [
           }
         ]
       },
-      {
-        "name": "compoundThreshold",
-        "type": "uint128",
-        "internalType": "uint128"
-      },
-      {
-        "name": "twapInterval",
-        "type": "uint32",
-        "internalType": "uint32"
-      }
     ],
     "stateMutability": "view"
   },

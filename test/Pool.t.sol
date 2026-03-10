@@ -642,7 +642,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -650,7 +649,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -672,7 +670,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -680,7 +677,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -711,11 +707,11 @@ contract PoolTest is Test, UniV4IntegrationSetup {
         uint128 y = 1 << 127;
 
         // Should not revert.
-        PoolLib.getEquivalentLiq(lowTick, highTick, x, y, sqrtPriceX96, sqrtPriceX96, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, y, sqrtPriceX96, true);
         console.log("MIN_SQRT_PRICE");
-        PoolLib.getEquivalentLiq(lowTick, highTick, x, 1 << 64, TickMath.MIN_SQRT_PRICE, TickMath.MIN_SQRT_PRICE, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, x, 1 << 64, TickMath.MIN_SQRT_PRICE, true);
         console.log("MAX_SQRT_PRICE");
-        PoolLib.getEquivalentLiq(lowTick, highTick, 1 << 64, y, TickMath.MAX_SQRT_PRICE, TickMath.MAX_SQRT_PRICE, true);
+        PoolLib.getEquivalentLiq(lowTick, highTick, 1 << 64, y, TickMath.MAX_SQRT_PRICE, true);
     }
 
     /// forge-config: default.allow_internal_expect_revert = true
@@ -732,7 +728,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             1,
             type(uint128).max,
             type(uint128).max,
-            TickMath.getSqrtPriceAtTick(-1),
             TickMath.getSqrtPriceAtTick(-1),
             false
         );
@@ -753,7 +748,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             type(uint128).max,
             type(uint128).max,
             TickMath.getSqrtPriceAtTick(-1),
-            TickMath.getSqrtPriceAtTick(-1),
             true
         );
     }
@@ -772,7 +766,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -780,7 +773,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -802,7 +794,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -810,7 +801,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -849,7 +839,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             type(uint128).max,
             type(uint128).max,
             TickMath.getSqrtPriceAtTick(2),
-            TickMath.getSqrtPriceAtTick(2),
             false
         );
     }
@@ -869,7 +858,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             type(uint128).max,
             type(uint128).max,
             TickMath.getSqrtPriceAtTick(2),
-            TickMath.getSqrtPriceAtTick(2),
             true
         );
     }
@@ -887,7 +875,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -895,7 +882,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -932,7 +918,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -940,7 +925,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -963,7 +947,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             x,
             y,
             sqrtPriceX96,
-            sqrtPriceX96,
             false
         );
         uint128 equivLiqRoundingUp = PoolLib.getEquivalentLiq(
@@ -971,7 +954,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             highTick,
             x,
             y,
-            sqrtPriceX96,
             sqrtPriceX96,
             true
         );
@@ -996,7 +978,6 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             type(uint128).max,
             type(uint128).max,
             TickMath.getSqrtPriceAtTick(0),
-            TickMath.getSqrtPriceAtTick(0),
             false
         );
     }
@@ -1016,18 +997,16 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             type(uint128).max,
             type(uint128).max,
             TickMath.getSqrtPriceAtTick(0),
-            TickMath.getSqrtPriceAtTick(0),
             true
         );
     }
 
-    function testEquivalentLiqWithTwap() public pure {
+    function testEquivalentLiqAtDifferentPrices() public pure {
         uint128 liq = PoolLib.getEquivalentLiq(
             -300,
             20,
             123456789,
             987654321,
-            TickMath.getSqrtPriceAtTick(-100),
             TickMath.getSqrtPriceAtTick(-100),
             true
         );
@@ -1039,32 +1018,10 @@ contract PoolTest is Test, UniV4IntegrationSetup {
             123456789,
             987654321,
             TickMath.getSqrtPriceAtTick(-200),
-            TickMath.getSqrtPriceAtTick(-200),
             true
         );
 
         assertGt(higherLiq, liq, "higherLiq.gt.liq");
-        // If we have both prices, it'll use the one that gives a higher liq.
-        uint128 mixedLiq = PoolLib.getEquivalentLiq(
-            -300,
-            20,
-            123456789,
-            987654321,
-            TickMath.getSqrtPriceAtTick(-200),
-            TickMath.getSqrtPriceAtTick(-100),
-            true
-        );
-        assertEq(mixedLiq, higherLiq, "mixedLiq.equals.higherLiq");
-        uint128 mixedLiq2 = PoolLib.getEquivalentLiq(
-            -300,
-            20,
-            123456789,
-            987654321,
-            TickMath.getSqrtPriceAtTick(-100),
-            TickMath.getSqrtPriceAtTick(-200),
-            true
-        );
-        assertEq(mixedLiq, mixedLiq2, "mixedLiq.equals.mixedLiq2");
     }
 
     // Get Amounts

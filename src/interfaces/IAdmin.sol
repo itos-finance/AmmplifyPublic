@@ -32,8 +32,7 @@ interface IAdmin {
         view
         returns (
             SmoothRateCurveConfig memory feeCurve,
-            SmoothRateCurveConfig memory splitCurve,
-            uint32 twapInterval
+            SmoothRateCurveConfig memory splitCurve
         );
 
     function getDefaultFeeConfig()

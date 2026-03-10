@@ -20,6 +20,7 @@ import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
 import { FeeLib } from "./Fee.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import { tuint256, tint256 } from "transient-goodies/TransientPrimitives.sol";
 
@@ -86,6 +87,7 @@ struct Pool {
 /// A helper library for accessing the underlying pool via V4 PoolManager.
 /// @dev All liquidity modifications are batched and executed inside a PoolManager unlock callback.
 library PoolLib {
+    using SafeERC20 for IERC20;
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
     using StateLibrary for IPoolManager;
@@ -116,14 +118,6 @@ library PoolLib {
         IPoolManager manager = IPoolManager(Store.poolManager());
         PoolId poolId = Store.getPoolId(poolAddr);
         (sqrtPriceX96, , , ) = manager.getSlot0(poolId);
-    }
-
-    /// Get a slower moving price metric for the given pool.
-    /// @dev V4 has no built-in TWAP oracle. For now, we use the spot price as a placeholder.
-    /// TODO: Integrate an external oracle (e.g., Chainlink) for robust TWAP in production.
-    function getTwapSqrtPriceX96(address poolAddr) internal view returns (uint160 twapSqrtPriceX96) {
-        // V4 has no built-in observe() function. Fall back to spot price.
-        twapSqrtPriceX96 = getSqrtPriceX96(poolAddr);
     }
 
     /// Collect fees from a position.
@@ -355,28 +349,16 @@ library PoolLib {
         uint256 x,
         uint256 y,
         uint160 sqrtPriceX96,
-        uint160 twapSqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
         (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
         uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
-        (uint256 twapLxX96, uint256 twapLyX96) = getAmounts(twapSqrtPriceX96, lowTick, highTick, X96, roundUp);
-        uint256 twapLiqValueX96 = (FullMath.mulX64(twapLxX96, twapSqrtPriceX96, false) >> 32) +
-            (twapLyX96 << 96) /
-            twapSqrtPriceX96;
-        uint256 myTwapValue = FullMath.mulX128(x, uint256(twapSqrtPriceX96) << 32, false) +
-            (y << 96) /
-            twapSqrtPriceX96;
 
         if (roundUp) {
-            uint128 liq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
-            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myTwapValue, X96, twapLiqValueX96));
-            equivLiq = liq > twapLiq ? liq : twapLiq;
+            equivLiq = SafeCast.toUint128(FullMath.mulDivRoundingUp(myValue, X96, liqValueX96));
         } else {
-            uint128 liq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
-            uint128 twapLiq = SafeCast.toUint128(FullMath.mulDiv(myTwapValue, X96, twapLiqValueX96));
-            equivLiq = liq > twapLiq ? liq : twapLiq;
+            equivLiq = SafeCast.toUint128(FullMath.mulDiv(myValue, X96, liqValueX96));
         }
     }
 
@@ -429,7 +411,7 @@ library PoolLib {
         if (delta < 0) {
             // V4: negative delta = caller must pay the pool manager.
             manager.sync(currency);
-            IERC20(token).transfer(address(manager), uint256(-delta));
+            IERC20(token).safeTransfer(address(manager), uint256(-delta));
             manager.settle();
         } else if (delta > 0) {
             // V4: positive delta = pool manager owes us tokens.

@@ -22,10 +22,6 @@ contract AdminFacet is TimedAdminFacet {
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
     event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
-    event TwapIntervalSet(address indexed pool, uint32 interval);
-    event DefaultTwapIntervalSet(uint32 interval);
-
-    error InvalidZeroInterval();
     error FullUtilizationUnhandled(uint128 maxUtilX64);
 
     /* Taker related */
@@ -68,20 +64,6 @@ contract AdminFacet is TimedAdminFacet {
         emit SplitCurveSet(pool, splitCurve);
     }
 
-    function setTwapInterval(address pool, uint32 interval) external {
-        require(interval > 0, InvalidZeroInterval());
-        AdminLib.validateOwner();
-        Store.fees().twapIntervals[pool] = interval;
-        emit TwapIntervalSet(pool, interval);
-    }
-
-    function setDefaultTwapInterval(uint32 interval) external {
-        require(interval > 0, InvalidZeroInterval());
-        AdminLib.validateOwner();
-        Store.fees().defaultTwapInterval = interval;
-        emit DefaultTwapIntervalSet(interval);
-    }
-
     function setJITPenalties(uint32 lifetime, uint64 penaltyX64) external {
         AdminLib.validateOwner();
         Store.fees().jitLifetime = lifetime;
@@ -96,14 +78,12 @@ contract AdminFacet is TimedAdminFacet {
         view
         returns (
             SmoothRateCurveConfig memory feeCurve,
-            SmoothRateCurveConfig memory splitCurve,
-            uint32 twapInterval
+            SmoothRateCurveConfig memory splitCurve
         )
     {
         FeeStore storage store = Store.fees();
         feeCurve = store.feeCurves[pool];
         splitCurve = store.splitCurves[pool];
-        twapInterval = store.twapIntervals[pool];
     }
 
     function getDefaultFeeConfig()
@@ -112,7 +92,6 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint32 twapInterval,
             uint32 jitLifetime,
             uint64 jitPenaltyX64
         )
@@ -120,7 +99,6 @@ contract AdminFacet is TimedAdminFacet {
         FeeStore storage store = Store.fees();
         feeCurve = store.defaultFeeCurve;
         splitCurve = store.defaultSplitCurve;
-        twapInterval = store.defaultTwapInterval;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;
     }
