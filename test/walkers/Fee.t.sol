@@ -31,7 +31,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
     function testEmptyWalk() public {
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Route setup.
         Route memory route = RouteImpl.make(25600, 400, 13000);
@@ -54,7 +54,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
     /// Tests a single down call
     function testDown() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // First test the case that we are at a leaf, and it converts the unclaims to real fees.
         Key key = KeyImpl.make(10, 1);
@@ -68,7 +68,6 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         n.liq.tLiq = 100e10;
         n.liq.xTLiq = 0;
         FeeWalker.down(key, false, data);
-        assertEq(n.fees.xCFees, 100e18, "1");
         assertEq(n.fees.makerXFeesPerLiqX128, 1e8 << 128, "2");
         assertEq(n.fees.makerYFeesPerLiqX128, 0, "3");
         assertEq(n.fees.xTakerFeesPerLiqX128, 0, "4");
@@ -76,7 +75,6 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         // Without more unclaims, nothing changes.
         n.liq.mLiq = 50e10;
         FeeWalker.down(key, false, data);
-        assertEq(n.fees.xCFees, 100e18, "6");
         // The rates don't change.
         assertEq(n.fees.makerXFeesPerLiqX128, 1e8 << 128, "7");
         assertEq(n.fees.makerYFeesPerLiqX128, 0, "8");
@@ -146,7 +144,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
 
     function testUp() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
 
         // First test a leaf visit.
@@ -250,8 +248,6 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         data.fees.rightColTakerYEarningsPerLiqX128 = 19;
         FeeWalker.up(key, false, data);
         // Since fee rates are per liq, when we merge them into the combined range, they're just added together.
-        assertEq(n.fees.xCFees, 0);
-        assertEq(n.fees.yCFees, 0);
         assertEq(n.fees.makerXFeesPerLiqX128, 20, "25");
         assertEq(n.fees.makerYFeesPerLiqX128, 40, "26");
         assertEq(n.fees.takerXFeesPerLiqX128, 30, "27");
@@ -291,14 +287,10 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         n.fees.takerYFeesPerLiqX128 = 0;
         FeeWalker.up(key, false, data);
         // We get maker fees in both cuz of the subtree borrows.
-        assertGt(rightNode.fees.xCFees, 0, "34");
-        assertGt(rightNode.fees.yCFees, 0, "35");
         // but we only get taker fee rates in Y since the price is above range.
         assertEq(rightNode.fees.takerXFeesPerLiqX128, 0, "36");
         assertGt(rightNode.fees.takerYFeesPerLiqX128, 0, "37");
         // The fees get propogated up.
-        assertGt(n.fees.xCFees, 0, "38");
-        assertGt(n.fees.yCFees, 0, "39");
         // And taker now pays x fees since it got combined.
         assertEq(n.fees.takerXFeesPerLiqX128, 30, "40");
         assertGt(n.fees.makerYFeesPerLiqX128, 40, "41");
@@ -309,7 +301,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
     function testLeftRightWeights() public {
         // Just test that left/right weights are computed without issue.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         // Everything is zero right now. So weights should be equal for both sides.
         (uint256 lw, uint256 rw) = FeeWalker.getLeftRightWeights(data.liq, data.fees, node.liq, left.liq, right.liq, 8);
@@ -396,7 +388,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
 
     function testChargeTrueFeeRate() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         data.timestamp = uint128(block.timestamp) - 1;
         console.log("price", pInfo.sqrtPriceX96);
@@ -446,25 +438,14 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         assertGt(cty, 1, "cty3");
         assertGt(cmx, 0, "cmx3");
         assertApproxEqRel(cty / 16, cmy, 2e12, "cmy3"); // Why is there this much error? TODO
-        assertNotEq(node.fees.xCFees, 0, "xcfees03");
-        assertNotEq(node.fees.yCFees, 0, "ycfees03");
-        assertEq(node.fees.xCFees, (node.liq.mLiq * cmx) >> 128, "xCFees3");
-        assertEq(node.fees.yCFees, (node.liq.mLiq * cmy) >> 128, "yCFees3");
         // If we drop some of the compounding mliq and added ncliq the rates might stay the same
         // but fewer cFees will be given.
-        uint256 oldXCFees = node.fees.xCFees;
-        uint256 oldYCFees = node.fees.yCFees;
-        node.fees.xCFees = 0;
-        node.fees.yCFees = 0;
-        node.liq.ncLiq = 10e18; // Gets subtracted from the overall mliq.
         rates = FeeWalker.chargeTrueFeeRate(key, node, data);
         (uint256 cmx2, uint256 cmy2, uint256 ctx2, uint256 cty2) = (rates[0], rates[1], rates[2], rates[3]);
         assertEq(ctx, ctx2, "ctx4");
         assertEq(cty, cty2, "cty4");
         assertEq(cmx, cmx2, "cmx4");
         assertEq(cmy, cmy2, "cmy4");
-        assertEq(node.fees.xCFees, oldXCFees / 2, "xCFees4");
-        assertEq(node.fees.yCFees, oldYCFees / 2, "yCFees4");
 
         // Even without borrows, a prefix tliq will create borrows.
         node.liq.subtreeTLiq = 0;
@@ -489,7 +470,6 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
         data.liq.tLiqPrefix = 150e18;
         node.liq.mLiq = 0;
         node.liq.tLiq = 0;
-        node.liq.ncLiq = 0;
         (Key leftKey, Key rightKey) = key.children();
         Node storage leftChild = data.node(leftKey);
         Node storage rightChild = data.node(rightKey);
@@ -525,7 +505,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
     /// Can try with different weights and borrow splits.
     function testChildSplit() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
 
         // First test that zero/zero works fine.
@@ -714,7 +694,7 @@ contract FeeWalkerTest is Test, UniV4IntegrationSetup {
 
     function testAdd128Fees() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1);
         assertEq(110, FeeWalker.add128Fees(50, 60, data, true));
         assertEq(120, FeeWalker.add128Fees(50, 70, data, false));

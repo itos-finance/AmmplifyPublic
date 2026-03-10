@@ -122,7 +122,6 @@ contract Ammplify is AmmplifyForkBase {
         // bytes calldata rftData
         decomposer.decompose(
             tokenId,
-            false,
             TickMath.getSqrtRatioAtTick(tickLower),
             TickMath.getSqrtRatioAtTick(tickUpper),
             ""

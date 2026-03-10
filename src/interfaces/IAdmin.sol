@@ -37,7 +37,6 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval
         );
 
@@ -47,7 +46,6 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint64 jitLifetime,
             uint64 jitPenaltyX64
         );

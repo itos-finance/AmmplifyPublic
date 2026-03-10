@@ -8,14 +8,13 @@ import { Phase } from "../tree/Route.sol";
 import { FullMath } from "../FullMath.sol";
 import { Asset, AssetNode } from "../Asset.sol";
 import { PoolInfo, PoolLib } from "../Pool.sol";
-import { FeeLib } from "../Fee.sol";
 import { FeeStore } from "../Fee.sol";
 import { FeeWalker } from "./Fee.sol";
 import { Store } from "../Store.sol";
 import { SafeCast } from "Commons/Math/Cast.sol";
 
 enum LiqType {
-    MAKER,
+    _DEPRECATED_MAKER, // Formerly compounding maker, no longer used.
     MAKER_NC,
     TAKER
 }
@@ -24,8 +23,6 @@ enum LiqType {
 struct LiqNode {
     uint128 mLiq;
     uint128 tLiq;
-    uint128 ncLiq;
-    uint128 shares; // Total shares of compounding maker liq.
     // This is updated after all changes to mliq are completed.
     uint256 subtreeMLiq;
     uint256 subtreeTLiq;
@@ -56,33 +53,15 @@ library LiqNodeImpl {
     /// The top bit of the dirty byte is reserved for PoolWalker's use.
     uint8 public constant RESERVED_DIRTY_FLAG = 1 << 7;
 
-    function compound(LiqNode storage self, uint128 compoundedLiq) internal returns (bool compounded) {
-        if (compoundedLiq == 0) {
-            return false;
-        }
-        if (compoundedLiq > MAX_MLIQ - self.mLiq) {
-            return false;
-        }
-
-        self.mLiq += compoundedLiq;
-        setDirty(self);
-        return true;
-    }
-
     /// The net liquidity owned by the node's position.
     function net(LiqNode storage self) internal view returns (int128) {
         // Ensure liquidity at each node won't be greater than 2^127 - 1.
         return SafeCast.toInt128(self.borrowed + self.mLiq) - SafeCast.toInt128(self.tLiq + self.lent);
     }
 
-    /// @notice Splits balance between compounding and non-compounding maker liquidity.
-    /// @dev Callers should check if the mliq is non-zero first.
-    /// @return c The nominal amount of fees collected for compounding makers.
-    /// @return nonCX128 The rate earned per non-compounding liq.
-    function splitMakerFees(LiqNode storage self, uint256 nominal) internal view returns (uint128 c, uint256 nonCX128) {
-        // Every mliq earns the same rate here. We round down for everyone to avoid overcollection of dust.
-        nonCX128 = (uint256(nominal) << 128) / self.mLiq;
-        c = uint128(nominal - FullMath.mulX128(nonCX128, self.ncLiq, true)); // Round up to subtract down.
+    /// @dev All maker fees go to per-liq rates since there is no compounding split.
+    function makerFeesPerLiqX128(LiqNode storage self, uint256 nominal) internal view returns (uint256) {
+        return (uint256(nominal) << 128) / self.mLiq;
     }
 
     function setDirty(LiqNode storage self) internal {
@@ -106,7 +85,6 @@ library LiqNodeImpl {
 struct LiqData {
     LiqType liqType;
     uint128 liq; // The target liquidity to set the asset node's liq to.
-    uint128 compoundThreshold; // The min liquidity worth compounding.
     // Prefix info
     uint128 mLiqPrefix; // Current prefix of maker liquidity.
     uint128 tLiqPrefix; // Current prefix of taker liquidity.
@@ -133,7 +111,6 @@ library LiqDataLib {
             LiqData({
                 liqType: asset.liqType,
                 liq: targetLiq,
-                compoundThreshold: FeeLib.getCompoundThreshold(pInfo.poolAddr),
                 mLiqPrefix: 0,
                 tLiqPrefix: 0,
                 rootMLiq: 0,
@@ -149,9 +126,7 @@ library LiqDataLib {
 }
 
 library LiqWalker {
-    // When calculating shares for compounding liq, we use virtual share accounting to avoid inflation attacks.
-    uint128 public constant VIRTUAL_LIQ = 1;
-    uint128 public constant VIRTUAL_SHARES = type(uint32).max;
+    uint128 public constant MIN_BORROW_THRESHOLD = 1e12;
 
     error InsufficientBorrowLiquidity(int256 netLiq);
     error InsufficientStandingFees(uint256 required, uint128 available, bool isX);
@@ -173,16 +148,15 @@ library LiqWalker {
             iter = LiqIter({ key: key, width: key.width(), lowTick: lowTick, highTick: highTick });
         }
 
-        // Compound first.
-        compound(iter, node, data);
+        // Update fee checkpoints first.
+        updateFeeCheckpoints(iter, node, data);
 
         // Do the modifications.
         if (visit) {
             modify(iter, node, data, data.liq.liq);
         }
 
-        // Update subtree liqs.
-        // We assume we're basically always compounding so we always have to update subtrees.
+        // Update subtree liqs after modifications.
         if (iter.width > 1) {
             (Key lk, Key rk) = key.children();
             Node storage lNode = data.node(lk);
@@ -227,15 +201,11 @@ library LiqWalker {
 
     /* Helpers */
 
-    /// Compounding's first step is to actually collect the base pool fees (for both makers and takers).
-    /// So this is a crucial step to always call when walking over any node.
-    /// @dev We update the taker fees here
-    function compound(LiqIter memory iter, Node storage node, Data memory data) internal {
-        // Collect fees here BUT these may not be this node's actual fees to compound because it could be BORROWED liq
-        // from a parent node. Therefore, we have to rely on inside fee rates to calc compounds despite potentially
-        // having more fees than that.
+    /// Collect pool fees and update fee checkpoints for this node.
+    /// @dev Must be called on every node during the up walk to keep fee accounting accurate.
+    function updateFeeCheckpoints(LiqIter memory iter, Node storage node, Data memory data) internal {
+        // Collect fees from V4 pool positions at this node.
         if (node.liq.net() > 0) {
-            // But we do track the actual fee balances given so that we know how much we can actually compound.
             (uint256 xCollected, uint256 yCollected) = PoolLib.collect(
                 data.poolAddr,
                 iter.lowTick,
@@ -245,7 +215,7 @@ library LiqWalker {
             data.liq.xFeesCollected = FeeWalker.add128Fees(data.liq.xFeesCollected, xCollected, data, true);
             data.liq.yFeesCollected = FeeWalker.add128Fees(data.liq.yFeesCollected, yCollected, data, false);
         }
-        // Now we calculate what swap fees are earned by makers and owed by the taker borrows.
+        // Calculate swap fees earned by makers and owed by taker borrows.
         (uint256 newFeeGrowthInside0X128, uint256 newFeeGrowthInside1X128) = PoolLib.getInsideFees(
             data.poolAddr,
             data.currentTick,
@@ -260,11 +230,10 @@ library LiqWalker {
             feeDiffInside0X128 = newFeeGrowthInside0X128 - node.liq.feeGrowthInside0X128;
             feeDiffInside1X128 = newFeeGrowthInside1X128 - node.liq.feeGrowthInside1X128;
         }
-        // This raw fee growth is what's owed by Takers.
         node.liq.feeGrowthInside0X128 = newFeeGrowthInside0X128;
         node.liq.feeGrowthInside1X128 = newFeeGrowthInside1X128;
 
-        // The taker fees owed are covered by the collaterals they post, so those fees can be compounded.
+        // Taker fees owed are covered by their collateral, counted as collected fees.
         data.liq.xFeesCollected = FeeWalker.add128Fees(
             data.liq.xFeesCollected,
             FullMath.mulX128(node.liq.tLiq, feeDiffInside0X128, false),
@@ -278,53 +247,14 @@ library LiqWalker {
             false
         );
 
-        // If we have no maker liq in this node, then there is nothing to compound.
-        if (node.liq.mLiq == 0) return;
-
-        // Otherwise, the fees should have been collected (or are available from collateral)
-        // and we can compound.
-        uint256 x = FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false);
-        uint256 y = FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false);
-
-        uint256 nonCX128;
-        (x, nonCX128) = node.liq.splitMakerFees(x);
-        node.fees.makerXFeesPerLiqX128 += nonCX128;
-        node.fees.xCFees = FeeWalker.add128Fees(node.fees.xCFees, x, data, true);
-
-        (y, nonCX128) = node.liq.splitMakerFees(y);
-        node.fees.makerYFeesPerLiqX128 += nonCX128;
-        node.fees.yCFees = FeeWalker.add128Fees(node.fees.yCFees, y, data, false);
-
-        // See how much we can actually compound.
-        uint128 availableCompoundX = data.liq.xFeesCollected < node.fees.xCFees
-            ? data.liq.xFeesCollected
-            : node.fees.xCFees;
-        uint128 availableCompoundY = data.liq.yFeesCollected < node.fees.yCFees
-            ? data.liq.yFeesCollected
-            : node.fees.yCFees;
-        (uint128 assignableLiq, uint128 leftoverX, uint128 leftoverY) = PoolLib.getAssignableLiq(
-            iter.lowTick,
-            iter.highTick,
-            availableCompoundX,
-            availableCompoundY,
-            data.sqrtPriceX96
-        );
-
-        if (assignableLiq < data.liq.compoundThreshold) {
-            // Not worth compounding right now.
-            return;
-        }
-
-        if (node.liq.compound(assignableLiq)) {
-            // If we can't compound (cuz of overflow), we don't update the fees.
-            uint128 usedX = availableCompoundX - leftoverX;
-            uint128 usedY = availableCompoundY - leftoverY;
-            data.liq.xFeesCollected -= usedX;
-            data.liq.yFeesCollected -= usedY;
-            data.compoundSpendX += usedX;
-            data.compoundSpendY += usedY;
-            node.fees.xCFees -= usedX;
-            node.fees.yCFees -= usedY;
+        // All maker fees go directly to per-liq rates.
+        if (node.liq.mLiq > 0) {
+            node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(
+                FullMath.mulX128(node.liq.mLiq, feeDiffInside0X128, false)
+            );
+            node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(
+                FullMath.mulX128(node.liq.mLiq, feeDiffInside1X128, false)
+            );
         }
     }
 
@@ -339,78 +269,11 @@ library LiqWalker {
         bool dirty = true;
         uint128 targetSliq = targetLiq; // Only changed in the MAKER case
 
-        if (data.liq.liqType == LiqType.MAKER) {
-            // If this compounding liq balance overflows, the pool cannot be on reasonable tokens,
-            // hence we allow the overflow error to revert. This won't affect other pools.
-            uint128 compoundingLiq = node.liq.mLiq - node.liq.ncLiq + VIRTUAL_LIQ;
-            {
-                // For adding liquidity, we need to consider existing fees
-                // and what amount of equivalent liq they're worth.
-                uint128 equivLiq = PoolLib.getEquivalentLiq(
-                    iter.lowTick,
-                    iter.highTick,
-                    node.fees.xCFees,
-                    node.fees.yCFees,
-                    data.sqrtPriceX96,
-                    data.twapSqrtPriceX96,
-                    true
-                );
-                compoundingLiq += equivLiq;
-            }
-            // We ONLY use virtual shares when adding and removing compounding liq.
-            // All fee calculations, liquidity minted/burned etc. are done using real liq values.
-            uint128 nodeShares = node.liq.shares + VIRTUAL_SHARES;
-            // The shares we'll have afterwards.
-            targetSliq = SafeCast.toUint128(FullMath.mulDiv(nodeShares, targetLiq, compoundingLiq));
-            if (sliq < targetSliq) {
-                uint128 sliqDiff = targetSliq - sliq;
-                uint128 liqDiff = uint128(FullMath.mulDivRoundingUp(compoundingLiq, sliqDiff, nodeShares));
-                node.liq.mLiq += liqDiff;
-                node.liq.shares += sliqDiff;
-                if (!node.liq.initialized) {
-                    liqDiff += 1;
-                }
-                (uint256 xNeeded, uint256 yNeeded) = data.computeBalances(iter.key, liqDiff, true);
-                data.xBalance += int256(xNeeded);
-                data.yBalance += int256(yNeeded);
-            } else if (sliq > targetSliq) {
-                uint256 shareRatioX256;
-                {
-                    uint128 sliqDiff = sliq - targetSliq;
-                    node.liq.shares -= sliqDiff;
-                    shareRatioX256 = FullMath.mulDivX256(sliqDiff, nodeShares, false);
-                }
-                {
-                    // When subtracting shares, the actual liq removed is based on the real liq without the equiv liq
-                    // since we'll be removing the fees directly as well.
-                    uint128 realCLiq = node.liq.mLiq - node.liq.ncLiq + VIRTUAL_LIQ;
-                    uint128 liq = uint128(FullMath.mulX256(realCLiq, shareRatioX256, false));
-                    node.liq.mLiq -= liq;
-                    // Claim the balances from the liquidity itself.
-                    (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liq, false);
-                    data.xBalance -= int256(xOwed);
-                    data.yBalance -= int256(yOwed);
-                }
-                // Now claim your fees.
-                {
-                    uint256 xClaim = FullMath.mulX256(node.fees.xCFees, shareRatioX256, false);
-                    node.fees.xCFees -= uint128(xClaim);
-                    data.xFees += xClaim;
-                }
-                {
-                    uint256 yClaim = FullMath.mulX256(node.fees.yCFees, shareRatioX256, false);
-                    node.fees.yCFees -= uint128(yClaim);
-                    data.yFees += yClaim;
-                }
-            } else {
-                dirty = false;
-            }
-        } else if (data.liq.liqType == LiqType.MAKER_NC) {
+        if (data.liq.liqType == LiqType.MAKER_NC) {
             if (sliq < targetLiq) {
                 uint128 liqDiff = targetLiq - sliq;
                 sliq = targetLiq;
                 node.liq.mLiq += liqDiff;
-                node.liq.ncLiq += liqDiff;
                 if (!node.liq.initialized) {
                     liqDiff += 1;
                 }
@@ -420,7 +283,6 @@ library LiqWalker {
             } else if (sliq > targetLiq) {
                 uint128 liqDiff = sliq - targetLiq;
                 node.liq.mLiq -= liqDiff;
-                node.liq.ncLiq -= liqDiff;
                 // Now we claim the balances from the liquidity itself.
                 (uint256 xOwed, uint256 yOwed) = data.computeBalances(iter.key, liqDiff, false);
                 data.xBalance -= int256(xOwed);
@@ -519,7 +381,7 @@ library LiqWalker {
             }
             repayable = min(repayable, uint128(sibLiq));
             repayable = min(repayable, sibling.liq.borrowed);
-            if (repayable <= data.liq.compoundThreshold) {
+            if (repayable <= MIN_BORROW_THRESHOLD) {
                 // Below the compound threshold it's too small to worth repaying.
                 return;
             }
@@ -553,9 +415,9 @@ library LiqWalker {
             Node storage sibling = data.node(sibKey);
             Node storage parent = data.node(parentKey);
             int128 borrow = -netLiq;
-            if (borrow < int128(data.liq.compoundThreshold)) {
+            if (borrow < int128(MIN_BORROW_THRESHOLD)) {
                 // We borrow at least this amount.
-                borrow = int128(data.liq.compoundThreshold);
+                borrow = int128(MIN_BORROW_THRESHOLD);
             }
             data.modifyPreLend(parentKey, borrow);
             parent.liq.setDirty();

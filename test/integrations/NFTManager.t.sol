@@ -127,7 +127,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV4IntegrationSetu
             LOW_TICK, // lowTick
             HIGH_TICK, // highTick
             LIQUIDITY, // liq
-            false, // isCompounding
             uint128(MIN_SQRT_RATIO), // minSqrtPriceX96
             uint128(MAX_SQRT_RATIO), // maxSqrtPriceX96
             rftData // rftData
@@ -183,7 +182,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV4IntegrationSetu
         // Now decompose and mint the position
         (uint256 tokenId, uint256 assetId) = nftManager.decomposeAndMint(
             positionId, // positionId
-            true, // isCompounding
             uint128(MIN_SQRT_RATIO), // minSqrtPriceX96
             uint128(MAX_SQRT_RATIO), // maxSqrtPriceX96
             rftData // rftData
@@ -238,7 +236,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV4IntegrationSetu
             LOW_TICK, // lowTick
             HIGH_TICK, // highTick
             LIQUIDITY, // liq
-            false, // isCompounding
             uint128(MIN_SQRT_RATIO), // minSqrtPriceX96
             uint128(MAX_SQRT_RATIO), // maxSqrtPriceX96
             rftData // rftData
@@ -282,7 +279,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV4IntegrationSetu
             LOW_TICK, // lowTick
             HIGH_TICK, // highTick
             LIQUIDITY, // liq
-            false, // isCompounding
             uint128(MIN_SQRT_RATIO), // minSqrtPriceX96
             uint128(MAX_SQRT_RATIO), // maxSqrtPriceX96
             rftData // rftData
@@ -327,7 +323,6 @@ contract NFTManagerTest is MultiSetupTest, IERC721Receiver, UniV4IntegrationSetu
             LOW_TICK, // lowTick
             HIGH_TICK, // highTick
             LIQUIDITY, // liq
-            false, // isCompounding
             uint128(MIN_SQRT_RATIO), // minSqrtPriceX96
             uint128(MAX_SQRT_RATIO), // maxSqrtPriceX96
             rftData // rftData

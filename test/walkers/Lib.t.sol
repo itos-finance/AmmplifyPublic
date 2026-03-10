@@ -11,7 +11,7 @@ import { Pool, PoolInfo, PoolLib, PoolValidation } from "../../src/Pool.sol";
 import { UniV4IntegrationSetup } from "../UniV4.u.sol";
 import { Asset, AssetLib } from "../../src/Asset.sol";
 import { TreeTickLib } from "../../src/tree/Tick.sol";
-import { WalkerLib, CompoundWalkerLib } from "../../src/walkers/Lib.sol";
+import { WalkerLib } from "../../src/walkers/Lib.sol";
 import { PoolWalker } from "../../src/walkers/Pool.sol";
 import { Store } from "../../src/Store.sol";
 import { FeeLib } from "../../src/Fee.sol";
@@ -34,8 +34,8 @@ contract WalkerLibTest is Test, UniV4IntegrationSetup {
     function testWalksWork() public {
         // Generic data setup.
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        console.log("compounding");
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        console.log("maker");
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
         WalkerLib.modify(pInfo, -100, 100, data);
 
@@ -43,7 +43,7 @@ contract WalkerLibTest is Test, UniV4IntegrationSetup {
         PoolWalker.settle(pInfo, -100, 100, data);
 
         console.log("non-compounding");
-        (asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, false);
+        (asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
         WalkerLib.modify(pInfo, -100, 100, data);
         PoolWalker.settle(pInfo, -100, 100, data);
@@ -57,7 +57,7 @@ contract WalkerLibTest is Test, UniV4IntegrationSetup {
 
     function testWalkAddRemove() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, true);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
         WalkerLib.modify(pInfo, -100, 100, data);
         PoolWalker.settle(pInfo, -100, 100, data);
@@ -67,16 +67,9 @@ contract WalkerLibTest is Test, UniV4IntegrationSetup {
 
     function testEmptyNCWalk() public {
         PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24, false);
+        (Asset storage asset, ) = AssetLib.newMaker(msg.sender, pInfo, -100, 100, 1e24);
         Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 1e24);
         WalkerLib.modify(pInfo, -100, 100, data);
-    }
-
-    function testCompound() public {
-        PoolInfo memory pInfo = PoolLib.getPoolInfo(pools[0]);
-        Asset storage asset = AssetLib.nullAsset();
-        Data memory data = DataImpl.make(pInfo, asset, 0, type(uint160).max, 0);
-        CompoundWalkerLib.compound(pInfo, -100, 100, data);
     }
 
     function testEmptyTakerFails() public {

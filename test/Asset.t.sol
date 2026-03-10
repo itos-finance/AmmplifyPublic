@@ -21,7 +21,7 @@ contract AssetTest is Test {
 
         vm.warp(100);
 
-        (Asset storage assetNC, uint256 assetIdNC) = AssetLib.newMaker(owner, pInfoNC, -2000, 2000, 1e20, false);
+        (Asset storage assetNC, uint256 assetIdNC) = AssetLib.newMaker(owner, pInfoNC, -2000, 2000, 1e20);
 
         assertEq(assetIdNC, 1, "assetIdNC");
 
@@ -49,14 +49,14 @@ contract AssetTest is Test {
 
         vm.warp(200);
 
-        (Asset storage assetC, uint256 assetIdC) = AssetLib.newMaker(owner, pInfoC, -3000, 4000, 2e21, true);
+        (Asset storage assetC, uint256 assetIdC) = AssetLib.newMaker(owner, pInfoC, -3000, 4000, 2e21);
         assertEq(assetIdC, 2, "assetIdC");
 
         assertEq(assetC.owner, owner, "assetC.owner");
         assertEq(assetC.poolAddr, pInfoC.poolAddr, "assetC.poolAddr");
         assertEq(assetC.lowTick, -3000, "assetC.lowTick");
         assertEq(assetC.highTick, 4000, "assetC.highTick");
-        assertEq(uint8(assetC.liqType), uint8(LiqType.MAKER), "assetC.liqType");
+        assertEq(uint8(assetC.liqType), uint8(LiqType.MAKER_NC), "assetC.liqType");
         assertEq(assetC.liq, 2e21, "assetC.liq");
         assertEq(assetC.timestamp, 200, "assetC.timestamp");
 
@@ -141,7 +141,7 @@ contract AssetTest is Test {
         pInfo.poolAddr = makeAddr("pool");
 
         // maker
-        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (Asset storage maker, uint256 makerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         Asset storage gMaker = AssetLib.getAsset(makerId);
         assertEq(gMaker.owner, maker.owner, "gMaker.owner");
@@ -153,7 +153,7 @@ contract AssetTest is Test {
         assertEq(gMaker.timestamp, maker.timestamp, "gMaker.timestamp");
 
         // taker
-        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (Asset storage taker, uint256 takerId) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         Asset storage gTaker = AssetLib.getAsset(takerId);
         assertEq(gTaker.owner, taker.owner, "gTaker.owner");
@@ -174,9 +174,9 @@ contract AssetTest is Test {
         PoolInfo memory pInfo;
         pInfo.poolAddr = makeAddr("pool");
 
-        (, uint256 assetId1) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
-        (, uint256 assetId2) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
-        (, uint256 assetId3) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        (, uint256 assetId1) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
+        (, uint256 assetId2) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
+        (, uint256 assetId3) = AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove middle
         AssetLib.removeAsset(assetId2);
@@ -232,31 +232,31 @@ contract AssetTest is Test {
         // maker
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Add permission.
         AssetLib.addPermission(owner, msg.sender);
         assertTrue(AssetLib.viewPermission(owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove permission
         AssetLib.removePermission(owner, msg.sender);
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Add permissioned opener.
         AssetLib.addPermissionedOpener(msg.sender);
         assertTrue(AssetLib.viewPermission(owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // Remove permissioned opener.
         AssetLib.removePermissionedOpener(msg.sender);
         assertFalse(AssetLib.viewPermission(owner, msg.sender));
         vm.expectRevert(abi.encodeWithSelector(AssetLib.NotPermissioned.selector, owner, msg.sender));
-        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(owner, pInfo, -2000, 2000, 1e20);
 
         // But we can always open for ourselves.
-        AssetLib.newMaker(msg.sender, pInfo, -2000, 2000, 1e20, false);
+        AssetLib.newMaker(msg.sender, pInfo, -2000, 2000, 1e20);
     }
 }

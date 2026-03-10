@@ -74,7 +74,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -106,7 +105,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -136,7 +134,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            true, // compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -144,7 +141,7 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
 
         // Verify asset was created with compounding type
         (, , , , LiqType liqType, ) = viewFacet.getAssetInfo(assetId);
-        assertEq(uint8(liqType), uint8(LiqType.MAKER));
+        assertEq(uint8(liqType), uint8(LiqType.MAKER_NC));
     }
 
     function testNewMakerInvalidTicks() public {
@@ -159,7 +156,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             highTick, // high tick first
             lowTick, // low tick second
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -177,7 +173,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             0, // zero liquidity
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -195,7 +190,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false,
             maxSqrtPriceX96, // min > max
             minSqrtPriceX96,
             rftData
@@ -213,7 +207,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -253,7 +246,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -298,7 +290,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -333,7 +324,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false,
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -371,7 +361,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -465,7 +454,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -518,7 +506,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -559,7 +546,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             liquidity,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData
@@ -612,7 +598,6 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
             lowTick,
             highTick,
             excessiveLiq,
-            false, // non-compounding
             minSqrtPriceX96,
             maxSqrtPriceX96,
             rftData

@@ -72,13 +72,11 @@ contract AdminFacet is TimedAdminFacet {
 
     function setDefaultCompoundThreshold(uint128 threshold) external {
         AdminLib.validateOwner();
-        Store.fees().defaultCompoundThreshold = threshold;
         emit DefaultCompoundThresholdSet(threshold);
     }
 
     function setCompoundThreshold(address pool, uint128 threshold) external {
         AdminLib.validateOwner();
-        Store.fees().compoundThresholds[pool] = threshold;
         emit CompoundThresholdSet(pool, threshold);
     }
 
@@ -111,14 +109,12 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval
         )
     {
         FeeStore storage store = Store.fees();
         feeCurve = store.feeCurves[pool];
         splitCurve = store.splitCurves[pool];
-        compoundThreshold = store.compoundThresholds[pool];
         twapInterval = store.twapIntervals[pool];
     }
 
@@ -128,7 +124,6 @@ contract AdminFacet is TimedAdminFacet {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval,
             uint32 jitLifetime,
             uint64 jitPenaltyX64
@@ -137,7 +132,6 @@ contract AdminFacet is TimedAdminFacet {
         FeeStore storage store = Store.fees();
         feeCurve = store.defaultFeeCurve;
         splitCurve = store.defaultSplitCurve;
-        compoundThreshold = store.defaultCompoundThreshold;
         twapInterval = store.defaultTwapInterval;
         jitLifetime = store.jitLifetime;
         jitPenaltyX64 = store.jitPenaltyX64;

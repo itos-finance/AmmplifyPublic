@@ -29,7 +29,6 @@ contract GetFeeConfig is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval
         ) {
             console2.log("=== Fee Configuration ===");
@@ -49,7 +48,6 @@ contract GetFeeConfig is AmmplifyPositions {
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
             console2.log("");
             
-            console2.log("Compound Threshold:", compoundThreshold);
             console2.log("TWAP Interval:", twapInterval);
             console2.log("");
             
@@ -79,7 +77,6 @@ contract GetFeeConfig is AmmplifyPositions {
         try admin.getFeeConfig(poolAddress) returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
             uint32 twapInterval
         ) {
             console2.log("=== Fee Configuration ===");
@@ -99,7 +96,6 @@ contract GetFeeConfig is AmmplifyPositions {
             console2.log("  maxRateX64:", splitCurve.maxRateX64);
             console2.log("");
             
-            console2.log("Compound Threshold:", compoundThreshold);
             console2.log("TWAP Interval:", twapInterval);
             console2.log("");
             

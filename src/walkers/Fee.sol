@@ -28,8 +28,6 @@ struct FeeNode {
     // Note that these are uint128. They hold a fee balance which can grow unbounded.
     // However assuming 18 decimals, and a price of one trillion, earning 1 million a day, it would take
     // a year of not compounding to cause an overflow. We do have an escape hatch for fees just in case.
-    uint128 xCFees; // Fees collected in x for compounding liquidity.
-    uint128 yCFees; // Fees collected in y for compounding liquidity.
     uint128 unclaimedMakerXFees; // Unclaimed fees in x.
     uint128 unclaimedMakerYFees; // Unclaimed fees in y.
     uint128 unpaidTakerXFees; // Unpaid fees in x.
@@ -117,15 +115,9 @@ library FeeWalker {
             }
 
             if (node.liq.mLiq > 0) {
-                // If there is no mliq, fees wouldn't propogate down.
-                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerXFees);
-                node.fees.makerXFeesPerLiqX128 += nonCX128;
-                node.fees.xCFees += c;
+                node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(node.fees.unclaimedMakerXFees);
                 node.fees.unclaimedMakerXFees = 0;
-
-                (c, nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerYFees);
-                node.fees.makerYFeesPerLiqX128 += nonCX128;
-                node.fees.yCFees += c;
+                node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(node.fees.unclaimedMakerYFees);
                 node.fees.unclaimedMakerYFees = 0;
             }
 
@@ -175,14 +167,10 @@ library FeeWalker {
                 uint256 myLiq = node.liq.mLiq * width;
                 uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
                 node.fees.unclaimedMakerXFees -= uint128(myEarnings);
-                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(myEarnings);
-                node.fees.makerXFeesPerLiqX128 += nonCX128;
-                node.fees.xCFees += c;
+                node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(myEarnings);
                 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerYFees, myLiq, node.liq.subtreeMLiq);
                 node.fees.unclaimedMakerYFees -= uint128(myEarnings);
-                (c, nonCX128) = node.liq.splitMakerFees(myEarnings);
-                node.fees.makerYFeesPerLiqX128 += nonCX128;
-                node.fees.yCFees += c;
+                node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(myEarnings);
             }
         }
 
@@ -271,20 +259,6 @@ library FeeWalker {
             node.fees.takerYFeesPerLiqX128 += colTakerYRateX128;
             node.fees.makerXFeesPerLiqX128 += colMakerXRateX128;
             node.fees.makerYFeesPerLiqX128 += colMakerYRateX128;
-            // We round down to avoid overpaying dust.
-            uint256 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-            node.fees.xCFees = add128Fees(
-                node.fees.xCFees,
-                FullMath.mulX128(colMakerXRateX128, compoundingLiq, false),
-                data,
-                true
-            );
-            node.fees.yCFees = add128Fees(
-                node.fees.yCFees,
-                FullMath.mulX128(colMakerYRateX128, compoundingLiq, false),
-                data,
-                false
-            );
 
             // The children have already been charged their fees.
 
@@ -477,20 +451,6 @@ library FeeWalker {
         node.fees.takerYFeesPerLiqX128 += colRatesX128[3];
         node.fees.makerXFeesPerLiqX128 += colRatesX128[0];
         node.fees.makerYFeesPerLiqX128 += colRatesX128[1];
-
-        uint256 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-        node.fees.xCFees = add128Fees(
-            node.fees.xCFees,
-            FullMath.mulX128(colRatesX128[0], compoundingLiq, false),
-            data,
-            true
-        );
-        node.fees.yCFees = add128Fees(
-            node.fees.yCFees,
-            FullMath.mulX128(colRatesX128[1], compoundingLiq, false),
-            data,
-            false
-        );
         // Then we calculate the children's fees and split.
         if (
             childrenPaidEarned[0] > 0 ||
