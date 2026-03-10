@@ -23,8 +23,8 @@ struct FeeNode {
     uint256 xTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as x.
     uint256 yTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as y.
     // Maker fees including swap fees and lending earnings.
-    uint256 makerXFeesPerLiqX128; // Used for non-compounding makers
-    uint256 makerYFeesPerLiqX128; // Used for non-compounding makers
+    uint256 makerXFeesPerLiqX128; // Per-liquidity fee rate for makers.
+    uint256 makerYFeesPerLiqX128; // Per-liquidity fee rate for makers.
     // Note that these are uint128. They hold a fee balance which can grow unbounded.
     // However assuming 18 decimals, and a price of one trillion, earning 1 million a day, it would take
     // a year of not compounding to cause an overflow. We do have an escape hatch for fees just in case.

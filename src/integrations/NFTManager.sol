@@ -465,8 +465,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return The color string
      */
     function _getColorForLiqType(LiqType liqType) internal pure returns (string memory) {
-        if (liqType == LiqType._DEPRECATED_MAKER) return "#4CAF50"; // Green for deprecated maker
-        if (liqType == LiqType.MAKER_NC) return "#8BC34A"; // Light green for non-compounding maker
+        if (liqType == LiqType.MAKER_NC) return "#4CAF50"; // Green for maker
         if (liqType == LiqType.TAKER) return "#FF9800"; // Orange for taker
         return "#9E9E9E"; // Default gray
     }
@@ -477,8 +476,7 @@ contract NFTManager is ERC721, Ownable, RFTPayer, IERC721Receiver {
      * @return The string representation
      */
     function _getLiqTypeString(LiqType liqType) internal pure returns (string memory) {
-        if (liqType == LiqType._DEPRECATED_MAKER) return "Deprecated Maker";
-        if (liqType == LiqType.MAKER_NC) return "Non-Compounding Maker";
+        if (liqType == LiqType.MAKER_NC) return "Maker";
         if (liqType == LiqType.TAKER) return "Taker";
         return "Unknown";
     }

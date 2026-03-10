@@ -29,8 +29,6 @@ contract AdminFacetTest is MultiSetupTest, UniV4IntegrationSetup {
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
     event VaultAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
     event TwapIntervalSet(address indexed pool, uint32 interval);
@@ -118,22 +116,6 @@ contract AdminFacetTest is MultiSetupTest, UniV4IntegrationSetup {
         assertEq(storedSplitCurve.maxRateX64, testSplitCurve.maxRateX64);
     }
 
-    function testSetCompoundThreshold() public {
-        uint128 threshold = 1e18;
-        vm.expectEmit(true, false, false, true);
-        emit CompoundThresholdSet(testPool, threshold);
-
-        adminFacet.setCompoundThreshold(testPool, threshold);
-    }
-
-    function testSetDefaultCompoundThreshold() public {
-        uint128 threshold = 1e18;
-        vm.expectEmit(false, false, false, true);
-        emit DefaultCompoundThresholdSet(threshold);
-
-        adminFacet.setDefaultCompoundThreshold(threshold);
-    }
-
     function testSetTwapInterval() public {
         uint32 interval = 600;
         vm.expectEmit(true, false, false, true);
@@ -193,9 +175,6 @@ contract AdminFacetTest is MultiSetupTest, UniV4IntegrationSetup {
 
         vm.expectRevert(AdminLib.NotOwner.selector);
         adminFacet.setDefaultSplitCurve(testSplitCurve);
-
-        vm.expectRevert(AdminLib.NotOwner.selector);
-        adminFacet.setCompoundThreshold(testPool, 1e18);
 
         vm.expectRevert(AdminLib.NotOwner.selector);
         adminFacet.setJITPenalties(1 hours, 1e18);
