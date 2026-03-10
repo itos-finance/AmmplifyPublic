@@ -3,12 +3,11 @@ pragma solidity ^0.8.27;
 
 import { console2 as console } from "forge-std/console2.sol";
 
-import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
-import { TickMath } from "v3-core/libraries/TickMath.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { console } from "forge-std/console.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "../UniV3.u.sol";
+import { UniV4IntegrationSetup } from "../UniV4.u.sol";
 
 import { PoolInfo } from "../../src/Pool.sol";
 import { AmmplifyAdminRights } from "../../src/facets/Admin.sol";
@@ -19,14 +18,12 @@ import { RouteImpl } from "../../src/tree/Route.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
-/// @dev The minimum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MIN_TICK)
+/// @dev The minimum value that can be returned from #getSqrtPriceAtTick. Equivalent to getSqrtPriceAtTick(MIN_TICK)
 uint160 constant MIN_SQRT_RATIO = 4295128739;
-/// @dev The maximum value that can be returned from #getSqrtRatioAtTick. Equivalent to getSqrtRatioAtTick(MAX_TICK)
+/// @dev The maximum value that can be returned from #getSqrtPriceAtTick. Equivalent to getSqrtPriceAtTick(MAX_TICK)
 uint160 constant MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342;
 
-contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
-    UniswapV3Pool public pool;
-
+contract TakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
     address public recipient;
     address public poolAddr;
     int24[2] public ticks;
@@ -58,7 +55,15 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
     }
 
     function setUp() public {
-        _newDiamond(factory);
+        _newDiamond(manager);
+
+        (, address _pool, address _token0, address _token1) = setUpPool();
+        // Provide much more liquidity to support taker borrowing
+        // Add liquidity in a wider range with much larger amounts
+        addPoolLiq(0, -1200, 1200, 1000e18);
+
+        _registerPool(poolKeys[0]);
+
         // Grant TAKER rights to this test contract using the TimedAdmin system
         // Since this is a test, we'll submit rights and then time travel to accept them
         adminFacet.submitRights(address(this), AmmplifyAdminRights.TAKER, true);
@@ -74,18 +79,12 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         console.log("Test contract rights after granting:", rights);
         require(rights & AmmplifyAdminRights.TAKER != 0, "Failed to grant TAKER rights");
 
-        (, address _pool, address _token0, address _token1) = setUpPool();
-        // Provide much more liquidity to support taker borrowing
-        // Add liquidity in a wider range with much larger amounts
-        addPoolLiq(0, -1200, 1200, 1000e18);
-
         token0 = MockERC20(_token0);
         token1 = MockERC20(_token1);
-        pool = UniswapV3Pool(_pool);
 
         // Set up test parameters
         recipient = address(this);
-        poolAddr = address(pool);
+        poolAddr = _pool;
         ticks = [-600, 600];
 
         liquidity = 1e18;
@@ -94,6 +93,9 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         freezeSqrtPriceX96 = 3 << 95; // Above range, 1.5 = sqrt(price)
 
         poolInfo = viewFacet.getPoolInfo(poolAddr);
+
+        tokens.push(_token0);
+        tokens.push(_token1);
 
         // Fund this contract for testing
         _fundAccount(address(this));
@@ -652,7 +654,7 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         // Move price above the taker range (above tick 600)
         int24 targetTick = 800; // Move price outside the range
-        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtPriceAtTick(targetTick);
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value after price movement
@@ -727,7 +729,7 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         // Move price below the taker range (below tick -600)
         int24 targetTick = -800; // Move price outside the range
-        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtPriceAtTick(targetTick);
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value after price movement
@@ -802,7 +804,7 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         // Make a large price movement well outside the range
         int24 targetTick = 1000; // Large upward movement, well outside range
-        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtPriceAtTick(targetTick);
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value after large price movement
@@ -880,7 +882,7 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         // Move price outside range first
         int24 targetTick = 800;
-        uint160 targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        uint160 targetSqrtPriceX96 = TickMath.getSqrtPriceAtTick(targetTick);
         swapTo(0, targetSqrtPriceX96);
 
         // Verify position is valuable when out of range
@@ -894,7 +896,7 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         // Move price back into range
         targetTick = 0; // Back to center of range
-        targetSqrtPriceX96 = TickMath.getSqrtRatioAtTick(targetTick);
+        targetSqrtPriceX96 = TickMath.getSqrtPriceAtTick(targetTick);
         swapTo(0, targetSqrtPriceX96);
 
         // Query position value when back in range
@@ -1376,15 +1378,15 @@ contract TakerFacetTest is MultiSetupTest, UniV3IntegrationSetup {
             );
         }
 
-        swapTo(0, TickMath.getSqrtRatioAtTick(4260));
+        swapTo(0, TickMath.getSqrtPriceAtTick(4260));
         makerFacet.removeMaker(address(this), makerIds[0], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
         takerFacet.removeTaker(takerIds[0], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
 
-        swapTo(0, TickMath.getSqrtRatioAtTick(4800));
+        swapTo(0, TickMath.getSqrtPriceAtTick(4800));
         makerFacet.removeMaker(address(this), makerIds[1], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
         takerFacet.removeTaker(takerIds[1], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
 
-        swapTo(0, TickMath.getSqrtRatioAtTick(6000));
+        swapTo(0, TickMath.getSqrtPriceAtTick(6000));
         makerFacet.removeMaker(address(this), makerIds[2], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
         takerFacet.removeTaker(takerIds[2], sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], rftData);
     }

@@ -7,7 +7,8 @@ import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Strings } from "a@openzeppelin/contracts/utils/Strings.sol";
 import { IDiamond } from "Commons/Diamond/interfaces/IDiamond.sol";
 import { DiamondCutFacet } from "Commons/Diamond/facets/DiamondCutFacet.sol";
-import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
+import { PoolManager } from "v4-core/PoolManager.sol";
+import { PoolKey } from "v4-core/types/PoolKey.sol";
 import { VaultType } from "../src/vaults/Vault.sol";
 
 import { SimplexDiamond } from "../src/Diamond.sol";
@@ -18,7 +19,7 @@ import { PoolFacet } from "../src/facets/Pool.sol";
 import { ViewFacet } from "../src/facets/View.sol";
 import { PoolInfo } from "../src/Pool.sol";
 
-import { UniV3IntegrationSetup } from "./UniV3.u.sol";
+import { UniV4IntegrationSetup } from "./UniV4.u.sol";
 import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockERC4626 } from "./mocks/MockERC4626.sol";
 import { NonfungiblePositionManager } from "./mocks/nfpm/NonfungiblePositionManager.sol";
@@ -49,12 +50,12 @@ contract MultiSetupTest is Test {
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
 
-    function _newDiamond(UniswapV3Factory factory) internal {
-        _newDiamond(address(factory));
+    function _newDiamond(PoolManager _manager) internal {
+        _newDiamond(address(_manager));
     }
 
     /// Deploy the diamond and facets
-    function _newDiamond(address factory) internal {
+    function _newDiamond(address poolManager) internal {
         // Deploy facets first
         adminFacet = new AdminFacet();
         makerFacet = new MakerFacet();
@@ -71,8 +72,8 @@ contract MultiSetupTest is Test {
             viewFacet: address(viewFacet)
         });
 
-        // Deploy diamond with factory and facet addresses
-        diamond = address(new SimplexDiamond(factory, facetAddresses));
+        // Deploy diamond with pool manager and facet addresses
+        diamond = address(new SimplexDiamond(poolManager, facetAddresses));
 
         // Cast facets to diamond address for interface access
         adminFacet = AdminFacet(diamond);
@@ -82,12 +83,17 @@ contract MultiSetupTest is Test {
         viewFacet = ViewFacet(diamond);
     }
 
-    function _deployNFPM(UniswapV3Factory factory) internal {
-        _deployNFPM(address(factory));
+    function _deployNFPM(PoolManager _manager) internal {
+        _deployNFPM(address(_manager));
     }
 
-    function _deployNFPM(address factory) internal {
-        nfpm = new NonfungiblePositionManager(factory, address(0), address(0));
+    function _deployNFPM(address poolManager) internal {
+        nfpm = new NonfungiblePositionManager(poolManager, address(0), address(0));
+    }
+
+    /// Register a V4 pool key with the diamond so it can interact with it.
+    function _registerPool(PoolKey memory poolKey) internal returns (address poolAddr) {
+        poolAddr = adminFacet.registerPool(poolKey);
     }
 
     /// Call this last since it messes with prank.

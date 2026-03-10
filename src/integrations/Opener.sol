@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
-import { TickMath } from "v3-core/libraries/TickMath.sol";
+import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { PoolLib, PoolInfo } from "../Pool.sol";
 import { IMaker } from "../interfaces/IMaker.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
@@ -91,8 +91,8 @@ contract Opener is ICapricornCLSwapCallback {
         // Calculate expected liquidity and token amounts upfront based on original liquidity calculation
         // This helps us determine the expected ratio when opening the position
         uint160 sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
-        uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(lowTick);
-        uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(highTick);
+        uint160 sqrtPriceAX96 = TickMath.getSqrtPriceAtTick(lowTick);
+        uint160 sqrtPriceBX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         // Calculate expected liquidity from the amountSwap and the user's tokenIn
         // We'll use amountSwap as the expected output, and calculate what liquidity we can get
@@ -252,7 +252,7 @@ contract Opener is ICapricornCLSwapCallback {
             address(this), // recipient
             zeroForOne,
             -int256(amountOut), // negative for exact output
-            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1, // no price limit
+            zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1, // no price limit
             "" // no callback data needed, we use storage
         );
 

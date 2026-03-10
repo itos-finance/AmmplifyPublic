@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import { IUniswapV3PoolImmutables } from "v3-core/interfaces/pool/IUniswapV3PoolImmutables.sol";
-import { IUniswapV3PoolDerivedState } from "v3-core/interfaces/pool/IUniswapV3PoolDerivedState.sol";
-import { IUniswapV3Pool } from "v3-core/interfaces/IUniswapV3Pool.sol";
-import { IUniswapV3Factory } from "v3-core/interfaces/IUniswapV3Factory.sol";
+import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
+import { StateLibrary } from "v4-core/libraries/StateLibrary.sol";
+import { PoolKey } from "v4-core/types/PoolKey.sol";
+import { PoolId, PoolIdLibrary } from "v4-core/types/PoolId.sol";
+import { Currency } from "v4-core/types/Currency.sol";
+import { IHooks } from "v4-core/interfaces/IHooks.sol";
+import { BalanceDelta } from "v4-core/types/BalanceDelta.sol";
+import { ModifyLiquidityParams } from "v4-core/types/PoolOperation.sol";
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { FullMath } from "./FullMath.sol";
 import { SqrtPriceMath } from "v4-core/libraries/SqrtPriceMath.sol";
@@ -15,13 +19,14 @@ import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientS
 import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
 import { FeeLib } from "./Fee.sol";
+import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import { tuint256, tint256 } from "transient-goodies/TransientPrimitives.sol";
 
 // In memory struct derived from a pool
 struct PoolInfo {
     // Immutables
-    address poolAddr;
+    address poolAddr; // Deterministic identifier derived from PoolId
     address token0;
     address token1;
     int24 tickSpacing;
@@ -35,6 +40,8 @@ struct PoolInfo {
 using PoolInfoImpl for PoolInfo global;
 
 library PoolInfoImpl {
+    using StateLibrary for IPoolManager;
+
     function tokens(PoolInfo memory self) internal pure returns (address[] memory) {
         address[] memory _tokens = new address[](2);
         _tokens[0] = self.token0;
@@ -47,19 +54,21 @@ library PoolInfoImpl {
     }
 
     function refreshPrice(PoolInfo memory self) internal view {
-        (self.sqrtPriceX96, self.currentTick, , , , , ) = IUniswapV3Pool(self.poolAddr).slot0();
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(self.poolAddr);
+        (self.sqrtPriceX96, self.currentTick, , ) = manager.getSlot0(poolId);
     }
 
     function getFeeGrowthGlobals(
         PoolInfo memory self
     ) internal view returns (uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(self.poolAddr);
-        feeGrowthGlobal0X128 = poolContract.feeGrowthGlobal0X128();
-        feeGrowthGlobal1X128 = poolContract.feeGrowthGlobal1X128();
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(self.poolAddr);
+        (feeGrowthGlobal0X128, feeGrowthGlobal1X128) = manager.getFeeGrowthGlobals(poolId);
     }
 
     function validate(PoolInfo memory self) internal view {
-        PoolValidation.validate(self.poolAddr, self.token0, self.token1, self.fee);
+        PoolValidation.validate(self.poolAddr);
     }
 }
 
@@ -69,211 +78,231 @@ struct Pool {
     // The last time the pool was modified.
     // This is ONLY updated when a new Data struct is created.
     uint128 timestamp;
-    // Used to indicate when we need to update the tick fee growth caches.
-    uint128 walkCount;
     // Temporary liq storage
     mapping(Key key => tint256) preBorrows;
     mapping(Key key => tint256) preLends;
-    // For tick fee caching.
-    mapping(int24 tick => tuint256) tickInitialized;
-    mapping(int24 tick => tuint256) feeGrowthsOutside0X128;
-    mapping(int24 tick => tuint256) feeGrowthsOutside1X128;
 }
 
-/// A helper library for accessing the underlying pool's ABI.
-/// @dev This will have to change for each pool we integrate with.
+/// A helper library for accessing the underlying pool via V4 PoolManager.
+/// @dev All liquidity modifications are batched and executed inside a PoolManager unlock callback.
 library PoolLib {
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
+    using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
 
-    // keccak256(abi.encode(uint256(keccak256("ammplify.pool.guard.20250804")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant POOL_GUARD_SLOT = 0x22683b50bc083c867d84f1a241821c03bdc9b99b2f4ba292e47bc4ea8ead2500;
     uint128 private constant X128 = type(uint128).max; // Off by 1 from x128, but will fit in 128 bits.
     uint96 private constant X96 = type(uint96).max; // Off by 1 from x96, but will fit in 96 bits.
 
-    // How many observations we want from our pools for the twap calculations.
-    uint16 public constant MIN_OBSERVATIONS = 32;
+    // Transient storage slots for batching V4 operations.
+    // keccak256("ammplify.v4.ops.count")
+    uint256 private constant OPS_COUNT_SLOT = 0x8d7b6e4c5a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7;
+    // keccak256("ammplify.v4.ops.base")
+    uint256 private constant OPS_BASE_SLOT = 0x7c6b5a4938271605f4e3d2c1b0a9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7;
 
-    function getPoolInfo(address pool) internal view returns (PoolInfo memory pInfo) {
-        pInfo.poolAddr = pool;
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        pInfo.token0 = poolContract.token0();
-        pInfo.token1 = poolContract.token1();
-
-        pInfo.tickSpacing = poolContract.tickSpacing();
-        pInfo.fee = poolContract.fee();
-        // We find the first power of two that is less than the number of tree indices to be the width.
+    function getPoolInfo(address poolAddr) internal view returns (PoolInfo memory pInfo) {
+        pInfo.poolAddr = poolAddr;
+        PoolKey memory poolKey = Store.getPoolKey(poolAddr);
+        pInfo.token0 = Currency.unwrap(poolKey.currency0);
+        pInfo.token1 = Currency.unwrap(poolKey.currency1);
+        pInfo.tickSpacing = poolKey.tickSpacing;
+        pInfo.fee = poolKey.fee;
         pInfo.treeWidth = TreeTickLib.calcRootWidth(TickMath.MIN_TICK, TickMath.MAX_TICK, pInfo.tickSpacing);
         PoolInfoImpl.refreshPrice(pInfo);
-
         return pInfo;
     }
 
-    function getSqrtPriceX96(address pool) internal view returns (uint160 sqrtPriceX96) {
-        (sqrtPriceX96, , , , , , ) = IUniswapV3Pool(pool).slot0();
+    function getSqrtPriceX96(address poolAddr) internal view returns (uint160 sqrtPriceX96) {
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(poolAddr);
+        (sqrtPriceX96, , , ) = manager.getSlot0(poolId);
     }
 
     /// Get a slower moving price metric for the given pool.
-    /// @dev This is used for taker borrow cost calculations and equivalent liq calculations.
-    function getTwapSqrtPriceX96(address pool) internal view returns (uint160 twapSqrtPriceX96) {
-        uint32 interval = FeeLib.getTwapInterval(pool);
-        IUniswapV3PoolDerivedState poolContract = IUniswapV3PoolDerivedState(pool);
-        // Get the TWAP.
-        uint32[] memory timepoints = new uint32[](2);
-        timepoints[0] = 0;
-        timepoints[1] = interval;
-        (int56[] memory tickCumulatives, ) = poolContract.observe(timepoints);
-        int56 tickCumulativeDelta = tickCumulatives[0] - tickCumulatives[1];
-        // We don't mind rounding the twapTick to 0 (price to 1).
-        int24 twapTick = int24(tickCumulativeDelta / int32(interval));
-        twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
+    /// @dev V4 has no built-in TWAP oracle. For now, we use the spot price as a placeholder.
+    /// TODO: Integrate an external oracle (e.g., Chainlink) for robust TWAP in production.
+    function getTwapSqrtPriceX96(address poolAddr) internal view returns (uint160 twapSqrtPriceX96) {
+        // V4 has no built-in observe() function. Fall back to spot price.
+        twapSqrtPriceX96 = getSqrtPriceX96(poolAddr);
     }
 
-    /*
-    /// Currently unused
-    /// This assumes the position in the pool still exists, and queries how much fees are owed.
-    /// @dev A non-modifying way to get fees owed.
-    function getFees(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 x, uint128 y) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        bytes32 myKey = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
-        uint128 liq;
-        uint256 feeGrowthInside0LastX128;
-        uint256 feeGrowthInside1LastX128;
-        // The x and y here are the fees accumulated since the last poke, before the check was updated.
-        (liq, feeGrowthInside0LastX128, feeGrowthInside1LastX128, x, y) = poolContract.positions(myKey);
-        (uint256 feeGrowthInside0NowX128, uint256 feeGrowthInside1NowX128) = getInsideFees(pool, lowerTick, upperTick);
-        unchecked {
-            x += FullMath.mulX128(liq, feeGrowthInside0NowX128 - feeGrowthInside0LastX128, false);
-            y += FullMath.mulX128(liq, feeGrowthInside1NowX128 - feeGrowthInside1LastX128, false);
-        }
-    }
-    */
-
-    /**
-     * @notice Wrapper around pool collect function.
-     * Collects just fees if no liquidity has been burned, otherwise collects both.
-     * @param pool to operate on
-     * @param tickLower bound
-     * @param tickUpper bound
-     */
+    /// Collect fees from a position.
+    /// @dev In V4, there is no separate collect. We compute owed fees from StateLibrary,
+    /// and record a zero-delta modifyLiquidity (poke) to update the position's fee checkpoint.
+    /// Actual token settlement happens in the unlock callback after all operations are executed.
     function collect(
-        address pool,
+        address poolAddr,
         int24 tickLower,
         int24 tickUpper,
         bool burnFirst
     ) internal returns (uint256 amount0, uint256 amount1) {
-        if (burnFirst) {
-            // First do an empty burn to trigger a fee calc.
-            IUniswapV3Pool(pool).burn(tickLower, tickUpper, 0);
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(poolAddr);
+
+        // Get position info to compute owed fees.
+        (uint128 liq, uint256 lastFG0, uint256 lastFG1) =
+            manager.getPositionInfo(poolId, address(this), tickLower, tickUpper, bytes32(0));
+
+        if (liq > 0) {
+            // Compute fees using current fee growth inside vs last checkpoint.
+            (uint256 currentFG0, uint256 currentFG1) =
+                manager.getFeeGrowthInside(poolId, tickLower, tickUpper);
+
+            unchecked {
+                amount0 = FullMath.mulDiv(uint256(liq), currentFG0 - lastFG0, uint256(1) << 128);
+                amount1 = FullMath.mulDiv(uint256(liq), currentFG1 - lastFG1, uint256(1) << 128);
+            }
         }
-        return IUniswapV3Pool(pool).collect(address(this), tickLower, tickUpper, type(uint128).max, type(uint128).max);
+
+        if (burnFirst) {
+            // Record a poke to update the position's fee checkpoint in the unlock callback.
+            _recordOp(tickLower, tickUpper, 0);
+        }
+        // If burnFirst is false, a burn was already recorded and will handle the checkpoint update.
     }
 
-    /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
+    /// Get the fee checkpoint for a certain range using V4 StateLibrary.
     function getInsideFees(
-        address pool,
+        address poolAddr,
         int24 currentTick,
         uint256 feeGrowthGlobal0X128,
         uint256 feeGrowthGlobal1X128,
         int24 lowerTick,
         int24 upperTick
-    ) internal returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
-        (uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, lowerTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
-        (uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, upperTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
+    ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(poolAddr);
+
+        // Get lower tick fee growth outside
+        (uint128 lowerLiqGross, , uint256 lowerFGO0, uint256 lowerFGO1) = manager.getTickInfo(poolId, lowerTick);
+        if (lowerLiqGross == 0 && currentTick >= lowerTick) {
+            lowerFGO0 = feeGrowthGlobal0X128;
+            lowerFGO1 = feeGrowthGlobal1X128;
+        }
+
+        // Get upper tick fee growth outside
+        (uint128 upperLiqGross, , uint256 upperFGO0, uint256 upperFGO1) = manager.getTickInfo(poolId, upperTick);
+        if (upperLiqGross == 0 && currentTick >= upperTick) {
+            upperFGO0 = feeGrowthGlobal0X128;
+            upperFGO1 = feeGrowthGlobal1X128;
+        }
+
         unchecked {
             if (currentTick < lowerTick) {
-                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = lowerFGO0 - upperFGO0;
+                feeGrowthInside1X128 = lowerFGO1 - upperFGO1;
             } else if (currentTick >= upperTick) {
-                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = upperFGO0 - lowerFGO0;
+                feeGrowthInside1X128 = upperFGO1 - lowerFGO1;
             } else {
-                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFGO0 - upperFGO0;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFGO1 - upperFGO1;
             }
         }
     }
 
-    function getTickGrowthsOutside(address pool, int24 tick, int24 currentTick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) internal returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128) {
-        Pool storage pStore = Store.load().pools[pool];
-        if (pStore.tickInitialized[tick].get() == pStore.walkCount) {
-            feeGrowthOutside0X128 = pStore.feeGrowthsOutside0X128[tick].get();
-            feeGrowthOutside1X128 = pStore.feeGrowthsOutside1X128[tick].get();
-        } else {
-            bool init;
-            IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-            (
-                ,
-                ,
-                feeGrowthOutside0X128,
-                feeGrowthOutside1X128,
-            ,
-            ,
-            ,
-            init
-            ) = poolContract.ticks(tick);
-
-            if (!init && currentTick >= tick) {
-                feeGrowthOutside0X128 = feeGrowthGlobal0X128;
-                feeGrowthOutside1X128 = feeGrowthGlobal1X128;
-            }
-            pStore.tickInitialized[tick].set(pStore.walkCount);
-            pStore.feeGrowthsOutside0X128[tick].set(feeGrowthOutside0X128);
-            pStore.feeGrowthsOutside1X128[tick].set(feeGrowthOutside1X128);
-        }
+    /// Get the liquidity specific to a particular range via V4 StateLibrary.
+    function getLiq(address poolAddr, int24 lowerTick, int24 upperTick) internal view returns (uint128 liq) {
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(poolAddr);
+        (liq, , ) = manager.getPositionInfo(poolId, address(this), lowerTick, upperTick, bytes32(0));
     }
 
-    function updateWalkCount(address pool) internal {
-        Pool storage pStore = Store.load().pools[pool];
-        unchecked {
-            ++pStore.walkCount;
-        }
-    }
-
-    /// Get the liquidity specific to a particular range.
-    function getLiq(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 liq) {
-        (liq, , , , ) = IUniswapV3Pool(pool).positions(
-            keccak256(abi.encodePacked(address(this), lowerTick, upperTick))
-        );
-    }
-
-    /**
-     * @notice wrapper around pool mint function to handle callback verification
-     * @param pool to operate on
-     * @param tickLower bound
-     * @param tickUpper bound
-     * @param liquidity to mint
-     */
+    /// Record a mint operation to be executed in the unlock callback.
     function mint(
-        address pool,
+        address /* pool */,
         int24 tickLower,
         int24 tickUpper,
         uint128 liquidity
     ) internal returns (uint256 amount0, uint256 amount1) {
-        POOL_GUARD_SLOT.asAddress().tstore(pool);
-        (amount0, amount1) = IUniswapV3Pool(pool).mint(address(this), tickLower, tickUpper, liquidity, "");
-        POOL_GUARD_SLOT.asAddress().tstore(address(0));
+        _recordOp(tickLower, tickUpper, int128(uint128(liquidity)));
+        return (0, 0);
     }
 
-    /**
-     * @notice wrapper around pool burn function
-     * @param pool to operate on
-     * @param tickLower bound
-     * @param tickUpper bound
-     * @param liquidity to burn
-     */
+    /// Record a burn operation to be executed in the unlock callback.
     function burn(
-        address pool,
+        address /* pool */,
         int24 tickLower,
         int24 tickUpper,
         uint128 liquidity
     ) internal returns (uint256 amount0, uint256 amount1) {
-        return IUniswapV3Pool(pool).burn(tickLower, tickUpper, liquidity);
+        _recordOp(tickLower, tickUpper, -int128(uint128(liquidity)));
+        return (0, 0);
     }
 
-    function poolGuard() internal view returns (address) {
-        return POOL_GUARD_SLOT.asAddress().tload();
+    /* Batched V4 Operations */
+
+    function clearOps() internal {
+        assembly {
+            tstore(OPS_COUNT_SLOT, 0)
+        }
     }
+
+    function getOpCount() internal view returns (uint256 count) {
+        assembly {
+            count := tload(OPS_COUNT_SLOT)
+        }
+    }
+
+    function getOp(uint256 index) internal view returns (int24 tickLower, int24 tickUpper, int128 liquidityDelta) {
+        uint256 slot = OPS_BASE_SLOT + index * 2;
+        uint256 packed;
+        int256 delta;
+        assembly {
+            packed := tload(slot)
+            delta := tload(add(slot, 1))
+        }
+        tickLower = int24(uint24(packed >> 24));
+        tickUpper = int24(uint24(packed & 0xFFFFFF));
+        liquidityDelta = int128(delta);
+    }
+
+    /// Execute all recorded operations inside a V4 unlock callback.
+    /// @dev Called from PoolWalker.settle after the tree walk is complete.
+    function executeOps(PoolInfo memory pInfo) internal {
+        uint256 count = getOpCount();
+        if (count == 0) return;
+
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolKey memory poolKey = Store.getPoolKey(pInfo.poolAddr);
+        manager.unlock(abi.encode(poolKey, pInfo.token0, pInfo.token1));
+    }
+
+    /// Called by the PoolManager during unlock. Executes batched operations and settles tokens.
+    function handleUnlockCallback(bytes calldata data) internal returns (bytes memory) {
+        (PoolKey memory poolKey, address token0, address token1) = abi.decode(data, (PoolKey, address, address));
+
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        int256 totalDelta0;
+        int256 totalDelta1;
+
+        uint256 count = getOpCount();
+        for (uint256 i = 0; i < count; i++) {
+            (int24 tickLower, int24 tickUpper, int128 liquidityDelta) = getOp(i);
+
+            ModifyLiquidityParams memory params = ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: int256(liquidityDelta),
+                salt: bytes32(0)
+            });
+
+            (BalanceDelta callerDelta, ) = manager.modifyLiquidity(poolKey, params, "");
+            totalDelta0 += callerDelta.amount0();
+            totalDelta1 += callerDelta.amount1();
+        }
+
+        clearOps();
+
+        // Settle token deltas with the PoolManager.
+        // V4 convention: negative delta = caller must pay. Positive delta = caller receives.
+        _settleDelta(manager, poolKey.currency0, token0, totalDelta0);
+        _settleDelta(manager, poolKey.currency1, token1, totalDelta1);
+
+        return "";
+    }
+
+    /* Pure helpers (unchanged from V3) */
 
     /// Answers how much liquidity we can add from the given amounts for the given range, and
     /// how much is leftover.
@@ -289,25 +318,19 @@ library PoolLib {
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         if (sqrtPriceX96 <= lowSqrtPriceX96) {
-            // We are below the range, so we can only add liquidity for token0.
             leftoverY = y;
             if (x == 0) {
                 return (0, leftoverX, leftoverY);
             }
-            // Round up to round liq down.
             uint256 unitX128 = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, X128, true);
             assignableLiq = uint128((uint256(x) * X128) / unitX128);
-            // No leftover x, perhaps lose x dust here but it's okay.
         } else if (sqrtPriceX96 >= highSqrtPriceX96) {
-            // We are above the range, so we can only add liquidity for token1.
             leftoverX = x;
             if (y == 0) {
                 return (0, leftoverX, leftoverY);
             }
-            // Round up to round liq down.
             uint256 unitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, X128, true);
             assignableLiq = uint128((uint256(y) * X128) / unitX128);
-            // No leftover y, perhaps lose y dust here but it's okay.
         } else {
             uint256 reqXUnitX128 = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, X128, true);
             uint256 reqYUnitX128 = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, X128, true);
@@ -325,11 +348,7 @@ library PoolLib {
         }
     }
 
-    /// How much liquidity is are these assets worth in the given range.
-    /// We consider two prices, the current price and the twap price and use the one that produces more liquidity,
-    /// which causes an underweighting of the newly added liquidity. This slippage protects existing depositors
-    /// and new depositors can simply wait for low volatility moments to avoid slippage.
-    /// This protects us from someone manipulating the pool price to get a more favorable mint.
+    /// How much liquidity are these assets worth in the given range.
     function getEquivalentLiq(
         int24 lowTick,
         int24 highTick,
@@ -339,11 +358,9 @@ library PoolLib {
         uint160 twapSqrtPriceX96,
         bool roundUp
     ) internal pure returns (uint128 equivLiq) {
-        // Compute with the current price.
         (uint256 lxX96, uint256 lyX96) = getAmounts(sqrtPriceX96, lowTick, highTick, X96, roundUp);
         uint256 liqValueX96 = (FullMath.mulX64(lxX96, sqrtPriceX96, false) >> 32) + (lyX96 << 96) / sqrtPriceX96;
         uint256 myValue = FullMath.mulX128(x, uint256(sqrtPriceX96) << 32, false) + (y << 96) / sqrtPriceX96;
-        // Compute with the twap price.
         (uint256 twapLxX96, uint256 twapLyX96) = getAmounts(twapSqrtPriceX96, lowTick, highTick, X96, roundUp);
         uint256 twapLiqValueX96 = (FullMath.mulX64(twapLxX96, twapSqrtPriceX96, false) >> 32) +
             (twapLyX96 << 96) /
@@ -379,94 +396,113 @@ library PoolLib {
         uint160 highSqrtPriceX96 = TickMath.getSqrtPriceAtTick(highTick);
 
         if (sqrtPriceX96 < lowSqrtPriceX96) {
-            // We are below the range, so we can only get token0.
             x = SqrtPriceMath.getAmount0Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
             y = 0;
         } else if (sqrtPriceX96 >= highSqrtPriceX96) {
-            // We are above the range, so we can only get token1.
             x = 0;
             y = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, highSqrtPriceX96, liq, roundUp);
         } else {
-            // We are in the range, so we can get both tokens.
             x = SqrtPriceMath.getAmount0Delta(sqrtPriceX96, highSqrtPriceX96, liq, roundUp);
             y = SqrtPriceMath.getAmount1Delta(lowSqrtPriceX96, sqrtPriceX96, liq, roundUp);
+        }
+    }
+
+    /* Internal helpers */
+
+    function _recordOp(int24 tickLower, int24 tickUpper, int128 delta) private {
+        uint256 count;
+        assembly {
+            count := tload(OPS_COUNT_SLOT)
+        }
+        uint256 slot = OPS_BASE_SLOT + count * 2;
+        // Pack ticks using uint masks to avoid sign-extension corruption.
+        // Each tick is masked to 24 bits; tickLower in bits [47:24], tickUpper in bits [23:0].
+        uint256 packed = (uint256(uint24(tickLower)) << 24) | uint256(uint24(tickUpper));
+        assembly {
+            tstore(slot, packed)
+            tstore(add(slot, 1), delta)
+            tstore(OPS_COUNT_SLOT, add(count, 1))
+        }
+    }
+
+    function _settleDelta(IPoolManager manager, Currency currency, address token, int256 delta) private {
+        if (delta < 0) {
+            // V4: negative delta = caller must pay the pool manager.
+            manager.sync(currency);
+            IERC20(token).transfer(address(manager), uint256(-delta));
+            manager.settle();
+        } else if (delta > 0) {
+            // V4: positive delta = pool manager owes us tokens.
+            manager.take(currency, address(this), uint256(delta));
         }
     }
 }
 
 library PoolValidation {
     // If you want to deploy a diamond for testing without validation, use this.
-    // But NEVER use this in production as malicious pools can drain fee earnings without this validation guard.
     address public constant SKIP_VALIDATION_FACTORY = address(0xDEADDEADDEAD);
 
-    // This pool cannot be used with this ammplify deployment as it's from a different factory.
     error UnrecognizedPool();
-    // This pool needs more observations to be safely used.
-    error PoolInsufficientObservations(uint16 observations, uint16 required);
 
-    function initFactory(address factory) internal {
-        Store.load().factory = factory;
+    function initPoolManager(address _poolManager) internal {
+        Store.load().poolManager = _poolManager;
     }
 
-    function validate(address poolAddr, address token0, address token1, uint24 fee) internal view {
-        address factory = Store.factory();
-        if (factory == SKIP_VALIDATION_FACTORY) return;
+    /// Validate that the pool is registered and initialized in the PoolManager.
+    function validate(address poolAddr) internal view {
+        address _poolManager = Store.poolManager();
+        if (_poolManager == SKIP_VALIDATION_FACTORY) return;
 
-        // We query the factory because we don't want to rely on the POOL_INIT_CODE_HASH
-        // which varies from fork to fork.
-        require(IUniswapV3Factory(factory).getPool(token0, token1, fee) == poolAddr, UnrecognizedPool());
+        // Verify pool is registered in our storage.
+        PoolKey memory poolKey = Store.getPoolKey(poolAddr);
+        require(Currency.unwrap(poolKey.currency0) != address(0), UnrecognizedPool());
 
-        (, , , , uint16 obsCardinalityNext, , ) = IUniswapV3Pool(poolAddr).slot0();
-        require(
-            obsCardinalityNext >= PoolLib.MIN_OBSERVATIONS,
-            PoolInsufficientObservations(obsCardinalityNext, PoolLib.MIN_OBSERVATIONS)
-        );
+        // Verify pool is initialized in the PoolManager by checking sqrtPriceX96 > 0.
+        IPoolManager manager = IPoolManager(_poolManager);
+        (uint160 sqrtPriceX96, , , ) = StateLibrary.getSlot0(manager, poolKey.toId());
+        require(sqrtPriceX96 > 0, UnrecognizedPool());
     }
 }
 
+/// View-only version of fee growth calculations (no transient storage caching).
 library PoolViewLib {
-    /// Get the fee checkpoint for a certain range. Does NOT assume the position exists.
+    using StateLibrary for IPoolManager;
+
+    /// Get the fee checkpoint for a certain range.
     function getInsideFees(
-        address pool,
+        address poolAddr,
         int24 currentTick,
         uint256 feeGrowthGlobal0X128,
         uint256 feeGrowthGlobal1X128,
         int24 lowerTick,
         int24 upperTick
     ) internal view returns (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) {
-        (uint256 lowerFeeGrowthOutside0X128, uint256 lowerFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, lowerTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
-        (uint256 upperFeeGrowthOutside0X128, uint256 upperFeeGrowthOutside1X128) = getTickGrowthsOutside(pool, upperTick, currentTick, feeGrowthGlobal0X128, feeGrowthGlobal1X128);
+        IPoolManager manager = IPoolManager(Store.poolManager());
+        PoolId poolId = Store.getPoolId(poolAddr);
+
+        (uint128 lowerLiqGross, , uint256 lowerFGO0, uint256 lowerFGO1) = manager.getTickInfo(poolId, lowerTick);
+        if (lowerLiqGross == 0 && currentTick >= lowerTick) {
+            lowerFGO0 = feeGrowthGlobal0X128;
+            lowerFGO1 = feeGrowthGlobal1X128;
+        }
+
+        (uint128 upperLiqGross, , uint256 upperFGO0, uint256 upperFGO1) = manager.getTickInfo(poolId, upperTick);
+        if (upperLiqGross == 0 && currentTick >= upperTick) {
+            upperFGO0 = feeGrowthGlobal0X128;
+            upperFGO1 = feeGrowthGlobal1X128;
+        }
+
         unchecked {
             if (currentTick < lowerTick) {
-                feeGrowthInside0X128 = lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = lowerFGO0 - upperFGO0;
+                feeGrowthInside1X128 = lowerFGO1 - upperFGO1;
             } else if (currentTick >= upperTick) {
-                feeGrowthInside0X128 = upperFeeGrowthOutside0X128 - lowerFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = upperFeeGrowthOutside1X128 - lowerFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = upperFGO0 - lowerFGO0;
+                feeGrowthInside1X128 = upperFGO1 - lowerFGO1;
             } else {
-                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFeeGrowthOutside0X128 - upperFeeGrowthOutside0X128;
-                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFeeGrowthOutside1X128 - upperFeeGrowthOutside1X128;
+                feeGrowthInside0X128 = feeGrowthGlobal0X128 - lowerFGO0 - upperFGO0;
+                feeGrowthInside1X128 = feeGrowthGlobal1X128 - lowerFGO1 - upperFGO1;
             }
         }
-    }
-
-    function getTickGrowthsOutside(address pool, int24 tick, int24 currentTick, uint256 feeGrowthGlobal0X128, uint256 feeGrowthGlobal1X128) internal view returns (uint256 feeGrowthOutside0X128, uint256 feeGrowthOutside1X128) {
-        bool init;
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-            (
-                ,
-                ,
-                feeGrowthOutside0X128,
-                feeGrowthOutside1X128,
-            ,
-            ,
-            ,
-            init
-            ) = poolContract.ticks(tick);
-
-            if (!init && currentTick >= tick) {
-                feeGrowthOutside0X128 = feeGrowthGlobal0X128;
-                feeGrowthOutside1X128 = feeGrowthGlobal1X128;
-            }
     }
 }

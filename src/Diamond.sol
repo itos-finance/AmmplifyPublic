@@ -33,10 +33,10 @@ contract SimplexDiamond is IDiamond {
         address viewFacet;
     }
 
-    constructor(address uniV3factory, FacetAddresses memory facetAddresses) {
+    constructor(address poolManager, FacetAddresses memory facetAddresses) {
         AdminLib.initOwner(msg.sender);
         FeeLib.init();
-        PoolValidation.initFactory(uniV3factory);
+        PoolValidation.initPoolManager(poolManager);
         FacetCut[] memory cuts = new FacetCut[](7);
 
         // Deploy DiamondCutFacet and DiamondLoupeFacet inline
@@ -69,7 +69,7 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory adminSelectors = new bytes4[](26);
+            bytes4[] memory adminSelectors = new bytes4[](27);
             adminSelectors[0] = TimedAdminFacet.transferOwnership.selector;
             adminSelectors[1] = TimedAdminFacet.acceptOwnership.selector;
             adminSelectors[2] = TimedAdminFacet.submitRights.selector;
@@ -96,6 +96,7 @@ contract SimplexDiamond is IDiamond {
             adminSelectors[23] = AdminFacet.swapVault.selector;
             adminSelectors[24] = AdminFacet.addPermissionedOpener.selector;
             adminSelectors[25] = AdminFacet.removePermissionedOpener.selector;
+            adminSelectors[26] = AdminFacet.registerPool.selector;
             cuts[2] = FacetCut({
                 facetAddress: facetAddresses.adminFacet,
                 action: FacetCutAction.Add,
@@ -134,9 +135,8 @@ contract SimplexDiamond is IDiamond {
         }
 
         {
-            bytes4[] memory selectors = new bytes4[](2);
-            selectors[0] = PoolFacet.uniswapV3MintCallback.selector;
-            selectors[1] = PoolFacet.capricornCLMintCallback.selector;
+            bytes4[] memory selectors = new bytes4[](1);
+            selectors[0] = PoolFacet.unlockCallback.selector;
             cuts[5] = IDiamond.FacetCut({
                 facetAddress: facetAddresses.poolFacet,
                 action: IDiamond.FacetCutAction.Add,
