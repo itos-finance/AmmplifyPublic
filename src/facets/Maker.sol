@@ -38,6 +38,7 @@ contract MakerFacet is ReentrancyGuardTransient, IMaker {
             liq
         );
         Data memory data = DataImpl.make(pInfo, asset, minSqrtPriceX96, maxSqrtPriceX96, liq);
+        data.skipFeeClaiming = true; // New position has no fees to collect.
         WalkerLib.modify(pInfo, lowTick, highTick, data);
         address[] memory tokens = pInfo.tokens();
         int256[] memory balances = new int256[](2);

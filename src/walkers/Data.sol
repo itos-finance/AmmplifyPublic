@@ -21,6 +21,7 @@ struct Data {
     uint160 sqrtPriceX96;
     int24 currentTick;
     bool takeAsX; // cache it outside the asset for gas savings.
+    bool skipFeeClaiming; // True for new positions (sliq=0 everywhere), skips fee down-walk.
     uint128 timestamp; // The last time the pool was modified.
     LiqData liq;
     FeeData fees;
@@ -75,6 +76,7 @@ library DataImpl {
                 sqrtPriceX96: currentSqrtPriceX96,
                 currentTick: pInfo.currentTick,
                 takeAsX: asset.takeAsX,
+                skipFeeClaiming: false,
                 timestamp: treeTimestamp,
                 liq: LiqDataLib.make(asset, pInfo, liq),
                 fees: FeeDataLib.make(pInfo),

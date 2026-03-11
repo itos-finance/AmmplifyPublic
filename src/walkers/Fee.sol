@@ -87,6 +87,16 @@ library FeeWalker {
         // On the way down, we accumulate the prefixes and claim fees.
         Node storage node = data.node(key);
 
+        // For new positions (sliq=0 everywhere), skip expensive fee claiming and splitting.
+        // We only need to accumulate mLiq/tLiq prefixes for the up-walk.
+        if (data.skipFeeClaiming) {
+            if (!visit) {
+                data.liq.mLiqPrefix += node.liq.mLiq;
+                data.liq.tLiqPrefix += node.liq.tLiq;
+            }
+            return;
+        }
+
         // We just claim all of our unclaimed.
         if (key.isLeaf()) {
             // If we're at a leaf, we can claim fees.

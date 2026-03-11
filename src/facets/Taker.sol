@@ -87,7 +87,8 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
             liq,
             SafeCast.toInt256(xFreeze),
             SafeCast.toInt256(yFreeze),
-            rftData
+            rftData,
+            true // isNew: skip fee claiming for new positions
         );
         VaultLib.deposit(pInfo.token0, vaultIndices[0], assetId, xFreeze);
         VaultLib.deposit(pInfo.token1, vaultIndices[1], assetId, yFreeze);
@@ -126,7 +127,8 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
             0,
             -SafeCast.toInt256(vaultX),
             -SafeCast.toInt256(vaultY),
-            rftData
+            rftData,
+            false // not new: must process existing fees
         );
         // We return balances from the perspective of the caller.
         balance0 = -balance0;
@@ -146,9 +148,11 @@ contract TakerFacet is ReentrancyGuardTransient, ITaker {
         uint128 liq,
         int256 vaultDiffX,
         int256 vaultDiffY,
-        bytes calldata rftData
+        bytes calldata rftData,
+        bool isNew
     ) internal returns (int256 totalX, int256 totalY) {
         Data memory data = DataImpl.make(pInfo, asset, sqrtPriceLimitsX96[0], sqrtPriceLimitsX96[1], liq);
+        data.skipFeeClaiming = isNew; // Skip fee down-walk for new positions.
         // This fills in the nodes in the asset.
         WalkerLib.modify(pInfo, ticks[0], ticks[1], data);
 
