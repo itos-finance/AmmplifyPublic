@@ -54,7 +54,6 @@ contract OpenMaker is AmmplifyPositions {
         console2.log("Low Tick:", params.lowTick);
         console2.log("High Tick:", params.highTick);
         console2.log("Liquidity:", params.liquidity);
-        console2.log("Is Compounding:", params.isCompounding);
 
         params.recipient = 0xbe7dC5cC7977ac378ead410869D6c96f1E6C773e;
 

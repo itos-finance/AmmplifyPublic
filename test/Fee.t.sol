@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 
@@ -19,22 +19,11 @@ contract FeeTest is Test {
 
     function testInit() public view {
         FeeStore storage store = Store.fees();
-        assertEq(store.defaultCompoundThreshold, 1e12);
         _assertDefaultFeeCurve(store.defaultFeeCurve);
         _assertDefaultSplitCurve(store.defaultSplitCurve);
     }
 
     // Getters
-
-    function testGetCompoundThreshold() public {
-        // Default
-        FeeStore storage store = Store.fees();
-        assertEq(FeeLib.getCompoundThreshold(address(0)), 1e12);
-
-        // Set
-        store.compoundThresholds[address(0)] = 1e13;
-        assertEq(FeeLib.getCompoundThreshold(address(0)), 1e13);
-    }
 
     function testGetSplitCurve() public {
         // Default

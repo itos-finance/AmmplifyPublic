@@ -1,7 +1,7 @@
 # Full reference https://github.com/foundry-rs/foundry/tree/master/config
 
 [profile.default]
-auto_detect_solc = false
+auto_detect_solc = true
 auto_detect_remappings=true
 bytecode_hash = "none"
 fs_permissions = [
@@ -10,7 +10,8 @@ fs_permissions = [
     { access = "read", path = "deployed-univ3.json" },
     { access = "read", path = "capricorn-mainnet.json" },
     { access = "read", path = "capricorn.json" },
-    { access = "read", path = "uniswap.json" }
+    { access = "read", path = "uniswap.json" },
+    { access = "read", path = "monad-v4.json" }
 ]
 fuzz = { runs = 256 }
 gas_reports = ["*"]
@@ -18,7 +19,6 @@ libs = ["lib"]
 optimizer = true
 optimizer_runs = 10_000
 out = "out"
-solc = "0.8.30"
 src = "src"
 test = "test"
 via_ir = true

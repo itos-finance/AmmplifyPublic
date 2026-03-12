@@ -44,7 +44,6 @@ contract OpenMakerNFT is AmmplifyPositions {
         console2.log("Low Tick:", params.lowTick);
         console2.log("High Tick:", params.highTick);
         console2.log("Liquidity:", params.liquidity);
-        console2.log("Is Compounding:", params.isCompounding);
 
         // Open the position using NFT manager (recommended for transferability)
         (uint256 tokenId, uint256 assetId) = openMakerWithNFT(params);

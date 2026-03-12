@@ -87,11 +87,6 @@ export const IAdminAbi = [
         ]
       },
       {
-        "name": "compoundThreshold",
-        "type": "uint128",
-        "internalType": "uint128"
-      },
-      {
         "name": "jitLifetime",
         "type": "uint64",
         "internalType": "uint64"
@@ -168,16 +163,6 @@ export const IAdminAbi = [
             "internalType": "uint128"
           }
         ]
-      },
-      {
-        "name": "compoundThreshold",
-        "type": "uint128",
-        "internalType": "uint128"
-      },
-      {
-        "name": "twapInterval",
-        "type": "uint32",
-        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -190,37 +175,6 @@ export const IAdminAbi = [
         "name": "vault",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setCompoundThreshold",
-    "inputs": [
-      {
-        "name": "pool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "threshold",
-        "type": "uint128",
-        "internalType": "uint128"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "setDefaultCompoundThreshold",
-    "inputs": [
-      {
-        "name": "threshold",
-        "type": "uint128",
-        "internalType": "uint128"
       }
     ],
     "outputs": [],
@@ -474,38 +428,6 @@ export const IAdminAbi = [
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "event",
-    "name": "CompoundThresholdSet",
-    "inputs": [
-      {
-        "name": "pool",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "threshold",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "DefaultCompoundThresholdSet",
-    "inputs": [
-      {
-        "name": "threshold",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
   },
   {
     "type": "event",

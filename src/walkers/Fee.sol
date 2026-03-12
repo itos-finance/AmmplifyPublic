@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { SmoothRateCurveConfig, SmoothRateCurveLib } from "Commons/Math/SmoothRateCurveLib.sol";
 import { UnsafeMath } from "Commons/Math/UnsafeMath.sol";
@@ -7,7 +7,7 @@ import { Key } from "../tree/Key.sol";
 import { Phase } from "../tree/Route.sol";
 import { Data } from "./Data.sol";
 import { Node } from "./Node.sol";
-import { LiqNode, LiqData } from "./Liq.sol";
+import { LiqData, LiqNode } from "./Liq.sol";
 import { FullMath } from "../FullMath.sol";
 import { FeeLib } from "../Fee.sol";
 import { PoolInfo } from "../Pool.sol";
@@ -23,13 +23,11 @@ struct FeeNode {
     uint256 xTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as x.
     uint256 yTakerFeesPerLiqX128; // Fee rate paid by takers subtree borrowing as y.
     // Maker fees including swap fees and lending earnings.
-    uint256 makerXFeesPerLiqX128; // Used for non-compounding makers
-    uint256 makerYFeesPerLiqX128; // Used for non-compounding makers
+    uint256 makerXFeesPerLiqX128; // Per-liquidity fee rate for makers.
+    uint256 makerYFeesPerLiqX128; // Per-liquidity fee rate for makers.
     // Note that these are uint128. They hold a fee balance which can grow unbounded.
     // However assuming 18 decimals, and a price of one trillion, earning 1 million a day, it would take
-    // a year of not compounding to cause an overflow. We do have an escape hatch for fees just in case.
-    uint128 xCFees; // Fees collected in x for compounding liquidity.
-    uint128 yCFees; // Fees collected in y for compounding liquidity.
+    // a year to cause an overflow. We do have an escape hatch for fees just in case.
     uint128 unclaimedMakerXFees; // Unclaimed fees in x.
     uint128 unclaimedMakerYFees; // Unclaimed fees in y.
     uint128 unpaidTakerXFees; // Unpaid fees in x.
@@ -89,6 +87,16 @@ library FeeWalker {
         // On the way down, we accumulate the prefixes and claim fees.
         Node storage node = data.node(key);
 
+        // For new positions (sliq=0 everywhere), skip expensive fee claiming and splitting.
+        // We only need to accumulate mLiq/tLiq prefixes for the up-walk.
+        if (data.skipFeeClaiming) {
+            if (!visit) {
+                data.liq.mLiqPrefix += node.liq.mLiq;
+                data.liq.tLiqPrefix += node.liq.tLiq;
+            }
+            return;
+        }
+
         // We just claim all of our unclaimed.
         if (key.isLeaf()) {
             // If we're at a leaf, we can claim fees.
@@ -117,15 +125,9 @@ library FeeWalker {
             }
 
             if (node.liq.mLiq > 0) {
-                // If there is no mliq, fees wouldn't propogate down.
-                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerXFees);
-                node.fees.makerXFeesPerLiqX128 += nonCX128;
-                node.fees.xCFees += c;
+                node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(node.fees.unclaimedMakerXFees);
                 node.fees.unclaimedMakerXFees = 0;
-
-                (c, nonCX128) = node.liq.splitMakerFees(node.fees.unclaimedMakerYFees);
-                node.fees.makerYFeesPerLiqX128 += nonCX128;
-                node.fees.yCFees += c;
+                node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(node.fees.unclaimedMakerYFees);
                 node.fees.unclaimedMakerYFees = 0;
             }
 
@@ -175,14 +177,10 @@ library FeeWalker {
                 uint256 myLiq = node.liq.mLiq * width;
                 uint256 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerXFees, myLiq, node.liq.subtreeMLiq);
                 node.fees.unclaimedMakerXFees -= uint128(myEarnings);
-                (uint128 c, uint256 nonCX128) = node.liq.splitMakerFees(myEarnings);
-                node.fees.makerXFeesPerLiqX128 += nonCX128;
-                node.fees.xCFees += c;
+                node.fees.makerXFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(myEarnings);
                 myEarnings = FullMath.mulDiv(node.fees.unclaimedMakerYFees, myLiq, node.liq.subtreeMLiq);
                 node.fees.unclaimedMakerYFees -= uint128(myEarnings);
-                (c, nonCX128) = node.liq.splitMakerFees(myEarnings);
-                node.fees.makerYFeesPerLiqX128 += nonCX128;
-                node.fees.yCFees += c;
+                node.fees.makerYFeesPerLiqX128 += node.liq.makerFeesPerLiqX128(myEarnings);
             }
         }
 
@@ -271,20 +269,6 @@ library FeeWalker {
             node.fees.takerYFeesPerLiqX128 += colTakerYRateX128;
             node.fees.makerXFeesPerLiqX128 += colMakerXRateX128;
             node.fees.makerYFeesPerLiqX128 += colMakerYRateX128;
-            // We round down to avoid overpaying dust.
-            uint256 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-            node.fees.xCFees = add128Fees(
-                node.fees.xCFees,
-                FullMath.mulX128(colMakerXRateX128, compoundingLiq, false),
-                data,
-                true
-            );
-            node.fees.yCFees = add128Fees(
-                node.fees.yCFees,
-                FullMath.mulX128(colMakerYRateX128, compoundingLiq, false),
-                data,
-                false
-            );
 
             // The children have already been charged their fees.
 
@@ -423,7 +407,7 @@ library FeeWalker {
             // And we calculate the payment made by the takers below the current node to set the unpaids.
             // And we use the total balances to set the maker rates and unclaimeds.
             uint128 aboveTLiq = data.liq.tLiqPrefix + node.liq.tLiq;
-            (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeTWAPBalances(key, aboveTLiq, true);
+            (uint256 aboveXBorrows, uint256 aboveYBorrows) = data.computeBalances(key, aboveTLiq, true);
             colXPaid = FullMath.mulX64(aboveXBorrows, takerRateX64, true);
             colYPaid = FullMath.mulX64(aboveYBorrows, takerRateX64, true);
             if (aboveTLiq != 0) {
@@ -477,20 +461,6 @@ library FeeWalker {
         node.fees.takerYFeesPerLiqX128 += colRatesX128[3];
         node.fees.makerXFeesPerLiqX128 += colRatesX128[0];
         node.fees.makerYFeesPerLiqX128 += colRatesX128[1];
-
-        uint256 compoundingLiq = node.liq.mLiq - node.liq.ncLiq;
-        node.fees.xCFees = add128Fees(
-            node.fees.xCFees,
-            FullMath.mulX128(colRatesX128[0], compoundingLiq, false),
-            data,
-            true
-        );
-        node.fees.yCFees = add128Fees(
-            node.fees.yCFees,
-            FullMath.mulX128(colRatesX128[1], compoundingLiq, false),
-            data,
-            false
-        );
         // Then we calculate the children's fees and split.
         if (
             childrenPaidEarned[0] > 0 ||

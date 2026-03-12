@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { Key } from "../tree/Key.sol";
 import { Route, Phase, RouteImpl } from "../tree/Route.sol";
@@ -71,26 +71,6 @@ library WalkerLib {
                 Store.fees().collateral[owner][pInfo.token1] += data.escapedY;
             }
         }
-    }
-}
-
-/// A compounding lib that effectively functions like a regular liq walk but without any modifications.
-library CompoundWalkerLib {
-    function compound(PoolInfo memory pInfo, int24 lowTick, int24 highTick, Data memory data) internal {
-        uint24 low = pInfo.treeTick(lowTick);
-        uint24 high = pInfo.treeTick(highTick) - 1;
-        Route memory route = RouteImpl.make(pInfo.treeWidth, low, high);
-        route.walk(WalkerLib.down, up, WalkerLib.phase, WalkerLib.toRaw(data));
-
-        WalkerLib.commitFeesCollected(pInfo, data);
-    }
-
-    function up(Key key, bool visit, bytes memory raw) internal {
-        Data memory data = WalkerLib.toData(raw);
-        FeeWalker.up(key, visit, data);
-        // Liq walker doesn't use visit except to determine if we should modify.
-        // We never modify hence we set it to false.
-        LiqWalker.up(key, false, data);
     }
 }
 

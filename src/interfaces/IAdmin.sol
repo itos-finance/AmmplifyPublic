@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { VaultType } from "../vaults/Vault.sol";
+import { PoolKey } from "v4-core/types/PoolKey.sol";
 
 interface IAdmin {
     // Events
+    event PoolRegistered(address indexed poolAddr, PoolKey poolKey);
     event DefaultFeeCurveSet(SmoothRateCurveConfig feeCurve);
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
-    event JITPenaltySet(uint64 lifetime, uint64 penaltyX64);
+    event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
 
     /* Vault related events */
     event VaultAdded(address indexed token, uint8 indexed vaultIdx, address indexed vault, VaultType vType);
@@ -20,14 +20,16 @@ interface IAdmin {
     event VaultSwapped(address indexed token, uint8 indexed vaultId, address indexed oldVault, address newVault);
     event VaultBalanceTransferred(address indexed fromVault, address indexed toVault, uint256 amount);
 
+    // Pool registration
+    function registerPool(PoolKey calldata poolKey) external returns (address poolAddr);
+
     // Fee related functions
     function setFeeCurve(address pool, SmoothRateCurveConfig calldata feeCurve) external;
     function setDefaultFeeCurve(SmoothRateCurveConfig calldata feeCurve) external;
     function setDefaultSplitCurve(SmoothRateCurveConfig calldata splitCurve) external;
     function setSplitCurve(address pool, SmoothRateCurveConfig calldata splitCurve) external;
-    function setDefaultCompoundThreshold(uint128 threshold) external;
-    function setCompoundThreshold(address pool, uint128 threshold) external;
-    function setJITPenalties(uint64 lifetime, uint64 penaltyX64) external;
+    function setJITPenalties(uint32 lifetime, uint64 penaltyX64) external;
+    function sendStandingFees(address poolAddr, uint128 x, uint128 y) external;
 
     function getFeeConfig(
         address pool
@@ -36,9 +38,7 @@ interface IAdmin {
         view
         returns (
             SmoothRateCurveConfig memory feeCurve,
-            SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
-            uint32 twapInterval
+            SmoothRateCurveConfig memory splitCurve
         );
 
     function getDefaultFeeConfig()
@@ -47,10 +47,13 @@ interface IAdmin {
         returns (
             SmoothRateCurveConfig memory feeCurve,
             SmoothRateCurveConfig memory splitCurve,
-            uint128 compoundThreshold,
-            uint64 jitLifetime,
+            uint32 jitLifetime,
             uint64 jitPenaltyX64
         );
+
+    // Opener permissions
+    function addPermissionedOpener(address opener) external;
+    function removePermissionedOpener(address opener) external;
 
     // Vault related functions
     function viewVaults(address token, uint8 vaultIdx) external view returns (address vault, address backup);

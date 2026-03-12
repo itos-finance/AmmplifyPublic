@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { ERC20 } from "a@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SmoothRateCurveConfig } from "Commons/Math/SmoothRateCurveLib.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";
 
 import { MultiSetupTest } from "../MultiSetup.u.sol";
-import { UniV3IntegrationSetup } from "../UniV3.u.sol";
+import { UniV4IntegrationSetup } from "../UniV4.u.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 import { MockERC4626 } from "../mocks/MockERC4626.sol";
 import { VaultType } from "../../src/vaults/Vault.sol";
 import { VaultLib } from "../../src/vaults/Vault.sol";
 
-contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
+contract AdminFacetTest is MultiSetupTest, UniV4IntegrationSetup {
     uint256 constant TAKER_VAULT_ID = 80085;
 
     MockERC20 public mockToken;
@@ -29,15 +29,10 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
     event FeeCurveSet(address indexed pool, SmoothRateCurveConfig feeCurve);
     event DefaultSplitCurveSet(SmoothRateCurveConfig splitCurve);
     event SplitCurveSet(address indexed pool, SmoothRateCurveConfig splitCurve);
-    event DefaultCompoundThresholdSet(uint256 threshold);
-    event CompoundThresholdSet(address indexed pool, uint256 threshold);
     event JITPenaltySet(uint32 lifetime, uint64 penaltyX64);
     event VaultAdded(address indexed vault, address indexed token, uint8 indexed index, VaultType vType);
-    event TwapIntervalSet(address indexed pool, uint32 interval);
-    event DefaultTwapIntervalSet(uint32 interval);
-
     function setUp() public {
-        _newDiamond(factory);
+        _newDiamond(manager);
         nonOwner = address(0x1337);
         testPool = address(0xFFF);
 
@@ -69,7 +64,7 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setFeeCurve(testPool, testFeeCurve);
 
         // Verify the configuration was stored
-        (SmoothRateCurveConfig memory storedFeeCurve, , , ) = adminFacet.getFeeConfig(testPool);
+        (SmoothRateCurveConfig memory storedFeeCurve, ) = adminFacet.getFeeConfig(testPool);
         assertEq(storedFeeCurve.invAlphaX128, testFeeCurve.invAlphaX128);
         assertEq(storedFeeCurve.betaX64, testFeeCurve.betaX64);
         assertEq(storedFeeCurve.maxUtilX64, testFeeCurve.maxUtilX64);
@@ -83,7 +78,7 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setDefaultFeeCurve(testFeeCurve);
 
         // Verify the default configuration was stored
-        (SmoothRateCurveConfig memory storedFeeCurve, , , , , ) = adminFacet.getDefaultFeeConfig();
+        (SmoothRateCurveConfig memory storedFeeCurve, , , ) = adminFacet.getDefaultFeeConfig();
         assertEq(storedFeeCurve.invAlphaX128, testFeeCurve.invAlphaX128);
         assertEq(storedFeeCurve.betaX64, testFeeCurve.betaX64);
         assertEq(storedFeeCurve.maxUtilX64, testFeeCurve.maxUtilX64);
@@ -97,7 +92,7 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setSplitCurve(testPool, testSplitCurve);
 
         // Verify the configuration was stored
-        (, SmoothRateCurveConfig memory storedSplitCurve, , ) = adminFacet.getFeeConfig(testPool);
+        (, SmoothRateCurveConfig memory storedSplitCurve) = adminFacet.getFeeConfig(testPool);
         assertEq(storedSplitCurve.invAlphaX128, testSplitCurve.invAlphaX128);
         assertEq(storedSplitCurve.betaX64, testSplitCurve.betaX64);
         assertEq(storedSplitCurve.maxUtilX64, testSplitCurve.maxUtilX64);
@@ -111,57 +106,11 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setDefaultSplitCurve(testSplitCurve);
 
         // Verify the default configuration was stored
-        (, SmoothRateCurveConfig memory storedSplitCurve, , , , ) = adminFacet.getDefaultFeeConfig();
+        (, SmoothRateCurveConfig memory storedSplitCurve, , ) = adminFacet.getDefaultFeeConfig();
         assertEq(storedSplitCurve.invAlphaX128, testSplitCurve.invAlphaX128);
         assertEq(storedSplitCurve.betaX64, testSplitCurve.betaX64);
         assertEq(storedSplitCurve.maxUtilX64, testSplitCurve.maxUtilX64);
         assertEq(storedSplitCurve.maxRateX64, testSplitCurve.maxRateX64);
-    }
-
-    function testSetCompoundThreshold() public {
-        uint128 threshold = 1e18;
-        vm.expectEmit(true, false, false, true);
-        emit CompoundThresholdSet(testPool, threshold);
-
-        adminFacet.setCompoundThreshold(testPool, threshold);
-
-        // Verify the configuration was stored
-        (, , uint128 storedThreshold, ) = adminFacet.getFeeConfig(testPool);
-        assertEq(storedThreshold, threshold);
-    }
-
-    function testSetDefaultCompoundThreshold() public {
-        uint128 threshold = 1e18;
-        vm.expectEmit(false, false, false, true);
-        emit DefaultCompoundThresholdSet(threshold);
-
-        adminFacet.setDefaultCompoundThreshold(threshold);
-
-        // Verify the default configuration was stored
-        (, , uint128 storedThreshold, , , ) = adminFacet.getDefaultFeeConfig();
-        assertEq(storedThreshold, threshold);
-    }
-
-    function testSetTwapInterval() public {
-        uint32 interval = 600;
-        vm.expectEmit(true, false, false, true);
-        emit TwapIntervalSet(testPool, interval);
-        adminFacet.setTwapInterval(testPool, interval);
-
-        // Verify the configuration was stored
-        (, , , uint32 storedInterval) = adminFacet.getFeeConfig(testPool);
-        assertEq(storedInterval, interval);
-    }
-
-    function testSetDefaultTwapInterval() public {
-        uint32 interval = 600;
-        vm.expectEmit(false, false, false, true);
-        emit DefaultTwapIntervalSet(interval);
-        adminFacet.setDefaultTwapInterval(interval);
-
-        // Verify the default configuration was stored
-        (, , , uint32 storedInterval, , ) = adminFacet.getDefaultFeeConfig();
-        assertEq(storedInterval, interval);
     }
 
     function testSetJITPenalties() public {
@@ -173,7 +122,7 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
         adminFacet.setJITPenalties(lifetime, penaltyX64);
 
         // Verify the configuration was stored
-        (, , , , uint32 storedLifetime, uint64 storedPenalty) = adminFacet.getDefaultFeeConfig();
+        (, , uint32 storedLifetime, uint64 storedPenalty) = adminFacet.getDefaultFeeConfig();
         assertEq(storedLifetime, lifetime);
         assertEq(storedPenalty, penaltyX64);
     }
@@ -201,9 +150,6 @@ contract AdminFacetTest is MultiSetupTest, UniV3IntegrationSetup {
 
         vm.expectRevert(AdminLib.NotOwner.selector);
         adminFacet.setDefaultSplitCurve(testSplitCurve);
-
-        vm.expectRevert(AdminLib.NotOwner.selector);
-        adminFacet.setCompoundThreshold(testPool, 1e18);
 
         vm.expectRevert(AdminLib.NotOwner.selector);
         adminFacet.setJITPenalties(1 hours, 1e18);
