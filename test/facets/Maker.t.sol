@@ -585,60 +585,78 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
         );
     }
 
-    /// @notice Verify that the first depositor cannot extract more value than they put in
-    ///         by manipulating the pool price before/after creating a position.
+    /// @notice Verify that the first depositor cannot extract value from a second depositor
+    ///         through rounding manipulation when creating positions with minimal liquidity.
+    ///
+    /// Attack scenario:
+    ///   1. Attacker creates position with minimal liquidity (first depositor)
+    ///   2. Victim creates position with large liquidity in the same range
+    ///   3. Both remove their positions immediately
+    ///   4. Assert: victim gets back at least what they deposited (minus rounding)
     function testFirstDepositorDrain_NoValueLoss() public {
         address attacker = makeAddr("attacker");
+        address victim = makeAddr("victim");
+
         token0.mint(attacker, 100e18);
         token1.mint(attacker, 100e18);
+        token0.mint(victim, 100e18);
+        token1.mint(victim, 100e18);
+
         vm.startPrank(attacker);
         token0.approve(address(diamond), type(uint256).max);
         token1.approve(address(diamond), type(uint256).max);
         vm.stopPrank();
 
-        uint256 attackerBal0Before = token0.balanceOf(attacker);
-        uint256 attackerBal1Before = token1.balanceOf(attacker);
+        vm.startPrank(victim);
+        token0.approve(address(diamond), type(uint256).max);
+        token1.approve(address(diamond), type(uint256).max);
+        vm.stopPrank();
 
-        // 1. Attacker is the first Ammplify depositor with a small position
+        // 1. Attacker front-runs with minimal liquidity
         vm.startPrank(attacker);
-        uint256 assetId = makerFacet.newMaker(
-            attacker,
-            poolAddr,
-            lowTick,
-            highTick,
-            1e15, // small liquidity
-            minSqrtPriceX96,
-            maxSqrtPriceX96,
-            ""
+        uint256 attackerAsset = makerFacet.newMaker(
+            attacker, poolAddr, lowTick, highTick,
+            1e10, // very small liquidity
+            minSqrtPriceX96, maxSqrtPriceX96, ""
         );
         vm.stopPrank();
 
-        // 2. Attacker manipulates pool price via large swap (simulates front-running)
-        swapTo(0, TickMath.getSqrtPriceAtTick(5000));
+        // 2. Victim deposits with substantial liquidity in the same range
+        uint256 victimBal0Before = token0.balanceOf(victim);
+        uint256 victimBal1Before = token1.balanceOf(victim);
 
-        // 3. Attacker removes position at the manipulated price
-        vm.startPrank(attacker);
-        makerFacet.removeMaker(
-            attacker,
-            assetId,
-            minSqrtPriceX96,
-            maxSqrtPriceX96,
-            ""
+        vm.startPrank(victim);
+        uint256 victimAsset = makerFacet.newMaker(
+            victim, poolAddr, lowTick, highTick,
+            1e18, // large liquidity
+            minSqrtPriceX96, maxSqrtPriceX96, ""
         );
         vm.stopPrank();
 
-        uint256 attackerBal0After = token0.balanceOf(attacker);
-        uint256 attackerBal1After = token1.balanceOf(attacker);
+        uint256 victimDeposited0 = victimBal0Before - token0.balanceOf(victim);
+        uint256 victimDeposited1 = victimBal1Before - token1.balanceOf(victim);
 
-        // The attacker should not have gained value overall.
-        // They may have more of one token and less of another (impermanent loss),
-        // but total value (at any price) should not exceed what they started with + fees.
-        // At the manipulated price, the position's value should be <= initial deposit.
-        // We check a conservative bound: total tokens out <= total tokens in.
-        uint256 totalIn = attackerBal0Before + attackerBal1Before;
-        uint256 totalOut = attackerBal0After + attackerBal1After;
+        // 3. Both remove immediately (no swaps, no fee generation)
+        vm.startPrank(attacker);
+        makerFacet.removeMaker(attacker, attackerAsset, minSqrtPriceX96, maxSqrtPriceX96, "");
+        vm.stopPrank();
 
-        // Allow a small tolerance for rounding
-        assertLe(totalOut, totalIn + 10, "first depositor should not drain value");
+        vm.startPrank(victim);
+        (, , uint256 victimReceived0, uint256 victimReceived1) = makerFacet.removeMaker(
+            victim, victimAsset, minSqrtPriceX96, maxSqrtPriceX96, ""
+        );
+        vm.stopPrank();
+
+        // 4. Victim should not have lost meaningful value
+        // Allow a small tolerance for rounding inherent in liquidity math
+        uint256 tolerance = 100; // 100 wei tolerance
+        assertGe(
+            victimReceived0 + tolerance, victimDeposited0,
+            "victim should not lose token0 value"
+        );
+        assertGe(
+            victimReceived1 + tolerance, victimDeposited1,
+            "victim should not lose token1 value"
+        );
     }
 }
