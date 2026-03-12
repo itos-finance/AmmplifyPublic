@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
 import { IUnlockCallback } from "v4-core/interfaces/callback/IUnlockCallback.sol";
@@ -11,6 +11,7 @@ import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { IMaker } from "../interfaces/IMaker.sol";
 import { IView } from "../interfaces/IView.sol";
 import { PoolInfo } from "../Pool.sol";
+import { V4Settlement } from "../V4Settlement.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -193,31 +194,9 @@ contract Opener is IUnlockCallback {
             ""
         );
 
-        // Settle deltas
-        int128 delta0 = delta.amount0();
-        int128 delta1 = delta.amount1();
-
-        // For negative deltas (we owe the manager): sync, transfer, settle
-        if (delta0 < 0) {
-            Currency currency0 = poolKey.currency0;
-            poolManager.sync(currency0);
-            IERC20(Currency.unwrap(currency0)).safeTransfer(address(poolManager), uint256(uint128(-delta0)));
-            poolManager.settle();
-        }
-        if (delta1 < 0) {
-            Currency currency1 = poolKey.currency1;
-            poolManager.sync(currency1);
-            IERC20(Currency.unwrap(currency1)).safeTransfer(address(poolManager), uint256(uint128(-delta1)));
-            poolManager.settle();
-        }
-
-        // For positive deltas (manager owes us): take
-        if (delta0 > 0) {
-            poolManager.take(poolKey.currency0, address(this), uint256(uint128(delta0)));
-        }
-        if (delta1 > 0) {
-            poolManager.take(poolKey.currency1, address(this), uint256(uint128(delta1)));
-        }
+        // Settle deltas with the PoolManager
+        V4Settlement.settleDelta(poolManager, poolKey.currency0, Currency.unwrap(poolKey.currency0), delta.amount0());
+        V4Settlement.settleDelta(poolManager, poolKey.currency1, Currency.unwrap(poolKey.currency1), delta.amount1());
 
         return abi.encode(delta);
     }

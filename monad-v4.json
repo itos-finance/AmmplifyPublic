@@ -1,0 +1,14 @@
+{
+    "network": "Monad Mainnet",
+    "chainId": 143,
+    "poolManager": "0x188d586ddcf52439676ca21a244753fa19f9ea8e",
+    "stateView": "0x77395f3b2e73ae90843717371294fa97cc419d64",
+    "universalRouter": "0x0d97dc33264bfc1c226207428a79b26757fb9dc3",
+    "positionManager": "0x5b7ec4a94ff9bedb700fb82ab09d5846972f4016",
+    "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+    "quoter": "0xa222dd357a9076d1091ed6aa2e16c9742dd26891",
+    "tokens": {
+        "USDC": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+        "WMON": "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A"
+    }
+}

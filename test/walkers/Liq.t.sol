@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 import { console2 as console } from "forge-std/console2.sol";
@@ -42,7 +42,7 @@ contract LiqWalkerTest is Test, UniV4IntegrationSetup {
         addPoolLiq(0, 160000, 160010, 5e8);
         LiqWalker.updateFeeCheckpoints(iter, n, data);
 
-        // mLiq should not change since there is no compounding.
+        // mLiq should not change from updateFeeCheckpoints.
         assertEq(n.liq.mLiq, 5e8, "mLiq");
     }
 

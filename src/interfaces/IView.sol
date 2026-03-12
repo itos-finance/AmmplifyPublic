@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { Node } from "../walkers/Node.sol";
 import { Key } from "../tree/Key.sol";
@@ -54,4 +54,30 @@ interface IView {
     function queryAssetBalances(
         uint256 assetId
     ) external view returns (int256 netBalance0, int256 netBalance1, uint256 fees0, uint256 fees1);
+
+    /// @notice Get all asset IDs owned by a specific address.
+    /// @param owner The address to query.
+    /// @return assetIds The array of asset IDs owned by the address.
+    function getAssets(address owner) external view returns (uint256[] memory assetIds);
+
+    /// @notice Get the collateral balance for a specific recipient and token.
+    /// @param recipient The address of the collateral owner.
+    /// @param token The address of the token.
+    /// @return The amount of collateral deposited.
+    function getCollateralBalance(address recipient, address token) external view returns (uint256);
+
+    /// @notice Get collateral balances for multiple recipients and tokens.
+    /// @param recipients Array of recipient addresses.
+    /// @param tokens Array of token addresses (must be same length as recipients).
+    /// @return Array of collateral balances corresponding to each recipient-token pair.
+    function getCollateralBalances(
+        address[] calldata recipients,
+        address[] calldata tokens
+    ) external view returns (uint256[] memory);
+
+    /// @notice Check if an opener has permission to open positions for an owner.
+    /// @param owner The position owner.
+    /// @param opener The opener to check.
+    /// @return Whether the opener has permission.
+    function queryPermission(address owner, address opener) external view returns (bool);
 }

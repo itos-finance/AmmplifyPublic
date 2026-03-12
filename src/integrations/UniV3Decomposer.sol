@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.26;
 
 import { MakerFacet } from "../facets/Maker.sol";
 import { RFTPayer, RFTLib } from "../../lib/Commons/src/Util/RFT.sol";
@@ -36,7 +36,19 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     // Immutable configuration
     INonfungiblePositionManager public immutable NFPM;
     MakerFacet public immutable MAKER;
-    address private transient caller;
+    // Transient storage slot for reentrancy guard + caller tracking.
+    // Using assembly instead of `transient` keyword for 0.8.26 compatibility.
+    bytes32 private constant CALLER_TSLOT = bytes32(uint256(keccak256("UniV3Decomposer.caller")) - 1);
+
+    function _getCaller() private view returns (address c) {
+        bytes32 slot = CALLER_TSLOT;
+        assembly { c := tload(slot) }
+    }
+
+    function _setCaller(address c) private {
+        bytes32 slot = CALLER_TSLOT;
+        assembly { tstore(slot, c) }
+    }
 
     event Decomposed(
         uint256 indexed newAssetId,
@@ -100,10 +112,10 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
     /// @notice Prevents reentrancy by locking the contract during the call.
     ///         When locked all nonReentrant functions will revert.
     modifier nonReentrant {
-        require(caller == address(0), ReentrancyAttempt());
-        caller = msg.sender;
+        require(_getCaller() == address(0), ReentrancyAttempt());
+        _setCaller(msg.sender);
         _;
-        caller = address(0);
+        _setCaller(address(0));
     }
 
     function decompose(
@@ -205,7 +217,7 @@ contract UniV3Decomposer is RFTPayer, IERC721Receiver, Auto165 {
                 residuals[i] = -int256(residual);
             }
         }
-        if (hasRes) RFTLib.settle(caller, tokens, residuals, "");
+        if (hasRes) RFTLib.settle(_getCaller(), tokens, residuals, "");
         return "";
     }
 

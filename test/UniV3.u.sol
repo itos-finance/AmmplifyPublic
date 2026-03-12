@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { UniswapV3Factory } from "v3-core/UniswapV3Factory.sol";
 import { UniswapV3Pool } from "v3-core/UniswapV3Pool.sol";
@@ -187,8 +187,25 @@ contract UniV3IntegrationSetup is IUniswapV3MintCallback, IUniswapV3SwapCallback
 }
 
 contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
-    address transient public caller;
-    address transient public recipient;
+    // Assembly-based transient storage for 0.8.26 compatibility
+    bytes32 private constant CALLER_TSLOT = bytes32(uint256(keccak256("ExternalUniV3Caller.caller")) - 1);
+    bytes32 private constant RECIPIENT_TSLOT = bytes32(uint256(keccak256("ExternalUniV3Caller.recipient")) - 1);
+
+    function _caller() private view returns (address c) {
+        bytes32 s = CALLER_TSLOT;
+        assembly { c := tload(s) }
+    }
+
+    function _recipient() private view returns (address r) {
+        bytes32 s = RECIPIENT_TSLOT;
+        assembly { r := tload(s) }
+    }
+
+    function _setTransient(address c, address r) private {
+        bytes32 cs = CALLER_TSLOT;
+        bytes32 rs = RECIPIENT_TSLOT;
+        assembly { tstore(cs, c) tstore(rs, r) }
+    }
 
     function swap(
         address pool,
@@ -197,8 +214,7 @@ contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
         int256 amountSpecified,
         uint160 sqrtPriceLimitX96
     ) external {
-        caller = msg.sender;
-        recipient = to;
+        _setTransient(msg.sender, to);
         UniswapV3Pool(pool).swap(address(this), zeroForOne, amountSpecified, sqrtPriceLimitX96, "");
     }
 
@@ -209,8 +225,7 @@ contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
         int24 tickUpper,
         uint128 amount
     ) external {
-        caller = msg.sender;
-        recipient = to;
+        _setTransient(msg.sender, to);
         UniswapV3Pool(pool).mint(address(this), tickLower, tickUpper, amount, "");
     }
 
@@ -218,28 +233,28 @@ contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
         if (amount0Delta > 0) {
             TransferHelper.safeTransferFrom(
                 UniswapV3Pool(msg.sender).token0(),
-                caller,
+                _caller(),
                 msg.sender,
                 uint256(amount0Delta)
             );
         } else {
             TransferHelper.safeTransfer(
                 UniswapV3Pool(msg.sender).token0(),
-                recipient,
+                _recipient(),
                 uint256(-amount0Delta)
             );
         }
         if (amount1Delta > 0) {
             TransferHelper.safeTransferFrom(
                 UniswapV3Pool(msg.sender).token1(),
-                caller,
+                _caller(),
                 msg.sender,
                 uint256(amount1Delta)
             );
         } else {
             TransferHelper.safeTransfer(
                 UniswapV3Pool(msg.sender).token1(),
-                recipient,
+                _recipient(),
                 uint256(-amount1Delta)
             );
         }
@@ -249,7 +264,7 @@ contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
         if (amount0Owed > 0) {
             TransferHelper.safeTransferFrom(
                 UniswapV3Pool(msg.sender).token0(),
-                caller,
+                _caller(),
                 msg.sender,
                 amount0Owed
             );
@@ -257,7 +272,7 @@ contract ExternalUniV3Caller is IUniswapV3SwapCallback, IUniswapV3MintCallback {
         if (amount1Owed > 0) {
             TransferHelper.safeTransferFrom(
                 UniswapV3Pool(msg.sender).token1(),
-                caller,
+                _caller(),
                 msg.sender,
                 amount1Owed
             );

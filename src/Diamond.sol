@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { IDiamond } from "Commons/Diamond/interfaces/IDiamond.sol";
 import { LibDiamond } from "Commons/Diamond/libraries/LibDiamond.sol";

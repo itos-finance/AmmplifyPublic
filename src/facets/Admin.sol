@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { TimedAdminFacet } from "Commons/Util/TimedAdmin.sol";
 import { AdminLib } from "Commons/Util/Admin.sol";

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { TickMath } from "v4-core/libraries/TickMath.sol";
 import { console2 } from "forge-std/console2.sol";
@@ -585,8 +585,60 @@ contract MakerFacetTest is MultiSetupTest, UniV4IntegrationSetup {
         );
     }
 
-    // TODO: This test needs V4 adaptation - it uses V3-specific features (flash, slot0)
-    // function testFirstDepositorDrain_NoValueLoss() public {
-    //     ...
-    // }
+    /// @notice Verify that the first depositor cannot extract more value than they put in
+    ///         by manipulating the pool price before/after creating a position.
+    function testFirstDepositorDrain_NoValueLoss() public {
+        address attacker = makeAddr("attacker");
+        token0.mint(attacker, 100e18);
+        token1.mint(attacker, 100e18);
+        vm.startPrank(attacker);
+        token0.approve(address(diamond), type(uint256).max);
+        token1.approve(address(diamond), type(uint256).max);
+        vm.stopPrank();
+
+        uint256 attackerBal0Before = token0.balanceOf(attacker);
+        uint256 attackerBal1Before = token1.balanceOf(attacker);
+
+        // 1. Attacker is the first Ammplify depositor with a small position
+        vm.startPrank(attacker);
+        uint256 assetId = makerFacet.newMaker(
+            attacker,
+            poolAddr,
+            lowTick,
+            highTick,
+            1e15, // small liquidity
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            ""
+        );
+        vm.stopPrank();
+
+        // 2. Attacker manipulates pool price via large swap (simulates front-running)
+        swapTo(0, TickMath.getSqrtPriceAtTick(5000));
+
+        // 3. Attacker removes position at the manipulated price
+        vm.startPrank(attacker);
+        makerFacet.removeMaker(
+            attacker,
+            assetId,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            ""
+        );
+        vm.stopPrank();
+
+        uint256 attackerBal0After = token0.balanceOf(attacker);
+        uint256 attackerBal1After = token1.balanceOf(attacker);
+
+        // The attacker should not have gained value overall.
+        // They may have more of one token and less of another (impermanent loss),
+        // but total value (at any price) should not exceed what they started with + fees.
+        // At the manipulated price, the position's value should be <= initial deposit.
+        // We check a conservative bound: total tokens out <= total tokens in.
+        uint256 totalIn = attackerBal0Before + attackerBal1Before;
+        uint256 totalOut = attackerBal0After + attackerBal1After;
+
+        // Allow a small tolerance for rounding
+        assertLe(totalOut, totalIn + 10, "first depositor should not drain value");
+    }
 }

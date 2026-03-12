@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { Key } from "../tree/Key.sol";
 import { Node } from "./Node.sol";
@@ -480,8 +480,8 @@ library LiqWalker {
             // Give them the fees.
             data.xFees += earnedX;
             data.yFees += earnedY;
-            // When we remove non-compounding maker liq, we also need to reduce our standing fees
-            // since they're being "spent". This is just like when compounding takes fees away to add as liq.
+            // When we collect maker fees, we also need to reduce our standing fees
+            // since they're being "spent" and withdrawn from the protocol.
             data.liq.xFeesCollected -= uint128(earnedX);
             data.liq.yFeesCollected -= uint128(earnedY);
             // And now we update to the new fee checkpoint so we don't double collect.

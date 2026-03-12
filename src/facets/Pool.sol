@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1-or-later
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { IUnlockCallback } from "v4-core/interfaces/callback/IUnlockCallback.sol";
 import { PoolLib } from "../Pool.sol";

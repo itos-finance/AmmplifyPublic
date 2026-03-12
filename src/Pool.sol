@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.27;
+pragma solidity ^0.8.26;
 
 import { IPoolManager } from "v4-core/interfaces/IPoolManager.sol";
 import { StateLibrary } from "v4-core/libraries/StateLibrary.sol";
@@ -19,8 +19,7 @@ import { TransientSlot } from "openzeppelin-contracts/contracts/utils/TransientS
 import { SafeCast } from "Commons/Math/Cast.sol";
 import { Store } from "./Store.sol";
 import { FeeLib } from "./Fee.sol";
-import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import { V4Settlement } from "./V4Settlement.sol";
 
 import { tuint256, tint256 } from "transient-goodies/TransientPrimitives.sol";
 
@@ -87,7 +86,7 @@ struct Pool {
 /// A helper library for accessing the underlying pool via V4 PoolManager.
 /// @dev All liquidity modifications are batched and executed inside a PoolManager unlock callback.
 library PoolLib {
-    using SafeERC20 for IERC20;
+
     using TransientSlot for bytes32;
     using TransientSlot for TransientSlot.AddressSlot;
     using StateLibrary for IPoolManager;
@@ -289,9 +288,8 @@ library PoolLib {
         clearOps();
 
         // Settle token deltas with the PoolManager.
-        // V4 convention: negative delta = caller must pay. Positive delta = caller receives.
-        _settleDelta(manager, poolKey.currency0, token0, totalDelta0);
-        _settleDelta(manager, poolKey.currency1, token1, totalDelta1);
+        V4Settlement.settleDelta(manager, poolKey.currency0, token0, totalDelta0);
+        V4Settlement.settleDelta(manager, poolKey.currency1, token1, totalDelta1);
 
         return "";
     }
@@ -407,17 +405,6 @@ library PoolLib {
         }
     }
 
-    function _settleDelta(IPoolManager manager, Currency currency, address token, int256 delta) private {
-        if (delta < 0) {
-            // V4: negative delta = caller must pay the pool manager.
-            manager.sync(currency);
-            IERC20(token).safeTransfer(address(manager), uint256(-delta));
-            manager.settle();
-        } else if (delta > 0) {
-            // V4: positive delta = pool manager owes us tokens.
-            manager.take(currency, address(this), uint256(delta));
-        }
-    }
 }
 
 library PoolValidation {
