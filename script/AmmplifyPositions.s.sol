@@ -90,7 +90,7 @@ contract AmmplifyPositions is Script {
      */
     function loadEnvironment() public {
         string memory root = vm.projectRoot();
-        string memory path = string.concat(root, "/deployed-capricorn.json");
+        string memory path = string.concat(root, "/deployed-uniswap.json");
         string memory json = vm.readFile(path);
 
         env.deployer = json.readAddress(".deployer");

@@ -17,7 +17,7 @@ contract IncreaseCardinality is Script {
     using stdJson for string;
 
     // Constants
-    uint16 public constant MIN_OBSERVATIONS = 32;
+    uint16 public constant MIN_OBSERVATIONS = 450;
 
     // Environment configuration
     struct Environment {
@@ -67,6 +67,14 @@ contract IncreaseCardinality is Script {
         console2.log("=== Increasing Pool Cardinality ===");
         console2.log("Pool:", poolAddress);
 
+        // Query current observation cardinality
+        (, , , uint16 currentObservationCardinality, uint16 currentObservationCardinalityNext, , ) = UniswapV3Pool(
+            poolAddress
+        ).slot0();
+        console2.log("Current observation cardinality:", currentObservationCardinality);
+        console2.log("Current observation cardinality next:", currentObservationCardinalityNext);
+        console2.log("Target observation cardinality:", MIN_OBSERVATIONS);
+
         // Increase observation cardinality
         UniswapV3Pool(poolAddress).increaseObservationCardinalityNext(MIN_OBSERVATIONS);
         console2.log("Increased observation cardinality to:", MIN_OBSERVATIONS);
@@ -80,6 +88,6 @@ contract IncreaseCardinality is Script {
      * @notice Default run function with default pool
      */
     function run() public {
-        run(address(0x999Acd737b1EB0b545eeaab8fc0096626D49f0Fb));
+        run(address(0xB0B083E0353f7df4D5EE1C812eA8c6960c080373));
     }
 }
