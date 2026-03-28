@@ -129,26 +129,6 @@ library PoolLib {
         twapSqrtPriceX96 = TickMath.getSqrtPriceAtTick(twapTick);
     }
 
-    /*
-    /// Currently unused
-    /// This assumes the position in the pool still exists, and queries how much fees are owed.
-    /// @dev A non-modifying way to get fees owed.
-    function getFees(address pool, int24 lowerTick, int24 upperTick) internal view returns (uint128 x, uint128 y) {
-        IUniswapV3Pool poolContract = IUniswapV3Pool(pool);
-        bytes32 myKey = keccak256(abi.encodePacked(address(this), lowerTick, upperTick));
-        uint128 liq;
-        uint256 feeGrowthInside0LastX128;
-        uint256 feeGrowthInside1LastX128;
-        // The x and y here are the fees accumulated since the last poke, before the check was updated.
-        (liq, feeGrowthInside0LastX128, feeGrowthInside1LastX128, x, y) = poolContract.positions(myKey);
-        (uint256 feeGrowthInside0NowX128, uint256 feeGrowthInside1NowX128) = getInsideFees(pool, lowerTick, upperTick);
-        unchecked {
-            x += FullMath.mulX128(liq, feeGrowthInside0NowX128 - feeGrowthInside0LastX128, false);
-            y += FullMath.mulX128(liq, feeGrowthInside1NowX128 - feeGrowthInside1LastX128, false);
-        }
-    }
-    */
-
     /**
      * @notice Wrapper around pool collect function.
      * Collects just fees if no liquidity has been burned, otherwise collects both.

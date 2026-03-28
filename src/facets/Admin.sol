@@ -96,8 +96,9 @@ contract AdminFacet is TimedAdminFacet {
 
     function setJITPenalties(uint32 lifetime, uint64 penaltyX64) external {
         AdminLib.validateOwner();
-        Store.fees().jitLifetime = lifetime;
-        Store.fees().jitPenaltyX64 = penaltyX64;
+        FeeStore storage feeStore = Store.fees();
+        feeStore.jitLifetime = lifetime;
+        feeStore.jitPenaltyX64 = penaltyX64;
         emit JITPenaltySet(lifetime, penaltyX64);
     }
 
