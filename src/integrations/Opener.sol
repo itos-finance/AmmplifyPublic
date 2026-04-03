@@ -8,7 +8,8 @@ import { IMaker } from "../interfaces/IMaker.sol";
 import { LiquidityAmounts } from "./LiquidityAmounts.sol";
 import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import { console2 } from "forge-std/console2.sol";
+import { FullMath } from "v3-core/libraries/FullMath.sol";
+import { FixedPoint96 } from "v3-core/libraries/FixedPoint96.sol";
 
 interface ICapricornCLSwapCallback {
     function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
@@ -112,12 +113,6 @@ contract Opener is ICapricornCLSwapCallback {
 
         // Calculate liquidity from the token amounts we have
         // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
-
-        console2.log("balance0", balance0);
-        console2.log("balance1", balance1);
-        console2.log("sqrtPriceX96", sqrtPriceX96);
-        console2.log("sqrtPriceAX96", sqrtPriceAX96);
-        console2.log("sqrtPriceBX96", sqrtPriceBX96);
 
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
@@ -261,6 +256,233 @@ contract Opener is ICapricornCLSwapCallback {
 
         // Verify we didn't exceed maximum input
         require(amountIn <= amountInMaximum, SlippageTooHigh());
+
+        // Clear swap state
+        delete swapState;
+    }
+
+    /**
+     * @notice Opens a maker position with optimal on-chain swap calculation
+     * @dev Computes the ideal swap amount internally to minimize token refunds
+     * @param poolAddr The address of the pool
+     * @param tokenIn The token address that the user is providing
+     * @param amountIn The total amount of tokenIn the user is depositing
+     * @param lowTick The lower tick of the liquidity range
+     * @param highTick The upper tick of the liquidity range
+     * @param isCompounding Whether the position is compounding
+     * @param minSqrtPriceX96 Minimum sqrt price for the operation
+     * @param maxSqrtPriceX96 Maximum sqrt price for the operation
+     * @param amountOutMinimum Minimum amount of output token to receive from swap (slippage protection)
+     * @param rftData Data passed during RFT to the payer
+     * @return assetId The ID of the created asset
+     */
+    function openMakerOptimal(
+        address poolAddr,
+        address tokenIn,
+        uint256 amountIn,
+        int24 lowTick,
+        int24 highTick,
+        bool isCompounding,
+        uint160 minSqrtPriceX96,
+        uint160 maxSqrtPriceX96,
+        uint256 amountOutMinimum,
+        bytes calldata rftData
+    ) external returns (uint256 assetId) {
+        PoolInfo memory pInfo = PoolLib.getPoolInfo(poolAddr);
+        address token0 = pInfo.token0;
+        address token1 = pInfo.token1;
+
+        if (tokenIn != token0 && tokenIn != token1) {
+            revert InvalidToken();
+        }
+
+        address tokenOut = tokenIn == token0 ? token1 : token0;
+        bool isToken0In = tokenIn == token0;
+
+        uint160 sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
+        uint160 sqrtPriceAX96 = TickMath.getSqrtRatioAtTick(lowTick);
+        uint160 sqrtPriceBX96 = TickMath.getSqrtRatioAtTick(highTick);
+
+        // Compute the optimal swap amount on-chain
+        uint256 swapAmountIn = _computeOptimalSwapAmount(
+            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, amountIn, pInfo.fee, isToken0In
+        );
+
+        // Transfer user's tokenIn to this contract
+        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        // Perform exact-input swap
+        if (swapAmountIn > 0) {
+            _swapExactIn(poolAddr, tokenIn, tokenOut, swapAmountIn, amountOutMinimum);
+        }
+
+        // Get balances after swap
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
+
+        // Re-read price after swap (swap may have moved it)
+        sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
+
+        uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, balance0, balance1
+        );
+
+        // Reduce liquidity by 2 to help with rounding
+        if (liq >= 2) {
+            liq -= 2;
+        } else {
+            liq = 0;
+        }
+
+        if (liq == 0) {
+            revert("Insufficient liquidity");
+        }
+
+        // Calculate actual amounts needed for this liquidity
+        (uint256 neededAmount0, uint256 neededAmount1) = LiquidityAmounts.getAmountsForLiquidity(
+            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liq
+        );
+
+        // Approve tokens to diamond
+        if (neededAmount0 > 0) {
+            IERC20(token0).approve(diamond, neededAmount0);
+        }
+        if (neededAmount1 > 0) {
+            IERC20(token1).approve(diamond, neededAmount1);
+        }
+
+        // Open the maker position
+        assetId = IMaker(diamond).newMaker(
+            msg.sender,
+            poolAddr,
+            lowTick,
+            highTick,
+            liq,
+            isCompounding,
+            minSqrtPriceX96,
+            maxSqrtPriceX96,
+            rftData
+        );
+
+        // Refund unused amounts to user
+        uint256 refund0 = IERC20(token0).balanceOf(address(this));
+        uint256 refund1 = IERC20(token1).balanceOf(address(this));
+
+        if (refund0 > 0) {
+            IERC20(token0).safeTransfer(msg.sender, refund0);
+        }
+        if (refund1 > 0) {
+            IERC20(token1).safeTransfer(msg.sender, refund1);
+        }
+    }
+
+    /**
+     * @notice Computes the optimal amount of tokenIn to swap for an exact-input swap
+     * @dev Uses a closed-form formula: swapAmount = amountIn * valueNeeded / (valueNeeded + feeAdjustedValueKept)
+     * @param sqrtPriceX96 Current pool sqrt price
+     * @param sqrtPriceAX96 Lower tick sqrt price
+     * @param sqrtPriceBX96 Upper tick sqrt price
+     * @param amountIn Total amount of tokenIn
+     * @param fee Pool fee in hundredths of a bip (e.g., 3000 = 0.3%)
+     * @param isToken0In True if user provides token0, false if token1
+     * @return swapAmountIn Amount of tokenIn to swap
+     */
+    function _computeOptimalSwapAmount(
+        uint160 sqrtPriceX96,
+        uint160 sqrtPriceAX96,
+        uint160 sqrtPriceBX96,
+        uint256 amountIn,
+        uint24 fee,
+        bool isToken0In
+    ) internal pure returns (uint256 swapAmountIn) {
+        // Edge cases: price outside the range means only one token is needed
+        if (sqrtPriceX96 <= sqrtPriceAX96) {
+            // Price below range: only token0 needed
+            return isToken0In ? 0 : amountIn;
+        }
+        if (sqrtPriceX96 >= sqrtPriceBX96) {
+            // Price above range: only token1 needed
+            return isToken0In ? amountIn : 0;
+        }
+
+        // Compute reference amounts per unit of liquidity
+        uint128 refLiq = 1e18;
+        uint256 ref0 = LiquidityAmounts.getAmount0ForLiquidity(sqrtPriceX96, sqrtPriceBX96, refLiq);
+        uint256 ref1 = LiquidityAmounts.getAmount1ForLiquidity(sqrtPriceAX96, sqrtPriceX96, refLiq);
+
+        uint256 feeComplement = 1e6 - uint256(fee);
+
+        if (!isToken0In) {
+            // User provides token1, needs to swap some for token0
+            // ref0Value = value of ref0 in token1 terms = ref0 * sqrtPrice^2 / Q96^2
+            uint256 ref0Value = FullMath.mulDiv(ref0, sqrtPriceX96, FixedPoint96.Q96);
+            ref0Value = FullMath.mulDiv(ref0Value, sqrtPriceX96, FixedPoint96.Q96);
+
+            // Fee-adjusted value of token1 kept
+            uint256 ref1Adjusted = FullMath.mulDiv(ref1, feeComplement, 1e6);
+
+            uint256 denominator = ref0Value + ref1Adjusted;
+            if (denominator == 0) return 0;
+
+            swapAmountIn = FullMath.mulDiv(amountIn, ref0Value, denominator);
+        } else {
+            // User provides token0, needs to swap some for token1
+            // ref1Value = value of ref1 in token0 terms = ref1 * Q96^2 / sqrtPrice^2
+            uint256 ref1Value = FullMath.mulDiv(ref1, FixedPoint96.Q96, sqrtPriceX96);
+            ref1Value = FullMath.mulDiv(ref1Value, FixedPoint96.Q96, sqrtPriceX96);
+
+            // Fee-adjusted value of token0 kept
+            uint256 ref0Adjusted = FullMath.mulDiv(ref0, feeComplement, 1e6);
+
+            uint256 denominator = ref1Value + ref0Adjusted;
+            if (denominator == 0) return 0;
+
+            swapAmountIn = FullMath.mulDiv(amountIn, ref1Value, denominator);
+        }
+    }
+
+    /**
+     * @notice Performs an exact input swap
+     * @param poolAddr The pool address
+     * @param tokenIn The input token
+     * @param tokenOut The output token
+     * @param amountIn The exact amount of input token to spend
+     * @param amountOutMinimum Minimum amount of output token to receive
+     * @return amountOut The amount of output token received
+     */
+    function _swapExactIn(
+        address poolAddr,
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMinimum
+    ) private returns (uint256 amountOut) {
+        IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
+
+        bool zeroForOne = tokenIn < tokenOut;
+
+        // Store swap state for callback
+        swapState = SwapState({
+            poolAddr: poolAddr,
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            payer: address(this),
+            amountInMaximum: amountIn
+        });
+
+        // Execute the swap (positive amountSpecified = exact input)
+        (int256 amount0Delta, int256 amount1Delta) = pool.swap(
+            address(this),
+            zeroForOne,
+            int256(amountIn),
+            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+            ""
+        );
+
+        // Output is the negative delta
+        amountOut = uint256(-(zeroForOne ? amount1Delta : amount0Delta));
+
+        require(amountOut >= amountOutMinimum, SlippageTooHigh());
 
         // Clear swap state
         delete swapState;
