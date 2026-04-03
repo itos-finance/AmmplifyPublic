@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { formatUnits } from "viem";
-import { getPublicClient } from "../clients/chain.js";
+import { getPublicClient, setRpcUrl, getCurrentRpcUrl } from "../clients/chain.js";
 import * as middleware from "../clients/middleware.js";
 import { getDiamondAddress, getAddresses } from "../config.js";
 import { IViewAbi } from "../abi/IView.js";
@@ -362,6 +362,38 @@ export function registerReadTools(server: McpServer) {
             allowance: allowance.toString(),
             isMaxApproved: (allowance as bigint) > 2n ** 200n,
           }),
+        }],
+      };
+    }
+  );
+
+  // ─── set_rpc ────────────────────────────────────────────────
+  server.tool(
+    "set_rpc",
+    "Switch the RPC endpoint used for on-chain reads and writes. Useful if you have your own Monad node or want to use a different provider. Resets the cached clients immediately.",
+    { rpc_url: z.string().describe("New RPC endpoint URL (e.g. https://rpc.monad.xyz)") },
+    async ({ rpc_url }) => {
+      const previous = getCurrentRpcUrl();
+      setRpcUrl(rpc_url);
+      return {
+        content: [{
+          type: "text",
+          text: jsonStringify({ previous, current: rpc_url }),
+        }],
+      };
+    }
+  );
+
+  // ─── get_rpc ────────────────────────────────────────────────
+  server.tool(
+    "get_rpc",
+    "Show the current RPC endpoint being used for on-chain calls.",
+    {},
+    async () => {
+      return {
+        content: [{
+          type: "text",
+          text: jsonStringify({ rpcUrl: getCurrentRpcUrl() }),
         }],
       };
     }

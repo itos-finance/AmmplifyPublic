@@ -80,6 +80,5 @@ app.delete("/mcp", async (req, res) => {
 const config = getConfig();
 app.listen(config.port, () => {
   console.log(`Ammplify MCP server running at http://localhost:${config.port}/mcp`);
-  console.log(`Network: ${config.network} (chain ${config.chainId})`);
-  console.log(`RPC: ${config.rpcUrl}`);
+  console.log(`Chain: ${config.chainId} | RPC: ${config.rpcUrl}`);
 });

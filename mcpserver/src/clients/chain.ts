@@ -11,32 +11,45 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { getConfig } from "../config.js";
 
+let _rpcOverride: string | null = null;
+let _publicClient: PublicClient | null = null;
+let _walletClient: WalletClient<Transport, Chain, Account> | null = null;
+
+function getRpcUrl(): string {
+  return _rpcOverride || getConfig().rpcUrl;
+}
+
 function getChain(): Chain {
-  const { chainId, rpcUrl } = getConfig();
+  const { chainId } = getConfig();
   return {
     id: chainId,
     name: `Chain ${chainId}`,
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: {
-      default: { http: [rpcUrl] },
+      default: { http: [getRpcUrl()] },
     },
   };
 }
 
-let _publicClient: PublicClient | null = null;
+export function setRpcUrl(url: string) {
+  _rpcOverride = url;
+  _publicClient = null;
+  _walletClient = null;
+}
+
+export function getCurrentRpcUrl(): string {
+  return getRpcUrl();
+}
 
 export function getPublicClient(): PublicClient {
   if (!_publicClient) {
-    const { rpcUrl } = getConfig();
     _publicClient = createPublicClient({
       chain: getChain(),
-      transport: http(rpcUrl),
+      transport: http(getRpcUrl()),
     });
   }
   return _publicClient;
 }
-
-let _walletClient: WalletClient<Transport, Chain, Account> | null = null;
 
 export function getWalletClient(): WalletClient<Transport, Chain, Account> {
   if (!_walletClient) {
@@ -50,7 +63,7 @@ export function getWalletClient(): WalletClient<Transport, Chain, Account> {
     _walletClient = createWalletClient({
       account,
       chain: getChain(),
-      transport: http(config.rpcUrl),
+      transport: http(getRpcUrl()),
     });
   }
   return _walletClient;

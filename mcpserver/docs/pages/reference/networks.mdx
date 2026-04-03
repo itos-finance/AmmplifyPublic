@@ -1,50 +1,31 @@
 ---
 title: Networks
-description: Mainnet and testnet configuration for the Ammplify MCP server.
+description: Network configuration for the Ammplify MCP server.
 ---
 
 # Networks
 
-The Ammplify MCP server supports both Monad mainnet and testnet.
+Ammplify MCP runs on Monad mainnet (chain 143). Everything is pre-configured out of the box.
 
-## Configuration
+## Defaults
 
-Set the `AMMPLIFY_NETWORK` environment variable:
+| Setting | Value |
+|---------|-------|
+| **Chain ID** | 143 |
+| **RPC URL** | `https://rpc.monad.xyz` |
+| **Diamond** | `0x5b5e9d616fafccc4865a6c29b6f89ff3aae7c892` |
+| **Addresses File** | `addresses/monad-mainnet.json` |
 
-```bash
-# Mainnet (default)
-AMMPLIFY_NETWORK=mainnet
+## Overrides
 
-# Testnet
-AMMPLIFY_NETWORK=testnet
-```
-
-This automatically sets the correct RPC URL, chain ID, and deployed addresses.
-
-## Network Details
-
-| | Mainnet | Testnet |
-|---|---------|---------|
-| **Chain ID** | 143 | 10143 |
-| **RPC URL** | `https://rpc.monad.xyz` | `https://testnet-rpc.monad.xyz` |
-| **Addresses File** | `addresses/monad-mainnet.json` | `addresses/uniswapv3.json` |
-| **Diamond** | `0x5b5e9d616fafccc4865a6c29b6f89ff3aae7c892` | `0x67C78CbE8eF94D14A8519572b8AEEcad4bb9319B` |
-
-## Override Individual Settings
-
-You can override any auto-configured value:
+If you want to use your own RPC node:
 
 ```bash
-AMMPLIFY_NETWORK=mainnet
-
-# Override just the RPC (e.g., use a private node)
-AMMPLIFY_RPC_URL=https://my-private-monad-rpc.example.com
-
-# Override the addresses file
-AMMPLIFY_ADDRESSES_FILE=./addresses/custom.json
+AMMPLIFY_RPC_URL=https://my-monad-rpc.example.com
+AMMPLIFY_CHAIN_ID=143
 ```
 
-## Available Tokens (Mainnet)
+## Available Tokens
 
 | Token | Symbol | Decimals | Address |
 |-------|--------|----------|---------|
@@ -57,7 +38,7 @@ AMMPLIFY_ADDRESSES_FILE=./addresses/custom.json
 | Chog | CHOG | 18 | `0x350035555e10d9afaf1566aaebfced5ba6c27777` |
 | gMON | gMON | 18 | `0x8498312a6b3cbd158bf0c93abdcf29e6e4f55081` |
 
-## Available Pools (Mainnet)
+## Available Pools
 
 | Pair | Fee | Tick Spacing | Address |
 |------|-----|-------------|---------|

@@ -9,27 +9,6 @@ const root = resolve(__dirname, "..");
 
 dotenvConfig({ path: resolve(root, ".env") });
 
-export type NetworkName = "mainnet" | "testnet";
-
-interface NetworkDefaults {
-  rpcUrl: string;
-  chainId: number;
-  addressesFile: string;
-}
-
-const NETWORKS: Record<NetworkName, NetworkDefaults> = {
-  mainnet: {
-    rpcUrl: "https://rpc.monad.xyz",
-    chainId: 143,
-    addressesFile: "./addresses/monad-mainnet.json",
-  },
-  testnet: {
-    rpcUrl: "https://testnet-rpc.monad.xyz",
-    chainId: 10143,
-    addressesFile: "./addresses/uniswapv3.json",
-  },
-};
-
 export interface DeployedAddresses {
   network: string;
   deployer: string;
@@ -57,27 +36,16 @@ export interface DeployedAddresses {
   };
 }
 
-function getNetwork(): NetworkName {
-  const env = process.env.AMMPLIFY_NETWORK?.toLowerCase();
-  if (env === "testnet") return "testnet";
-  return "mainnet";
-}
-
 let _addresses: DeployedAddresses | null = null;
 
 export function getAddresses(): DeployedAddresses {
   if (!_addresses) {
-    const network = getNetwork();
-    const defaults = NETWORKS[network];
     const addressesPath = resolve(
       root,
-      process.env.AMMPLIFY_ADDRESSES_FILE || defaults.addressesFile
+      process.env.AMMPLIFY_ADDRESSES_FILE || "./addresses/monad-mainnet.json"
     );
     if (!existsSync(addressesPath)) {
-      throw new Error(
-        `Addresses file not found: ${addressesPath}\n` +
-        `Set AMMPLIFY_NETWORK=mainnet|testnet or AMMPLIFY_ADDRESSES_FILE to a valid path.`
-      );
+      throw new Error(`Addresses file not found: ${addressesPath}`);
     }
     _addresses = JSON.parse(readFileSync(addressesPath, "utf-8"));
   }
@@ -85,18 +53,11 @@ export function getAddresses(): DeployedAddresses {
 }
 
 export function getConfig() {
-  const network = getNetwork();
-  const defaults = NETWORKS[network];
-
-  const rpcUrl = process.env.AMMPLIFY_RPC_URL || defaults.rpcUrl;
-  const chainId = process.env.AMMPLIFY_CHAIN_ID
-    ? parseInt(process.env.AMMPLIFY_CHAIN_ID)
-    : defaults.chainId;
-
   return {
-    network,
-    rpcUrl,
-    chainId,
+    rpcUrl: process.env.AMMPLIFY_RPC_URL || "https://rpc.monad.xyz",
+    chainId: process.env.AMMPLIFY_CHAIN_ID
+      ? parseInt(process.env.AMMPLIFY_CHAIN_ID)
+      : 143,
     privateKey: process.env.AMMPLIFY_PRIVATE_KEY as `0x${string}` | undefined,
     middlewareUrl:
       process.env.AMMPLIFY_MIDDLEWARE_URL || "https://api.ammplify.xyz",
