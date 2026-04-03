@@ -1,0 +1,98 @@
+---
+title: Write Tools
+description: Reference for transaction-executing MCP tools. Requires AMMPLIFY_PRIVATE_KEY.
+---
+
+# Write Tools
+
+These tools execute on-chain transactions. They require `AMMPLIFY_PRIVATE_KEY` set in your `.env` file.
+
+All write tools simulate the transaction before sending, and wait for the receipt. They return the transaction hash and status.
+
+<Callout type="warning">
+Write tools execute real transactions on-chain. On mainnet, this involves real funds. Always verify the parameters before confirming.
+</Callout>
+
+## approve_token
+
+Approve the Ammplify diamond to spend tokens. Required before opening a position.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | Yes | Token symbol (`USDC`, `WMON`) or address |
+| `amount` | string | Yes | Amount (e.g. `"1000"`) or `"max"` for unlimited |
+
+**Example:** `approve_token({ token: "USDC", amount: "max" })`
+
+---
+
+## open_maker
+
+Open a new maker (LP) position. Deposits liquidity into a tick range.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pool_address` | string | Yes | Uniswap V3 pool address |
+| `low_tick` | integer | Yes | Lower tick (must be divisible by tickSpacing) |
+| `high_tick` | integer | Yes | Upper tick (must be divisible by tickSpacing) |
+| `liquidity` | string | Yes | Liquidity amount (uint128). Minimum: `1000000` |
+| `compounding` | boolean | No | Auto-compound fees (default: `true`) |
+| `recipient` | string | No | Recipient address (default: signer) |
+
+<Callout type="info">
+Both tokens in the pair must be approved for the Ammplify diamond before calling this tool. Use `get_allowance` to check, then `approve_token` if needed.
+</Callout>
+
+---
+
+## close_maker
+
+Close a maker position and withdraw all tokens + accumulated fees.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_id` | string | Yes | Asset ID of the position to close |
+| `recipient` | string | No | Recipient address (default: signer) |
+
+---
+
+## adjust_maker
+
+Adjust an existing position's liquidity. Increasing or decreasing also collects fees.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_id` | string | Yes | Asset ID to adjust |
+| `target_liquidity` | string | Yes | New target liquidity (uint128) |
+| `recipient` | string | No | Recipient address (default: signer) |
+
+---
+
+## collect_fees
+
+Collect accrued fees without changing the position size.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_id` | string | Yes | Asset ID of the position |
+| `recipient` | string | No | Recipient address (default: signer) |
+
+---
+
+## add_permission
+
+Grant an address permission to open positions on your behalf.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `opener` | string | Yes | Address to grant permission to |
+
+---
+
+## remove_permission
+
+Revoke an address's permission to open positions on your behalf.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `opener` | string | Yes | Address to revoke permission from |

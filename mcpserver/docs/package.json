@@ -1,0 +1,20 @@
+{
+  "name": "ammplify-mcp-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tome dev",
+    "build": "tome build",
+    "deploy": "tome deploy"
+  },
+  "devDependencies": {
+    "@mdx-js/rollup": "^3.1.1",
+    "@tomehq/cli": "^0.1.0",
+    "@tomehq/theme": "^0.1.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1"
+  }
+}

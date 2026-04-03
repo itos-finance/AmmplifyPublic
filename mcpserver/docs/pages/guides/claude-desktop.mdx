@@ -1,0 +1,79 @@
+---
+title: Claude Desktop Setup
+description: Step-by-step guide to connect Ammplify MCP to Claude Desktop.
+---
+
+# Claude Desktop Setup
+
+## Prerequisites
+
+- [Claude Desktop](https://claude.ai/download) installed
+- Node.js 18+ installed
+- The Ammplify MCP server running locally (`npm run dev`)
+
+## Step 1: Edit Claude Desktop Config
+
+Open the config file:
+
+```bash
+# macOS
+open ~/Library/Application\ Support/Claude/claude_desktop_config.json
+
+# Windows
+notepad %APPDATA%\Claude\claude_desktop_config.json
+```
+
+Add the Ammplify server:
+
+```json
+{
+  "mcpServers": {
+    "ammplify": {
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+## Step 2: Restart Claude Desktop
+
+Quit and reopen Claude Desktop. You should see the Ammplify tools available in the tools menu (hammer icon).
+
+## Step 3: Verify Connection
+
+Ask Claude:
+
+```
+List all Ammplify pools
+```
+
+Claude should call `get_pools` and return a list of 10+ pools with token pairs, fee tiers, and addresses.
+
+## Using Write Operations
+
+To execute transactions (open positions, approve tokens), your MCP server needs a private key:
+
+1. Add to your `mcpserver/.env`:
+   ```
+   AMMPLIFY_PRIVATE_KEY=0x...
+   ```
+2. Restart the MCP server (`npm run dev`)
+
+<Callout type="warning">
+Your private key is stored locally and never sent to any external service. The MCP server signs transactions locally using viem. For production use, consider integrating Privy or Coinbase AgentKit for managed wallet signing.
+</Callout>
+
+## Example: Full LP Flow
+
+```
+You: What's the best pool for earning yield on Ammplify?
+
+You: I want to provide liquidity to the WMON/USDC pool.
+     Approve my tokens and open a position around the current price.
+
+You: How is my position doing? Check the balances and fees.
+
+You: Collect my fees.
+```
+
+Claude will handle the entire flow: checking pool state, approving tokens, calculating tick ranges, opening the position, and monitoring it.

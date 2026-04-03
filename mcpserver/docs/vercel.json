@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npx tome build",
+  "outputDirectory": "out",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

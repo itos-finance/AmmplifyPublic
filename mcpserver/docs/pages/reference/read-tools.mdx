@@ -1,0 +1,136 @@
+---
+title: Read Tools
+description: Reference for all read-only MCP tools. No private key required.
+---
+
+# Read Tools
+
+These tools query data from Ammplify's middleware API and on-chain contracts. No private key needed.
+
+## Middleware Tools
+
+### get_pools
+
+List all Ammplify pools with token pairs, fee tiers, and addresses.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | | | |
+
+**Returns:** Array of pools with `address`, `token0`, `token1`, `fee`, `tickSpacing`, `chainId`.
+
+---
+
+### get_tvl
+
+Get total value locked across the Ammplify protocol.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)* | | | |
+
+**Returns:** Per-pool TVL breakdown and protocol total in USD.
+
+---
+
+### get_positions
+
+Get all maker (LP) positions for a wallet address.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `owner` | string | Yes | Wallet address |
+
+---
+
+### get_prices
+
+Get current token prices for a pool.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pool_address` | string | Yes | Pool contract address |
+
+---
+
+### get_leaderboard
+
+Get top earners on the Ammplify protocol.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `time_window` | string | No | `"1d"`, `"30d"`, or `"all-time"` (default) |
+
+---
+
+### get_tick_liquidity
+
+Get liquidity distribution across ticks in a range.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pool_address` | string | Yes | Pool contract address |
+| `lower_tick` | integer | Yes | Lower tick boundary |
+| `upper_tick` | integer | Yes | Upper tick boundary |
+
+---
+
+## On-Chain Tools
+
+### get_pool_info
+
+Get detailed pool state directly from the blockchain.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `pool_address` | string | Yes | Uniswap V3 pool address |
+
+**Returns:** `sqrtPriceX96`, `currentTick`, human-readable `price`, `fee`, `tickSpacing`, `liquidity`, token info (symbol, decimals, address), and Ammplify `poolInfo` (treeWidth).
+
+---
+
+### get_asset_info
+
+Get on-chain details for a specific position.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_id` | string | Yes | Asset ID (uint256 as string) |
+
+**Returns:** `owner`, `poolAddr`, `lowTick`, `highTick`, `liqType` (MAKER, MAKER_NC, TAKER), `liquidity`.
+
+---
+
+### get_asset_balances
+
+Get current token balances and accrued fees for a position.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_id` | string | Yes | Asset ID (uint256 as string) |
+
+**Returns:** `netBalance0`, `netBalance1` (position value), `fees0`, `fees1` (accrued fees), token metadata.
+
+---
+
+### get_token_balance
+
+Get ERC20 token balance for a wallet.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | Yes | Token symbol (`USDC`, `WMON`) or address |
+| `owner` | string | Yes | Wallet address |
+
+---
+
+### get_allowance
+
+Check ERC20 allowance for the Ammplify diamond contract.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | Yes | Token symbol or address |
+| `owner` | string | Yes | Wallet address that granted the allowance |
+
+**Returns:** `allowance` amount and `isMaxApproved` boolean.

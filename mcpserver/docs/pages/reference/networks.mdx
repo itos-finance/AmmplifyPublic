@@ -1,0 +1,72 @@
+---
+title: Networks
+description: Mainnet and testnet configuration for the Ammplify MCP server.
+---
+
+# Networks
+
+The Ammplify MCP server supports both Monad mainnet and testnet.
+
+## Configuration
+
+Set the `AMMPLIFY_NETWORK` environment variable:
+
+```bash
+# Mainnet (default)
+AMMPLIFY_NETWORK=mainnet
+
+# Testnet
+AMMPLIFY_NETWORK=testnet
+```
+
+This automatically sets the correct RPC URL, chain ID, and deployed addresses.
+
+## Network Details
+
+| | Mainnet | Testnet |
+|---|---------|---------|
+| **Chain ID** | 143 | 10143 |
+| **RPC URL** | `https://rpc.monad.xyz` | `https://testnet-rpc.monad.xyz` |
+| **Addresses File** | `addresses/monad-mainnet.json` | `addresses/uniswapv3.json` |
+| **Diamond** | `0x5b5e9d616fafccc4865a6c29b6f89ff3aae7c892` | `0x67C78CbE8eF94D14A8519572b8AEEcad4bb9319B` |
+
+## Override Individual Settings
+
+You can override any auto-configured value:
+
+```bash
+AMMPLIFY_NETWORK=mainnet
+
+# Override just the RPC (e.g., use a private node)
+AMMPLIFY_RPC_URL=https://my-private-monad-rpc.example.com
+
+# Override the addresses file
+AMMPLIFY_ADDRESSES_FILE=./addresses/custom.json
+```
+
+## Available Tokens (Mainnet)
+
+| Token | Symbol | Decimals | Address |
+|-------|--------|----------|---------|
+| Wrapped MON | WMON | 18 | `0x3bd359c1119da7da1d913d1c4d2b7c461115433a` |
+| USDC | USDC | 6 | `0x754704bc059f8c67012fed69bc8a327a5aafb603` |
+| Wrapped Ether | WETH | 18 | `0xee8c0e9f1bffb4eb878d8f15f368a02a35481242` |
+| Wrapped BTC | WBTC | 8 | `0x0555e30da8f98308edb960aa94c0db47230d2b9c` |
+| USDT0 | USDT0 | 6 | `0xe7cd86e13ac4309349f30b3435a9d337750fc82d` |
+| ShMonad | shMON | 18 | `0x1b68626dca36c7fe922fd2d55e4f631d962de19c` |
+| Chog | CHOG | 18 | `0x350035555e10d9afaf1566aaebfced5ba6c27777` |
+| gMON | gMON | 18 | `0x8498312a6b3cbd158bf0c93abdcf29e6e4f55081` |
+
+## Available Pools (Mainnet)
+
+| Pair | Fee | Tick Spacing | Address |
+|------|-----|-------------|---------|
+| WMON/USDC | 0.3% | 60 | `0x659bd0bc...` |
+| WMON/USDC | 1% | 200 | `0xc33e9e44...` |
+| USDC/WETH | 0.3% | 60 | `0x25ef1a21...` |
+| shMON/WMON | 0.01% | 1 | `0x1f86a9f2...` |
+| USDC/USDT0 | 0.01% | 1 | `0xacf82ecc...` |
+| WMON/USDT0 | 0.3% | 60 | `0x16d56469...` |
+| WBTC/USDC | 0.3% | 60 | `0xb0b083e0...` |
+| CHOG/WMON | 1% | 200 | `0x116e7d07...` |
+| WMON/gMON | 0.01% | 1 | `0xb80d7a8f...` |

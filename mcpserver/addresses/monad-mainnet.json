@@ -1,0 +1,79 @@
+{
+  "network": "Monad Mainnet (Chain 143)",
+  "deployer": "0x2a42bE604948c0cce8a1FCFC781089611E2a1ea0",
+  "tokens": {
+    "WMON": {
+      "address": "0x3bd359c1119da7da1d913d1c4d2b7c461115433a",
+      "name": "Wrapped MON",
+      "symbol": "WMON",
+      "decimals": 18
+    },
+    "USDC": {
+      "address": "0x754704bc059f8c67012fed69bc8a327a5aafb603",
+      "name": "USDC",
+      "symbol": "USDC",
+      "decimals": 6
+    },
+    "WETH": {
+      "address": "0xee8c0e9f1bffb4eb878d8f15f368a02a35481242",
+      "name": "Wrapped Ether",
+      "symbol": "WETH",
+      "decimals": 18
+    },
+    "WBTC": {
+      "address": "0x0555e30da8f98308edb960aa94c0db47230d2b9c",
+      "name": "Wrapped BTC",
+      "symbol": "WBTC",
+      "decimals": 8
+    },
+    "USDT0": {
+      "address": "0xe7cd86e13ac4309349f30b3435a9d337750fc82d",
+      "name": "USDT0",
+      "symbol": "USDT0",
+      "decimals": 6
+    },
+    "shMON": {
+      "address": "0x1b68626dca36c7fe922fd2d55e4f631d962de19c",
+      "name": "ShMonad",
+      "symbol": "shMON",
+      "decimals": 18
+    },
+    "CHOG": {
+      "address": "0x350035555e10d9afaf1566aaebfced5ba6c27777",
+      "name": "Chog",
+      "symbol": "CHOG",
+      "decimals": 18
+    },
+    "gMON": {
+      "address": "0x8498312a6b3cbd158bf0c93abdcf29e6e4f55081",
+      "name": "gMON",
+      "symbol": "gMON",
+      "decimals": 18
+    }
+  },
+  "vaults": {},
+  "ammplify": {
+    "simplexDiamond": "0x5b5e9d616fafccc4865a6c29b6f89ff3aae7c892",
+    "borrowlessDiamond": "",
+    "nftManager": ""
+  },
+  "uniswap": {
+    "factory": "",
+    "nfpm": "",
+    "simpleSwapRouter": "",
+    "pools": {
+      "WMON_USDC_3000": "0x659bd0bc4167ba25c62e05656f78043e7ed4a9da",
+      "WMON_USDC_10000": "0xc33e9e441e6f4e74cdb34f878be51189c9cb00d8",
+      "USDC_WETH_3000": "0x25ef1a210ff55bcee9f8fee979aaff6bd1be5bf1",
+      "shMON_WMON_100": "0x1f86a9f2441cac9b942cfb5445530cdbb28717ed",
+      "USDC_USDT0_100": "0xacf82ecc826a9fc2d8c8c4d370d2d268fa5b3500",
+      "WMON_USDT0_3000": "0x16d564690d32802a0562b4a8a2378350525b365f",
+      "WBTC_USDC_3000": "0xb0b083e0353f7df4d5ee1c812ea8c6960c080373",
+      "CHOG_WMON_10000": "0x116e7d070f1888b81e1e0324f56d6746b2d7d8f1",
+      "WMON_gMON_100": "0xb80d7a8f5331a907e34cd73f575c784b43e5acb5"
+    }
+  },
+  "integrations": {
+    "decomposer": ""
+  }
+}

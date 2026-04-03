@@ -1,0 +1,49 @@
+---
+title: Claude Code Setup
+description: Connect Ammplify MCP to Claude Code CLI.
+---
+
+# Claude Code Setup
+
+## Prerequisites
+
+- Claude Code CLI installed
+- Node.js 18+ installed
+
+## Step 1: Start the MCP Server
+
+```bash
+cd mcpserver
+npm install
+cp .env.example .env
+# Edit .env if needed (defaults to mainnet)
+npm run dev
+```
+
+## Step 2: Add the MCP Server
+
+In a separate terminal:
+
+```bash
+claude mcp add ammplify --transport http http://localhost:3100/mcp
+```
+
+## Step 3: Use It
+
+Start a Claude Code session and the Ammplify tools will be available:
+
+```bash
+claude
+```
+
+Then ask:
+
+```
+List all Ammplify pools and show me the TVL
+```
+
+## Removing the Server
+
+```bash
+claude mcp remove ammplify
+```

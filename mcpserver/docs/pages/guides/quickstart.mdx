@@ -1,0 +1,84 @@
+---
+title: Quickstart
+description: Get the Ammplify MCP server running in under 2 minutes.
+---
+
+# Quickstart
+
+## 1. Clone and Install
+
+```bash
+git clone https://github.com/itos-finance/AmmplifyPublic.git
+cd AmmplifyPublic/mcpserver
+npm install
+```
+
+## 2. Configure
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```bash
+# Network: "mainnet" or "testnet"
+AMMPLIFY_NETWORK=mainnet
+
+# Only needed for write operations (opening positions, approvals)
+# AMMPLIFY_PRIVATE_KEY=0x...
+```
+
+<Callout type="info">
+Read operations (pool data, balances, TVL) work without a private key. You only need `AMMPLIFY_PRIVATE_KEY` to execute transactions.
+</Callout>
+
+## 3. Start the Server
+
+```bash
+npm run dev
+```
+
+You should see:
+
+```
+Ammplify MCP server running at http://localhost:3100/mcp
+Network: mainnet (chain 143)
+RPC: https://rpc.monad.xyz
+```
+
+## 4. Connect Your AI Client
+
+<Tabs items={["Claude Desktop", "Claude Code"]}>
+
+```json
+// ~/Library/Application Support/Claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "ammplify": {
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+```bash
+claude mcp add ammplify --transport http http://localhost:3100/mcp
+```
+
+</Tabs>
+
+## 5. Try It Out
+
+Ask your AI:
+
+- "List all Ammplify pools"
+- "What's the TVL on Ammplify?"
+- "Show me the WMON/USDC pool info"
+- "Check my WMON balance for 0x..."
+
+## Next Steps
+
+- [Claude Desktop Setup](/guides/claude-desktop) — detailed walkthrough
+- [Read Tools Reference](/reference/read-tools) — all available data queries
+- [Write Tools Reference](/reference/write-tools) — position management operations

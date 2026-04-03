@@ -1,0 +1,66 @@
+---
+title: Ammplify MCP Server
+description: Connect AI agents to the Ammplify DeFi protocol. Provide liquidity, earn yield, and manage positions through natural language.
+---
+
+# Ammplify MCP Server
+
+Give your AI agent access to Ammplify — the liquidity provisioning protocol on Monad. Deposit liquidity, earn swap fees + borrow fees, and manage positions through conversation.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="zap" href="/guides/quickstart">
+    Get the MCP server running in under 2 minutes. No private key needed for read operations.
+  </Card>
+  <Card title="Claude Desktop" icon="monitor" href="/guides/claude-desktop">
+    Connect Ammplify to Claude Desktop with one config line.
+  </Card>
+  <Card title="Tools Reference" icon="wrench" href="/reference/read-tools">
+    Full reference for all 18 tools — read pool data, manage positions, earn yield.
+  </Card>
+  <Card title="Architecture" icon="layers" href="/reference/architecture">
+    How the MCP server connects to Ammplify's on-chain protocol and middleware API.
+  </Card>
+</CardGroup>
+
+## What You Can Do
+
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Read** | 11 tools | Pool data, positions, balances, fees, TVL, prices, leaderboard |
+| **Write** | 7 tools | Open/close/adjust positions, approve tokens, collect fees |
+| **Resources** | 2 | Protocol overview, deployed contract addresses |
+| **Prompts** | 3 | Guided workflows for position analysis, pool selection, LP onboarding |
+
+## Example Conversation
+
+```
+You: What pools are available on Ammplify?
+
+Claude: [calls get_pools] There are 10 pools on Ammplify. The largest by TVL
+is WMON/USDC (0.3% fee) with $14K TVL. Other pools include USDC/WETH,
+WBTC/USDC, shMON/WMON, and CHOG/WMON.
+
+You: Open a maker position on the WMON/USDC pool around the current price.
+
+Claude: [calls get_pool_info] Current price is 0.0268 USDC/WMON at tick -312514.
+I'll set up a range from tick -312600 to -312420 (centered, ±~0.5%).
+First I need to approve both tokens...
+[calls approve_token for WMON, then USDC]
+[calls open_maker with compounding=true]
+Position opened! Asset ID: 42. You're now earning swap fees + borrow fees.
+```
+
+## How Ammplify Works
+
+**Makers (LPs)** deposit liquidity into concentrated tick ranges — earning swap fees from the underlying Uniswap V3 pool plus borrow fees from Takers who borrow their liquidity. Think of it as writing covered calls and getting paid for it.
+
+**The protocol manages everything** through a binary tree structure that handles fee distribution, auto-compounding, and liquidity redistribution automatically.
+
+## Networks
+
+| Network | Chain ID | Status |
+|---------|----------|--------|
+| Monad Mainnet | 143 | Live |
+| Monad Testnet | 10143 | Available |
+
+Set `AMMPLIFY_NETWORK=mainnet` or `AMMPLIFY_NETWORK=testnet` in your `.env` file.

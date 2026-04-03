@@ -1,0 +1,85 @@
+---
+title: Architecture
+description: How the Ammplify MCP server connects AI agents to on-chain DeFi.
+---
+
+# Architecture
+
+## System Overview
+
+```
+AI Agent (Claude Desktop / Claude Code / ChatGPT)
+    |
+    | MCP Protocol (Streamable HTTP, JSON-RPC 2.0)
+    |
+Ammplify MCP Server (localhost:3100)
+    |
+    |--- Middleware API (api.ammplify.xyz)
+    |       Indexed data: pools, positions, TVL, prices, leaderboard
+    |
+    |--- On-Chain (Monad RPC via viem)
+            Direct reads: pool state, balances, allowances
+            Transactions: open/close positions, approvals, fee collection
+```
+
+## Components
+
+### MCP Server
+
+TypeScript server using the official `@modelcontextprotocol/sdk`. Exposes tools, resources, and prompts over Streamable HTTP transport.
+
+- **Entry point:** `src/index.ts`
+- **Transport:** Streamable HTTP on configurable port (default 3100)
+- **Session management:** Per-client sessions with unique IDs
+
+### Middleware Client
+
+HTTP client for `api.ammplify.xyz` — the Ammplify data indexing service. Provides aggregated data that's expensive to compute on-chain:
+
+- Pool listings with metadata
+- Position data by owner
+- Protocol TVL
+- Token prices
+- Leaderboard rankings
+
+### Chain Client
+
+viem-based client for direct blockchain reads and transaction execution:
+
+- **PublicClient** — read-only operations (no key needed)
+- **WalletClient** — transaction signing (requires private key)
+
+### Contract ABIs
+
+Extracted from the Ammplify Solidity contracts:
+
+| ABI | Purpose |
+|-----|---------|
+| `IMakerAbi` | Maker position operations (open, close, adjust, collect, permissions) |
+| `IViewAbi` | Read-only queries (asset info, balances, pool info, nodes) |
+| `IERC20Abi` | Token operations (balance, allowance, approve) |
+| `IUniswapV3PoolAbi` | Uniswap V3 pool state (slot0, liquidity, tokens) |
+| `IAdminAbi` | Protocol configuration (fee curves, vaults) |
+
+## Security Model
+
+The v1 MCP server uses **local private key signing** (same approach as the Ammplify CLI). The key never leaves the local process.
+
+For production deployments, we recommend integrating a managed wallet solution:
+
+| Solution | How It Works |
+|----------|-------------|
+| **Privy** | Server-side wallets via MPC, policy controls, `@privy-io/mcp-server` |
+| **Coinbase AgentKit** | CDP-managed wallets, smart wallet support, gasless transactions |
+| **Phantom MCP** | Wallet-prompted approval — AI proposes, user signs in Phantom |
+
+## Protocol: Ammplify
+
+Ammplify is built as a **Diamond proxy** (EIP-2535) with facets for each operation type. The MCP server interacts with a single diamond address that routes calls to the appropriate facet.
+
+The protocol manages liquidity through a **binary tree** structure that tracks positions at every granularity. This enables:
+
+- Automatic fee distribution between makers and takers
+- Auto-compounding of earned fees
+- Liquidity redistribution (solveLiq) when positions overlap
+- Utilization-based borrow fee curves
