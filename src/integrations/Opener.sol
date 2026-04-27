@@ -10,6 +10,7 @@ import { IERC20 } from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol"
 import { SafeERC20 } from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import { FullMath } from "v3-core/libraries/FullMath.sol";
 import { FixedPoint96 } from "v3-core/libraries/FixedPoint96.sol";
+import { IUniswapV3SwapCallback } from "v3-core/interfaces/callback/IUniswapV3SwapCallback.sol";
 
 interface ICapricornCLSwapCallback {
     function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata data) external;
@@ -18,13 +19,17 @@ interface ICapricornCLSwapCallback {
 /**
  * @title Opener
  * @notice Contract that opens maker positions by swapping for missing tokens
- * @dev Handles exact input swaps and Capricorn callbacks to acquire the token the user doesn't have
+ * @dev Handles exact input swaps and both Uniswap V3 and Capricorn callbacks
  */
-contract Opener is ICapricornCLSwapCallback {
+contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
     using SafeERC20 for IERC20;
 
     /// @notice The diamond contract that implements IMaker
     address public immutable diamond;
+
+    /// @dev Inverse of the balance fraction reserved to absorb the Diamond's
+    ///      round-up math when minting a new maker position. 10_000 = 0.01%.
+    uint256 private constant ROUNDING_HEADROOM_DIVISOR = 10_000;
 
     /// @notice Error thrown when callback is from wrong pool
     error InvalidCallbackSender();
@@ -114,41 +119,31 @@ contract Opener is ICapricornCLSwapCallback {
         // Calculate liquidity from the token amounts we have
         // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
 
+        // Size liquidity against a slightly reduced view of our balances. The
+        // Diamond's internal walker math rounds up when computing how many tokens
+        // it needs to collect, and can exceed our balances by a relative amount
+        // (~1e-5 in practice) that a small absolute reduction does not cover.
+        // `BPS_DENOM - ROUNDING_BPS` gives a proportional headroom that scales
+        // with the position size.
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             sqrtPriceAX96,
             sqrtPriceBX96,
-            balance0,
-            balance1
+            balance0 - (balance0 / ROUNDING_HEADROOM_DIVISOR),
+            balance1 - (balance1 / ROUNDING_HEADROOM_DIVISOR)
         );
 
-        // Reduce liquidity by 2 to help with rounding
-        if (liq >= 2) {
-            liq -= 2;
-        } else {
-            liq = 0;
-        }
-
-        // If liquidity is too low, revert
         if (liq == 0) {
             revert("Insufficient liquidity");
         }
 
-        // Calculate actual amounts needed for this liquidity
-        (uint256 neededAmount0, uint256 neededAmount1) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96,
-            sqrtPriceAX96,
-            sqrtPriceBX96,
-            liq
-        );
 
-        // Approve tokens to diamond
-        if (neededAmount0 > 0) {
-            IERC20(token0).approve(diamond, neededAmount0);
-        }
-        if (neededAmount1 > 0) {
-            IERC20(token1).approve(diamond, neededAmount1);
-        }
+        // Approve tokens to diamond. We approve our full balance rather than the
+        // `LiquidityAmounts.getAmountsForLiquidity` estimate because the Diamond's
+        // internal walker math rounds up to avoid undercollection, and can request
+        // a few wei more than our estimate. Any surplus is refunded below.
+        IERC20(token0).approve(diamond, balance0);
+        IERC20(token1).approve(diamond, balance1);
 
         // Open the maker position
         assetId = IMaker(diamond).newMaker(
@@ -176,11 +171,29 @@ contract Opener is ICapricornCLSwapCallback {
     }
 
     /**
+     * @notice Uniswap V3 swap callback
+     * @param amount0Delta The change in token0 balance
+     * @param amount1Delta The change in token1 balance
+     */
+    function uniswapV3SwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
+        _handleSwapCallback(amount0Delta, amount1Delta);
+    }
+
+    /**
      * @notice Capricorn CL swap callback
      * @param amount0Delta The change in token0 balance
      * @param amount1Delta The change in token1 balance
      */
     function capricornCLSwapCallback(int256 amount0Delta, int256 amount1Delta, bytes calldata) external override {
+        _handleSwapCallback(amount0Delta, amount1Delta);
+    }
+
+    /**
+     * @notice Shared swap callback logic for both Uniswap V3 and Capricorn pools
+     * @param amount0Delta The change in token0 balance
+     * @param amount1Delta The change in token1 balance
+     */
+    function _handleSwapCallback(int256 amount0Delta, int256 amount1Delta) private {
         require(amount0Delta > 0 || amount1Delta > 0, "Invalid swap callback");
 
         SwapState memory state = swapState;
@@ -323,33 +336,21 @@ contract Opener is ICapricornCLSwapCallback {
         // Re-read price after swap (swap may have moved it)
         sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
 
+        // See openMaker for rationale on the headroom divisor.
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, balance0, balance1
+            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96,
+            balance0 - (balance0 / ROUNDING_HEADROOM_DIVISOR),
+            balance1 - (balance1 / ROUNDING_HEADROOM_DIVISOR)
         );
-
-        // Reduce liquidity by 2 to help with rounding
-        if (liq >= 2) {
-            liq -= 2;
-        } else {
-            liq = 0;
-        }
 
         if (liq == 0) {
             revert("Insufficient liquidity");
         }
 
-        // Calculate actual amounts needed for this liquidity
-        (uint256 neededAmount0, uint256 neededAmount1) = LiquidityAmounts.getAmountsForLiquidity(
-            sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96, liq
-        );
-
-        // Approve tokens to diamond
-        if (neededAmount0 > 0) {
-            IERC20(token0).approve(diamond, neededAmount0);
-        }
-        if (neededAmount1 > 0) {
-            IERC20(token1).approve(diamond, neededAmount1);
-        }
+        // See openMaker: approve our full balance to absorb the Diamond's
+        // round-up in its walker math. Any surplus is refunded below.
+        IERC20(token0).approve(diamond, balance0);
+        IERC20(token1).approve(diamond, balance1);
 
         // Open the maker position
         assetId = IMaker(diamond).newMaker(
