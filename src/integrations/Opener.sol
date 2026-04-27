@@ -31,6 +31,24 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
     ///      round-up math when minting a new maker position. 10_000 = 0.01%.
     uint256 private constant ROUNDING_HEADROOM_DIVISOR = 10_000;
 
+    /// @dev Absolute floor on the rounding headroom. For tiny positions the
+    ///      proportional headroom (balance / 10_000) integer-divides to 0 or 1
+    ///      wei, which isn't enough to absorb the Diamond's per-token round-up
+    ///      and causes `transferFrom` from the Opener to revert with STF.
+    uint256 private constant ABS_HEADROOM_FLOOR = 100;
+
+    /// @dev Returns `balance` reduced by the larger of the proportional or
+    ///      absolute headroom. When the balance is too small to support the
+    ///      floor the function returns 0 — downstream the resulting zero
+    ///      liquidity reverts cleanly with "Insufficient liquidity".
+    function _shrinkBalance(uint256 balance) private pure returns (uint256) {
+        if (balance == 0) return 0;
+        uint256 proportional = balance / ROUNDING_HEADROOM_DIVISOR;
+        uint256 headroom = proportional > ABS_HEADROOM_FLOOR ? proportional : ABS_HEADROOM_FLOOR;
+        if (headroom >= balance) return 0;
+        return balance - headroom;
+    }
+
     /// @notice Error thrown when callback is from wrong pool
     error InvalidCallbackSender();
     /// @notice Error thrown when slippage is too high
@@ -109,28 +127,38 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
         // Transfer user's tokenIn to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // Perform exact output swap: swap to get exactly amountSwap of tokenOut
-        _swapExactOut(poolAddr, tokenIn, tokenOut, pInfo.fee, amountSwap, amountIn, amountOutMinimum, msg.sender);
+        // Perform exact output swap. Bound the swap by the user-supplied sqrt
+        // price limit (whichever side moves the price for this swap direction)
+        // so the slippage tolerance is enforced as a price-range bound, not
+        // just an absolute output minimum.
+        _swapExactOut(
+            poolAddr,
+            tokenIn,
+            tokenOut,
+            pInfo.fee,
+            amountSwap,
+            amountIn,
+            amountOutMinimum,
+            msg.sender,
+            tokenIn == token0 ? minSqrtPriceX96 : maxSqrtPriceX96
+        );
 
         // Get balances after swap
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
 
-        // Calculate liquidity from the token amounts we have
-        // sqrtPriceX96, sqrtPriceAX96, and sqrtPriceBX96 are already calculated above
-
         // Size liquidity against a slightly reduced view of our balances. The
-        // Diamond's internal walker math rounds up when computing how many tokens
-        // it needs to collect, and can exceed our balances by a relative amount
-        // (~1e-5 in practice) that a small absolute reduction does not cover.
-        // `BPS_DENOM - ROUNDING_BPS` gives a proportional headroom that scales
-        // with the position size.
+        // Diamond's internal walker math rounds up when computing how many
+        // tokens it needs to collect, and can exceed our balances by a few wei.
+        // `_shrinkBalance` applies a proportional headroom with an absolute
+        // floor so tiny positions still leave enough margin to absorb the
+        // round-up.
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             sqrtPriceAX96,
             sqrtPriceBX96,
-            balance0 - (balance0 / ROUNDING_HEADROOM_DIVISOR),
-            balance1 - (balance1 / ROUNDING_HEADROOM_DIVISOR)
+            _shrinkBalance(balance0),
+            _shrinkBalance(balance1)
         );
 
         if (liq == 0) {
@@ -236,7 +264,8 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
         uint256 amountOut,
         uint256 amountInMaximum,
         uint256 amountOutMinimum,
-        address /* payer */
+        address /* payer */,
+        uint160 sqrtPriceLimitX96
     ) private returns (uint256 amountIn) {
         IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
 
@@ -255,12 +284,14 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
             amountInMaximum: amountInMaximum
         });
 
-        // Execute the swap (exact output - negative amount for exact output)
+        // Execute the swap (exact output - negative amount for exact output).
+        // The price limit is the user-supplied bound on the side the swap can
+        // move the price toward; falling back to MIN/MAX disables that bound.
         (int256 amount0Delta, int256 amount1Delta) = pool.swap(
             address(this), // recipient
             zeroForOne,
             -int256(amountOut), // negative for exact output
-            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1, // no price limit
+            _resolveSqrtPriceLimit(zeroForOne, sqrtPriceLimitX96),
             "" // no callback data needed, we use storage
         );
 
@@ -324,9 +355,17 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
         // Transfer user's tokenIn to this contract
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
-        // Perform exact-input swap
+        // Perform exact-input swap. Bound the swap by the user-supplied sqrt
+        // price limit on the side the swap can move the price toward.
         if (swapAmountIn > 0) {
-            _swapExactIn(poolAddr, tokenIn, tokenOut, swapAmountIn, amountOutMinimum);
+            _swapExactIn(
+                poolAddr,
+                tokenIn,
+                tokenOut,
+                swapAmountIn,
+                amountOutMinimum,
+                isToken0In ? minSqrtPriceX96 : maxSqrtPriceX96
+            );
         }
 
         // Get balances after swap
@@ -336,11 +375,11 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
         // Re-read price after swap (swap may have moved it)
         sqrtPriceX96 = PoolLib.getSqrtPriceX96(poolAddr);
 
-        // See openMaker for rationale on the headroom divisor.
+        // See openMaker for rationale on the headroom + absolute floor.
         uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96, sqrtPriceAX96, sqrtPriceBX96,
-            balance0 - (balance0 / ROUNDING_HEADROOM_DIVISOR),
-            balance1 - (balance1 / ROUNDING_HEADROOM_DIVISOR)
+            _shrinkBalance(balance0),
+            _shrinkBalance(balance1)
         );
 
         if (liq == 0) {
@@ -456,7 +495,8 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
-        uint256 amountOutMinimum
+        uint256 amountOutMinimum,
+        uint160 sqrtPriceLimitX96
     ) private returns (uint256 amountOut) {
         IUniswapV3Pool pool = IUniswapV3Pool(poolAddr);
 
@@ -471,12 +511,13 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
             amountInMaximum: amountIn
         });
 
-        // Execute the swap (positive amountSpecified = exact input)
+        // Execute the swap (positive amountSpecified = exact input). The price
+        // limit caps the slippage on the swap step at the user-supplied bound.
         (int256 amount0Delta, int256 amount1Delta) = pool.swap(
             address(this),
             zeroForOne,
             int256(amountIn),
-            zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1,
+            _resolveSqrtPriceLimit(zeroForOne, sqrtPriceLimitX96),
             ""
         );
 
@@ -487,5 +528,22 @@ contract Opener is ICapricornCLSwapCallback, IUniswapV3SwapCallback {
 
         // Clear swap state
         delete swapState;
+    }
+
+    /// @dev Translates the caller's user-facing sqrt price bound into the
+    ///      `sqrtPriceLimitX96` arg expected by `IUniswapV3Pool.swap`. Using
+    ///      0 (or any value on the wrong side of the current price) falls back
+    ///      to the absolute MIN+1/MAX-1 limits, which disables the bound.
+    function _resolveSqrtPriceLimit(
+        bool zeroForOne,
+        uint160 sqrtPriceLimitX96
+    ) private pure returns (uint160) {
+        if (zeroForOne) {
+            uint160 floorLimit = TickMath.MIN_SQRT_RATIO + 1;
+            return sqrtPriceLimitX96 > floorLimit ? sqrtPriceLimitX96 : floorLimit;
+        }
+        uint160 ceilLimit = TickMath.MAX_SQRT_RATIO - 1;
+        if (sqrtPriceLimitX96 == 0 || sqrtPriceLimitX96 > ceilLimit) return ceilLimit;
+        return sqrtPriceLimitX96;
     }
 }

@@ -86,6 +86,74 @@ contract OpenerForkTest is Test {
         assertLt(leftoverUsdc, 1e6, "leftover USDC should be < 1 USDC");
     }
 
+    /// Confirms `amountOutMinimum` is still enforced after the sqrt-bound
+    /// rework. We pass a comically high minimum no swap of 1 WMON could
+    /// possibly satisfy on this pool (1 USDC = 1e6 raw) and expect
+    /// SlippageTooHigh.
+    function test_OpenMakerOptimal_AmountOutMin_StillEnforced() public {
+        uint256 amountIn = 1 ether;
+        deal(WMON, user, amountIn);
+
+        vm.startPrank(user);
+        IERC20(WMON).approve(address(opener), amountIn);
+        vm.expectRevert(Opener.SlippageTooHigh.selector);
+        opener.openMakerOptimal(
+            POOL, WMON, amountIn, -314220, -308940, true,
+            TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO,
+            1_000_000, // 1 USDC — far more than 1 WMON can buy at this tick
+            ""
+        );
+        vm.stopPrank();
+    }
+
+    /// Sqrt-price slippage bound: a tight floor below current price should
+    /// cause the WMON→USDC swap (zeroForOne, price moves down) to revert with
+    /// the pool's SPL ("Sqrt Price Limit") error.
+    function test_OpenMakerOptimal_SqrtBound_RevertsWhenTooTight() public {
+        uint256 amountIn = 1 ether;
+        deal(WMON, user, amountIn);
+
+        // Read pool's current sqrtPriceX96 and pick a floor 0.01 wei below it
+        // so any swap that moves price down at all hits the bound immediately.
+        (uint160 sqrtPriceX96, , , , , , ) = IUniswapV3Pool(POOL).slot0();
+        uint160 tightFloor = sqrtPriceX96 - 1;
+
+        vm.startPrank(user);
+        IERC20(WMON).approve(address(opener), amountIn);
+        vm.expectRevert(); // pool reverts internally with SPL — non-typed
+        opener.openMakerOptimal(
+            POOL, WMON, amountIn, -314220, -308940, true,
+            tightFloor,
+            TickMath.MAX_SQRT_RATIO,
+            0,
+            ""
+        );
+        vm.stopPrank();
+    }
+
+    /// Same params as the failing tx but with amountOutMinimum=0. Proves the
+    /// fix is to drop the FE's pre-computed minimum until proper sqrt-price
+    /// slippage bounds are wired up.
+    function test_OpenMakerOptimal_TinyDeposit_ZeroMin_Mints() public {
+        uint256 amountIn = 1 ether;
+        deal(WMON, user, amountIn);
+
+        vm.startPrank(user);
+        IERC20(WMON).approve(address(opener), amountIn);
+        uint256 assetId = opener.openMakerOptimal(
+            POOL, WMON, amountIn, -314220, -308940, true,
+            TickMath.MIN_SQRT_RATIO, TickMath.MAX_SQRT_RATIO,
+            0,
+            ""
+        );
+        vm.stopPrank();
+
+        assertGt(assetId, 0, "tiny deposit should still mint with zero min");
+        console2.log("tiny assetId:", assetId);
+        console2.log("leftover WMON wei:", IERC20(WMON).balanceOf(user));
+        console2.log("leftover USDC:", IERC20(USDC).balanceOf(user));
+    }
+
     function test_OpenMakerOptimal_DepositUSDC_InRange() public {
         uint256 amountIn = 10_000_000; // 10 USDC
         deal(USDC, user, amountIn);
